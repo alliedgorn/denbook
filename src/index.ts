@@ -55,12 +55,20 @@ interface OracleMetadata {
   concepts: string;
 }
 
+interface OracleStatsInput {}
+
+interface OracleConceptsInput {
+  limit?: number;
+  type?: 'principle' | 'pattern' | 'learning' | 'retro' | 'all';
+}
+
 class OracleMCPServer {
   private server: Server;
   private db: Database.Database;
   private repoRoot: string;
   private chroma: ChromaClient;
   private collection: Collection | null = null;
+  private chromaStatus: 'unknown' | 'connected' | 'unavailable' = 'unknown';
 
   constructor() {
     this.repoRoot = process.env.ORACLE_REPO_ROOT || '/Users/nat/Code/github.com/laris-co/Nat-s-Agents';
@@ -71,7 +79,7 @@ class OracleMCPServer {
     this.server = new Server(
       {
         name: 'oracle-v2',
-        version: '0.1.0',
+        version: '0.2.0',
       },
       {
         capabilities: {
@@ -86,6 +94,34 @@ class OracleMCPServer {
 
     this.setupHandlers();
     this.setupErrorHandling();
+
+    // Check ChromaDB health on startup (non-blocking)
+    this.verifyChromaHealth();
+  }
+
+  /**
+   * Verify ChromaDB connection health
+   * Non-blocking - logs status and sets chromaStatus flag
+   */
+  private async verifyChromaHealth(): Promise<void> {
+    try {
+      const collections = await this.chroma.listCollections();
+      // ChromaDB returns array of collection names (strings) or objects with name property
+      const collectionNames = collections.map((c: string | { name: string }) =>
+        typeof c === 'string' ? c : c.name
+      );
+      const exists = collectionNames.includes('oracle_knowledge');
+      if (exists) {
+        this.chromaStatus = 'connected';
+        console.error('[ChromaDB] ✓ oracle_knowledge collection found');
+      } else {
+        this.chromaStatus = 'unavailable';
+        console.error('[ChromaDB] ✗ Collection not found. Available:', collectionNames.join(', ') || 'none');
+      }
+    } catch (e) {
+      this.chromaStatus = 'unavailable';
+      console.error('[ChromaDB] ✗ Cannot connect:', e instanceof Error ? e.message : String(e));
+    }
   }
 
   private setupErrorHandling(): void {
@@ -220,6 +256,36 @@ class OracleMCPServer {
             },
             required: []
           }
+        },
+        {
+          name: 'oracle_stats',
+          description: 'Get Oracle knowledge base statistics and health status. Returns document counts by type, indexing status, and ChromaDB connection status.',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        },
+        {
+          name: 'oracle_concepts',
+          description: 'List all concept tags in the Oracle knowledge base with document counts. Useful for discovering what topics are covered and filtering searches.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              limit: {
+                type: 'number',
+                description: 'Maximum number of concepts to return (default: 50)',
+                default: 50
+              },
+              type: {
+                type: 'string',
+                enum: ['principle', 'pattern', 'learning', 'retro', 'all'],
+                description: 'Filter concepts by document type',
+                default: 'all'
+              }
+            },
+            required: []
+          }
         }
       ]
     }));
@@ -243,6 +309,12 @@ class OracleMCPServer {
           case 'oracle_list':
             return await this.handleList(request.params.arguments as unknown as OracleListInput);
 
+          case 'oracle_stats':
+            return await this.handleStats(request.params.arguments as unknown as OracleStatsInput);
+
+          case 'oracle_concepts':
+            return await this.handleConcepts(request.params.arguments as unknown as OracleConceptsInput);
+
           default:
             throw new Error(`Unknown tool: ${request.params.name}`);
         }
@@ -259,6 +331,28 @@ class OracleMCPServer {
   }
 
   /**
+   * Private: Sanitize FTS5 query to prevent parse errors
+   * Removes/escapes FTS5 special characters
+   */
+  private sanitizeFtsQuery(query: string): string {
+    // Remove FTS5 special characters that could cause parse errors
+    // Includes: ? * + - ( ) ^ ~ " ' : . (all can cause FTS5 syntax errors)
+    let sanitized = query
+      .replace(/[?*+\-()^~"':.]/g, ' ')  // Remove FTS5 operators
+      .replace(/\s+/g, ' ')               // Normalize whitespace
+      .trim();
+
+    // If result is empty after sanitization, return original
+    // (will cause FTS5 error, but better than silent empty result)
+    if (!sanitized) {
+      console.error('[FTS5] Query became empty after sanitization:', query);
+      return query;
+    }
+
+    return sanitized;
+  }
+
+  /**
    * Tool: oracle_search
    * Hybrid search combining FTS5 keyword search and vector semantic search
    * Gracefully falls back to FTS5-only if ChromaDB is unavailable
@@ -267,8 +361,13 @@ class OracleMCPServer {
     const startTime = Date.now();
     const { query, type = 'all', limit = 5, offset = 0, mode = 'hybrid' } = input;
 
-    // Build FTS query - escape special characters
-    const safeQuery = query.replace(/['"]/g, '');
+    // Validate query
+    if (!query || query.trim().length === 0) {
+      throw new Error('Query cannot be empty');
+    }
+
+    // Build FTS query - sanitize special characters
+    const safeQuery = this.sanitizeFtsQuery(query);
 
     // Track warnings for fallback scenarios
     let warning: string | undefined;
@@ -406,7 +505,7 @@ class OracleMCPServer {
   private async handleConsult(input: OracleConsultInput) {
     const { decision, context = '' } = input;
     const query = context ? `${decision} ${context}` : decision;
-    const safeQuery = query.replace(/['"]/g, '');
+    const safeQuery = this.sanitizeFtsQuery(query);
 
     // Search for relevant principles
     const principleStmt = this.db.prepare(`
@@ -676,6 +775,124 @@ class OracleMCPServer {
   }
 
   /**
+   * Tool: oracle_stats
+   * Get knowledge base statistics and health status
+   */
+  private async handleStats(_input: OracleStatsInput) {
+    // Get document counts by type
+    const typeCounts = this.db.prepare(`
+      SELECT type, COUNT(*) as count
+      FROM oracle_documents
+      GROUP BY type
+    `).all() as Array<{ type: string; count: number }>;
+
+    const byType: Record<string, number> = {};
+    let totalDocs = 0;
+    for (const row of typeCounts) {
+      byType[row.type] = row.count;
+      totalDocs += row.count;
+    }
+
+    // Get FTS index count
+    const ftsCount = this.db.prepare('SELECT COUNT(*) as count FROM oracle_fts').get() as { count: number };
+
+    // Get last indexed timestamp
+    const lastIndexed = this.db.prepare(`
+      SELECT MAX(indexed_at) as last_indexed FROM oracle_documents
+    `).get() as { last_indexed: number | null };
+
+    // Get concept count (approximate)
+    const conceptsResult = this.db.prepare(`
+      SELECT concepts FROM oracle_documents WHERE concepts IS NOT NULL AND concepts != '[]'
+    `).all() as Array<{ concepts: string }>;
+
+    const uniqueConcepts = new Set<string>();
+    for (const row of conceptsResult) {
+      try {
+        const concepts = JSON.parse(row.concepts);
+        if (Array.isArray(concepts)) {
+          concepts.forEach((c: string) => uniqueConcepts.add(c));
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          total_documents: totalDocs,
+          by_type: byType,
+          fts_indexed: ftsCount.count,
+          unique_concepts: uniqueConcepts.size,
+          last_indexed: lastIndexed.last_indexed
+            ? new Date(lastIndexed.last_indexed).toISOString()
+            : null,
+          chroma_status: this.chromaStatus,
+          fts_status: ftsCount.count > 0 ? 'healthy' : 'empty',
+          version: '0.2.0',
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Tool: oracle_concepts
+   * List all concept tags with document counts
+   */
+  private async handleConcepts(input: OracleConceptsInput) {
+    const { limit = 50, type = 'all' } = input;
+
+    // Get all concepts from documents
+    const stmt = type === 'all'
+      ? this.db.prepare('SELECT concepts FROM oracle_documents WHERE concepts IS NOT NULL AND concepts != \'[]\'')
+      : this.db.prepare('SELECT concepts FROM oracle_documents WHERE type = ? AND concepts IS NOT NULL AND concepts != \'[]\'');
+
+    const rows = type === 'all' ? stmt.all() : stmt.all(type);
+
+    // Count concept occurrences
+    const conceptCounts = new Map<string, number>();
+    for (const row of rows as Array<{ concepts: string }>) {
+      try {
+        const concepts = JSON.parse(row.concepts);
+        if (Array.isArray(concepts)) {
+          for (const concept of concepts) {
+            if (typeof concept === 'string') {
+              conceptCounts.set(concept, (conceptCounts.get(concept) || 0) + 1);
+            }
+          }
+        }
+      } catch {
+        // Try comma-separated format
+        if (typeof row.concepts === 'string') {
+          const concepts = row.concepts.split(',').map(c => c.trim()).filter(Boolean);
+          for (const concept of concepts) {
+            conceptCounts.set(concept, (conceptCounts.get(concept) || 0) + 1);
+          }
+        }
+      }
+    }
+
+    // Convert to sorted array
+    const sortedConcepts = Array.from(conceptCounts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          concepts: sortedConcepts,
+          total_unique: conceptCounts.size,
+          filter_type: type,
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
    * Synthesize guidance from principles and patterns
    */
   private synthesizeGuidance(decision: string, principles: string[], patterns: string[]): string {
@@ -710,18 +927,24 @@ class OracleMCPServer {
   }
 
   /**
-   * Private: Normalize FTS5 rank score
+   * Private: Normalize FTS5 rank score using exponential decay
    * FTS5 rank is negative, lower = better match
    * This converts to 0-1 scale where higher = better
+   *
+   * Uses exponential decay for better separation of top results:
+   * - Rank -1 → 0.74 (best)
+   * - Rank -3 → 0.41
+   * - Rank -5 → 0.22
+   * - Rank -10 → 0.05 (worst in typical results)
    *
    * @param rank - FTS5 rank (negative number)
    * @returns Normalized score between 0 and 1
    */
   private normalizeFtsScore(rank: number): number {
     // FTS5 rank is negative, more negative = better match
-    // Formula: 1 / (1 + Math.abs(rank))
-    // This gives us 0-1 where higher is better
-    return 1 / (1 + Math.abs(rank));
+    // Exponential decay gives better separation for top results
+    const absRank = Math.abs(rank);
+    return Math.exp(-0.3 * absRank);
   }
 
   /**

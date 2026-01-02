@@ -1,6 +1,6 @@
 {
   "name": "oracle-v2-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Oracle v2 - MCP Memory Layer for querying Oracle philosophy",
   "type": "module",
   "main": "src/index.ts",
@@ -11,9 +11,12 @@
     "index": "tsx src/indexer.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "playwright test",
-    "test:ui": "playwright test --ui",
-    "test:headed": "playwright test --headed"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.31.0",
@@ -26,8 +29,10 @@
     "@playwright/test": "^1.57.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^20.17.9",
+    "@vitest/coverage-v8": "^4.0.16",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.16"
   },
   "keywords": [
     "oracle",
@@ -37,5 +42,11 @@
     "semantic-search"
   ],
   "author": "Nat's Agents",
-  "license": "MIT"
+  "license": "MIT",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  }
 }

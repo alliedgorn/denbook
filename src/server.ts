@@ -661,9 +661,22 @@ const server = http.createServer((req, res) => {
         } else {
           try {
             const fullPath = path.join(REPO_ROOT, filePath);
-            // Security: ensure path is within REPO_ROOT
-            if (!fullPath.startsWith(REPO_ROOT)) {
-              result = { error: 'Invalid path' };
+
+            // Security: resolve symlinks and verify path is within REPO_ROOT
+            // This prevents path traversal attacks via symlinks
+            let realPath: string;
+            try {
+              realPath = fs.realpathSync(fullPath);
+            } catch {
+              // File doesn't exist - use resolved path for bounds check
+              realPath = path.resolve(fullPath);
+            }
+
+            // Get real REPO_ROOT path (in case it contains symlinks)
+            const realRepoRoot = fs.realpathSync(REPO_ROOT);
+
+            if (!realPath.startsWith(realRepoRoot)) {
+              result = { error: 'Invalid path: outside repository bounds' };
             } else if (fs.existsSync(fullPath)) {
               const content = fs.readFileSync(fullPath, 'utf-8');
               result = { path: filePath, content };
