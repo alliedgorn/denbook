@@ -12,6 +12,7 @@
  * - GET /reflect         - Random wisdom
  * - GET /stats           - Database statistics
  * - GET /graph           - Knowledge graph data
+ * - GET /context?cwd=... - Project context from ghq path
  * - POST /learn          - Add new pattern/learning
  */
 
@@ -47,6 +48,8 @@ import {
   handleDashboardActivity,
   handleDashboardGrowth
 } from './server/dashboard.js';
+
+import { handleContext } from './server/context.js';
 
 import path from 'path';
 
@@ -203,6 +206,11 @@ const server = http.createServer((req, res) => {
         );
         break;
 
+      case '/context':
+        // Return project context from ghq-format path
+        result = handleContext(query.cwd as string | undefined);
+        break;
+
       case '/file':
         // Return full file content
         const filePath = query.path as string;
@@ -251,6 +259,7 @@ const server = http.createServer((req, res) => {
             'GET /reflect - Random wisdom',
             'GET /stats - Database stats',
             'GET /graph - Knowledge graph data',
+            'GET /context?cwd=... - Project context from ghq path',
             'POST /learn - Add new pattern/learning',
             'GET /dashboard - Dashboard summary',
             'GET /dashboard/activity?days=7 - Recent activity',
@@ -283,6 +292,7 @@ server.listen(PORT, () => {
    - GET /reflect         Random wisdom
    - GET /stats           Database statistics
    - GET /graph           Knowledge graph data
+   - GET /context         Project context (ghq format)
    - POST /learn          Add new pattern/learning
 
    Examples:
@@ -293,6 +303,7 @@ server.listen(PORT, () => {
    curl http://localhost:${PORT}/reflect
    curl http://localhost:${PORT}/stats
    curl http://localhost:${PORT}/graph
+   curl http://localhost:${PORT}/context
    curl -X POST http://localhost:${PORT}/learn -H "Content-Type: application/json" \\
      -d '{"pattern":"Always verify before destructive operations","concepts":["safety","git"]}'
 `);

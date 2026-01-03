@@ -107,3 +107,19 @@ export interface DashboardGrowth {
     searches: number;
   }>;
 }
+
+export interface ProjectContext {
+  // From ghq path parsing
+  github: string;      // "https://github.com/laris-co/oracle-v2"
+  owner: string;       // "laris-co"
+  repo: string;        // "oracle-v2"
+  ghqPath: string;     // "github.com/laris-co/oracle-v2"
+
+  // Directories
+  root: string;        // Git root directory
+  cwd: string;         // Current working directory
+
+  // Git state
+  branch: string;      // Current branch
+  worktree: string;    // Git worktree path
+}

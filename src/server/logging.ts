@@ -14,17 +14,19 @@ export function logSearch(
   mode: string,
   resultsCount: number,
   searchTimeMs: number,
-  results: SearchResult[] = []
+  results: SearchResult[] = [],
+  project?: string
 ) {
   try {
     db.prepare(`
-      INSERT INTO search_log (query, type, mode, results_count, search_time_ms, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(query, type, mode, resultsCount, searchTimeMs, Date.now());
+      INSERT INTO search_log (query, type, mode, results_count, search_time_ms, created_at, project)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(query, type, mode, resultsCount, searchTimeMs, Date.now(), project || null);
 
     // Comprehensive console logging
     console.log(`\n${'='.repeat(60)}`);
     console.log(`[SEARCH] ${new Date().toISOString()}`);
+    if (project) console.log(`  Project: ${project}`);
     console.log(`  Query: "${query}"`);
     console.log(`  Type: ${type} | Mode: ${mode}`);
     console.log(`  Results: ${resultsCount} in ${searchTimeMs}ms`);
@@ -55,12 +57,12 @@ export function logSearch(
 /**
  * Log document access
  */
-export function logDocumentAccess(documentId: string, accessType: string) {
+export function logDocumentAccess(documentId: string, accessType: string, project?: string) {
   try {
     db.prepare(`
-      INSERT INTO document_access (document_id, access_type, created_at)
-      VALUES (?, ?, ?)
-    `).run(documentId, accessType, Date.now());
+      INSERT INTO document_access (document_id, access_type, created_at, project)
+      VALUES (?, ?, ?, ?)
+    `).run(documentId, accessType, Date.now(), project || null);
   } catch (e) {
     console.error('Failed to log access:', e);
   }
@@ -69,12 +71,12 @@ export function logDocumentAccess(documentId: string, accessType: string) {
 /**
  * Log learning addition
  */
-export function logLearning(documentId: string, patternPreview: string, source: string, concepts: string[]) {
+export function logLearning(documentId: string, patternPreview: string, source: string, concepts: string[], project?: string) {
   try {
     db.prepare(`
-      INSERT INTO learn_log (document_id, pattern_preview, source, concepts, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(documentId, patternPreview.substring(0, 100), source || 'Oracle Learn', JSON.stringify(concepts), Date.now());
+      INSERT INTO learn_log (document_id, pattern_preview, source, concepts, created_at, project)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(documentId, patternPreview.substring(0, 100), source || 'Oracle Learn', JSON.stringify(concepts), Date.now(), project || null);
   } catch (e) {
     console.error('Failed to log learning:', e);
   }
@@ -90,17 +92,19 @@ export function logConsult(
   patternsFound: number,
   guidance: string,
   principles: SearchResult[] = [],
-  patterns: SearchResult[] = []
+  patterns: SearchResult[] = [],
+  project?: string
 ) {
   try {
     db.prepare(`
-      INSERT INTO consult_log (decision, context, principles_found, patterns_found, guidance, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(decision, context || '', principlesFound, patternsFound, guidance.substring(0, 500), Date.now());
+      INSERT INTO consult_log (decision, context, principles_found, patterns_found, guidance, created_at, project)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(decision, context || '', principlesFound, patternsFound, guidance.substring(0, 500), Date.now(), project || null);
 
     // Comprehensive console logging
     console.log(`\n${'='.repeat(60)}`);
     console.log(`[CONSULT] ${new Date().toISOString()}`);
+    if (project) console.log(`  Project: ${project}`);
     console.log(`  Decision: "${decision}"`);
     if (context) console.log(`  Context: "${context}"`);
     console.log(`  Found: ${principlesFound} principles, ${patternsFound} patterns`);

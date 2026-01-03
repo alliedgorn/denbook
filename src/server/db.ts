@@ -77,6 +77,21 @@ export function initLoggingTables() {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_consult_created ON consult_log(created_at)`);
+
+  // Add project column to logging tables (migration)
+  // SQLite doesn't have IF NOT EXISTS for columns, so use try/catch
+  const tables = ['search_log', 'learn_log', 'document_access', 'consult_log'];
+  for (const table of tables) {
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN project TEXT`);
+    } catch {
+      // Column already exists, ignore
+    }
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_search_project ON search_log(project)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_learn_project ON learn_log(project)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_access_project ON document_access(project)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_consult_project ON consult_log(project)`);
 }
 
 /**

@@ -65,6 +65,41 @@ Returns server status.
 
 ---
 
+#### Project Context
+```
+GET /context?cwd={path}
+```
+Get project context from ghq-format directory path.
+
+**Parameters:**
+| Param | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `cwd` | No | `process.cwd()` | Directory path to parse |
+
+**Example:**
+```bash
+curl "http://localhost:37778/context"
+curl "http://localhost:37778/context?cwd=/Users/nat/Code/github.com/owner/repo/src"
+```
+
+**Response:**
+```json
+{
+  "github": "https://github.com/laris-co/oracle-v2",
+  "owner": "laris-co",
+  "repo": "oracle-v2",
+  "ghqPath": "github.com/laris-co/oracle-v2",
+  "root": "/Users/nat/Code/github.com/laris-co/oracle-v2",
+  "cwd": "/Users/nat/Code/github.com/laris-co/oracle-v2",
+  "branch": "main",
+  "worktree": "/Users/nat/Code/github.com/laris-co/oracle-v2"
+}
+```
+
+**Note:** Path must contain `github.com/owner/repo` pattern (ghq format).
+
+---
+
 #### Search
 ```
 GET /search?q={query}&type={type}&limit={n}&offset={n}
