@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oracle Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #2a2a3a;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      color: #a78bfa;
+    }
+
+    .header .version {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: #1a1a2e;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      border: 1px solid #2a2a3a;
+    }
+
+    .stat-card .value {
+      font-size: 32px;
+      font-weight: 600;
+      color: #a78bfa;
+    }
+
+    .stat-card .label {
+      font-size: 12px;
+      color: #888;
+      margin-top: 4px;
+      text-transform: uppercase;
+    }
+
+    .stat-card.healthy .value { color: #4ade80; }
+    .stat-card.warning .value { color: #fbbf24; }
+    .stat-card.error .value { color: #f87171; }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 24px;
+    }
+
+    .panel {
+      background: #1a1a2e;
+      border-radius: 12px;
+      border: 1px solid #2a2a3a;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #2a2a3a;
+      font-weight: 600;
+      color: #a78bfa;
+    }
+
+    .panel-content {
+      padding: 16px 20px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    /* Consultations list */
+    .activity-item {
+      padding: 12px 0;
+      border-bottom: 1px solid #2a2a3a;
+    }
+
+    .activity-item:last-child {
+      border-bottom: none;
+    }
+
+    .activity-item .query {
+      font-size: 14px;
+      color: #e0e0e0;
+      margin-bottom: 4px;
+    }
+
+    .activity-item .meta {
+      font-size: 12px;
+      color: #666;
+      display: flex;
+      gap: 12px;
+    }
+
+    .activity-item .meta .count {
+      color: #4ade80;
+    }
+
+    /* Concepts bar chart */
+    .concept-bar {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .concept-bar .name {
+      width: 100px;
+      font-size: 12px;
+      color: #888;
+    }
+
+    .concept-bar .bar {
+      flex: 1;
+      height: 20px;
+      background: #2a2a3a;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 0 8px;
+    }
+
+    .concept-bar .fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7c3aed, #a78bfa);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .concept-bar .count {
+      width: 30px;
+      font-size: 12px;
+      color: #888;
+      text-align: right;
+    }
+
+    /* Growth chart */
+    .growth-chart {
+      display: flex;
+      align-items: flex-end;
+      height: 150px;
+      gap: 4px;
+      padding-top: 20px;
+    }
+
+    .growth-bar {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .growth-bar .bar {
+      width: 100%;
+      background: linear-gradient(180deg, #7c3aed, #4c1d95);
+      border-radius: 4px 4px 0 0;
+      min-height: 4px;
+      transition: height 0.3s ease;
+    }
+
+    .growth-bar .date {
+      font-size: 10px;
+      color: #666;
+      margin-top: 4px;
+      transform: rotate(-45deg);
+      white-space: nowrap;
+    }
+
+    /* Health indicators */
+    .health-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .health-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #0a0a0f;
+      border-radius: 8px;
+    }
+
+    .health-item .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .health-item .dot.green { background: #4ade80; }
+    .health-item .dot.yellow { background: #fbbf24; }
+    .health-item .dot.red { background: #f87171; }
+
+    .health-item .text {
+      font-size: 12px;
+    }
+
+    .health-item .status {
+      margin-left: auto;
+      font-size: 11px;
+      color: #666;
+    }
+
+    /* Loading state */
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    .error {
+      color: #f87171;
+      padding: 20px;
+      text-align: center;
+    }
+
+    /* Refresh button */
+    .refresh-btn {
+      background: #2a2a3a;
+      border: none;
+      color: #a78bfa;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .refresh-btn:hover {
+      background: #3a3a4a;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Oracle Dashboard</h1>
+    <div>
+      <span class="version" id="version">v0.3.0</span>
+      <button class="refresh-btn" onclick="loadDashboard()">Refresh</button>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card">
+      <div class="value" id="total-docs">-</div>
+      <div class="label">Documents</div>
+    </div>
+    <div class="stat-card">
+      <div class="value" id="total-concepts">-</div>
+      <div class="label">Concepts</div>
+    </div>
+    <div class="stat-card">
+      <div class="value" id="consultations-7d">-</div>
+      <div class="label">Consults (7d)</div>
+    </div>
+    <div class="stat-card" id="health-card">
+      <div class="value" id="health-status">-</div>
+      <div class="label">Status</div>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <!-- Recent Consultations -->
+    <div class="panel">
+      <div class="panel-header">Recent Consultations</div>
+      <div class="panel-content" id="consultations-list">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Top Concepts -->
+    <div class="panel">
+      <div class="panel-header">Top Concepts</div>
+      <div class="panel-content" id="concepts-chart">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Recent Searches -->
+    <div class="panel">
+      <div class="panel-header">Recent Searches</div>
+      <div class="panel-content" id="searches-list">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Growth Chart -->
+    <div class="panel">
+      <div class="panel-header">Activity (Last 7 Days)</div>
+      <div class="panel-content" id="growth-chart">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+
+    <!-- System Health -->
+    <div class="panel">
+      <div class="panel-header">System Health</div>
+      <div class="panel-content" id="health-panel">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Recent Learnings -->
+    <div class="panel">
+      <div class="panel-header">Recent Learnings</div>
+      <div class="panel-content" id="learnings-list">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+
+    async function fetchJSON(endpoint) {
+      const res = await fetch(`${API_BASE}${endpoint}`);
+      return res.json();
+    }
+
+    function formatTime(isoString) {
+      const date = new Date(isoString);
+      const now = new Date();
+      const diff = now - date;
+
+      if (diff < 60000) return 'just now';
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+      return date.toLocaleDateString();
+    }
+
+    async function loadDashboard() {
+      try {
+        // Load summary
+        const summary = await fetchJSON('/dashboard/summary');
+
+        document.getElementById('total-docs').textContent = summary.documents.total;
+        document.getElementById('total-concepts').textContent = summary.concepts.total;
+        document.getElementById('consultations-7d').textContent = summary.activity.consultations_7d;
+
+        const healthCard = document.getElementById('health-card');
+        const healthStatus = document.getElementById('health-status');
+        if (summary.health.fts_status === 'healthy') {
+          healthStatus.textContent = 'Healthy';
+          healthCard.className = 'stat-card healthy';
+        } else {
+          healthStatus.textContent = 'Degraded';
+          healthCard.className = 'stat-card warning';
+        }
+
+        // Render top concepts
+        const conceptsHtml = summary.concepts.top.map(c => {
+          const maxCount = summary.concepts.top[0]?.count || 1;
+          const width = (c.count / maxCount) * 100;
+          return `
+            <div class="concept-bar">
+              <span class="name">${c.name}</span>
+              <div class="bar"><div class="fill" style="width: ${width}%"></div></div>
+              <span class="count">${c.count}</span>
+            </div>
+          `;
+        }).join('');
+        document.getElementById('concepts-chart').innerHTML = conceptsHtml || '<div class="loading">No concepts yet</div>';
+
+        // Render health panel
+        const healthHtml = `
+          <div class="health-grid">
+            <div class="health-item">
+              <div class="dot ${summary.health.fts_status === 'healthy' ? 'green' : 'red'}"></div>
+              <span class="text">FTS5 Index</span>
+              <span class="status">${summary.health.fts_status}</span>
+            </div>
+            <div class="health-item">
+              <div class="dot green"></div>
+              <span class="text">Documents</span>
+              <span class="status">${summary.documents.total}</span>
+            </div>
+            <div class="health-item">
+              <div class="dot ${summary.health.last_indexed ? 'green' : 'yellow'}"></div>
+              <span class="text">Last Indexed</span>
+              <span class="status">${summary.health.last_indexed ? formatTime(summary.health.last_indexed) : 'never'}</span>
+            </div>
+            <div class="health-item">
+              <div class="dot green"></div>
+              <span class="text">Concepts</span>
+              <span class="status">${summary.concepts.total}</span>
+            </div>
+          </div>
+        `;
+        document.getElementById('health-panel').innerHTML = healthHtml;
+
+        // Load activity
+        const activity = await fetchJSON('/dashboard/activity?days=7');
+
+        // Render consultations
+        const consultHtml = activity.consultations.map(c => `
+          <div class="activity-item">
+            <div class="query">${c.decision}</div>
+            <div class="meta">
+              <span class="count">${c.principles_found} principles, ${c.patterns_found} patterns</span>
+              <span>${formatTime(c.created_at)}</span>
+            </div>
+          </div>
+        `).join('');
+        document.getElementById('consultations-list').innerHTML = consultHtml || '<div class="loading">No consultations yet</div>';
+
+        // Render searches
+        const searchHtml = activity.searches.map(s => `
+          <div class="activity-item">
+            <div class="query">${s.query}</div>
+            <div class="meta">
+              <span class="count">${s.results_count} results</span>
+              <span>${s.search_time_ms}ms</span>
+              <span>${formatTime(s.created_at)}</span>
+            </div>
+          </div>
+        `).join('');
+        document.getElementById('searches-list').innerHTML = searchHtml || '<div class="loading">No searches yet</div>';
+
+        // Render learnings
+        const learnHtml = activity.learnings.map(l => `
+          <div class="activity-item">
+            <div class="query">${l.pattern_preview}</div>
+            <div class="meta">
+              <span>${l.source}</span>
+              <span>${formatTime(l.created_at)}</span>
+            </div>
+          </div>
+        `).join('');
+        document.getElementById('learnings-list').innerHTML = learnHtml || '<div class="loading">No learnings yet</div>';
+
+        // Load growth
+        const growth = await fetchJSON('/dashboard/growth?period=week');
+
+        const maxActivity = Math.max(...growth.data.map(d => d.consultations + d.searches + d.documents)) || 1;
+        const growthHtml = `
+          <div class="growth-chart">
+            ${growth.data.map(d => {
+              const total = d.consultations + d.searches + d.documents;
+              const height = (total / maxActivity) * 120;
+              return `
+                <div class="growth-bar">
+                  <div class="bar" style="height: ${Math.max(4, height)}px" title="${d.date}: ${total} activities"></div>
+                  <div class="date">${d.date.slice(5)}</div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+        document.getElementById('growth-chart').innerHTML = growthHtml;
+
+      } catch (error) {
+        console.error('Dashboard error:', error);
+        document.querySelectorAll('.panel-content').forEach(el => {
+          el.innerHTML = `<div class="error">Error loading data: ${error.message}</div>`;
+        });
+      }
+    }
+
+    // Initial load
+    loadDashboard();
+
+    // Auto-refresh every 30 seconds
+    setInterval(loadDashboard, 30000);
+  </script>
+</body>
+</html>

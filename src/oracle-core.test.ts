@@ -568,3 +568,170 @@ describe('Path Security', () => {
     expect(isPathSafe('/etc/passwd', REPO_ROOT)).toBe(false);
   });
 });
+
+// ============================================================================
+// Dashboard Logging Tests
+// ============================================================================
+
+describe('Dashboard Logging Functions', () => {
+  let testDb: Database.Database;
+  const testDbPath = '/tmp/oracle-dashboard-test.db';
+
+  beforeAll(() => {
+    // Create test database with logging tables
+    testDb = new Database(testDbPath);
+
+    testDb.exec(`
+      CREATE TABLE IF NOT EXISTS search_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        query TEXT NOT NULL,
+        type TEXT,
+        mode TEXT,
+        results_count INTEGER,
+        search_time_ms INTEGER,
+        created_at INTEGER NOT NULL
+      )
+    `);
+
+    testDb.exec(`
+      CREATE TABLE IF NOT EXISTS learn_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id TEXT NOT NULL,
+        pattern_preview TEXT,
+        source TEXT,
+        concepts TEXT,
+        created_at INTEGER NOT NULL
+      )
+    `);
+
+    testDb.exec(`
+      CREATE TABLE IF NOT EXISTS document_access (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id TEXT NOT NULL,
+        access_type TEXT,
+        created_at INTEGER NOT NULL
+      )
+    `);
+  });
+
+  afterAll(() => {
+    testDb.close();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  it('should insert search log entries', () => {
+    const now = Date.now();
+    testDb.prepare(`
+      INSERT INTO search_log (query, type, mode, results_count, search_time_ms, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run('test query', 'all', 'fts', 5, 42, now);
+
+    const result = testDb.prepare('SELECT * FROM search_log WHERE query = ?').get('test query') as any;
+    expect(result).toBeDefined();
+    expect(result.query).toBe('test query');
+    expect(result.results_count).toBe(5);
+    expect(result.search_time_ms).toBe(42);
+  });
+
+  it('should insert learn log entries', () => {
+    const now = Date.now();
+    testDb.prepare(`
+      INSERT INTO learn_log (document_id, pattern_preview, source, concepts, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('learn_test_1', 'Test pattern...', 'Oracle Learn', '["test","pattern"]', now);
+
+    const result = testDb.prepare('SELECT * FROM learn_log WHERE document_id = ?').get('learn_test_1') as any;
+    expect(result).toBeDefined();
+    expect(result.document_id).toBe('learn_test_1');
+    expect(result.pattern_preview).toBe('Test pattern...');
+    expect(JSON.parse(result.concepts)).toEqual(['test', 'pattern']);
+  });
+
+  it('should insert document access entries', () => {
+    const now = Date.now();
+    testDb.prepare(`
+      INSERT INTO document_access (document_id, access_type, created_at)
+      VALUES (?, ?, ?)
+    `).run('doc_test_1', 'search', now);
+
+    const result = testDb.prepare('SELECT * FROM document_access WHERE document_id = ?').get('doc_test_1') as any;
+    expect(result).toBeDefined();
+    expect(result.document_id).toBe('doc_test_1');
+    expect(result.access_type).toBe('search');
+  });
+
+  it('should query activity within date range', () => {
+    const now = Date.now();
+    const oneHourAgo = now - 3600000;
+    const twoDaysAgo = now - 172800000;
+
+    // Insert entries at different times
+    testDb.prepare(`INSERT INTO search_log (query, type, mode, results_count, search_time_ms, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('recent query', 'all', 'fts', 3, 10, oneHourAgo);
+    testDb.prepare(`INSERT INTO search_log (query, type, mode, results_count, search_time_ms, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('old query', 'all', 'fts', 2, 15, twoDaysAgo);
+
+    // Query last 24 hours
+    const oneDayAgo = now - 86400000;
+    const recentResults = testDb.prepare('SELECT * FROM search_log WHERE created_at > ?').all(oneDayAgo) as any[];
+
+    expect(recentResults.some(r => r.query === 'recent query')).toBe(true);
+    expect(recentResults.some(r => r.query === 'old query')).toBe(false);
+  });
+});
+
+describe('Dashboard Data Aggregation', () => {
+  it('should aggregate concept counts correctly', () => {
+    const conceptsData = [
+      '["trust", "safety"]',
+      '["trust", "pattern"]',
+      '["safety", "git"]',
+      '["trust"]'
+    ];
+
+    const conceptCounts = new Map<string, number>();
+    for (const conceptStr of conceptsData) {
+      const concepts = JSON.parse(conceptStr);
+      concepts.forEach((c: string) => {
+        conceptCounts.set(c, (conceptCounts.get(c) || 0) + 1);
+      });
+    }
+
+    expect(conceptCounts.get('trust')).toBe(3);
+    expect(conceptCounts.get('safety')).toBe(2);
+    expect(conceptCounts.get('pattern')).toBe(1);
+    expect(conceptCounts.get('git')).toBe(1);
+  });
+
+  it('should sort concepts by count descending', () => {
+    const conceptCounts = new Map([
+      ['trust', 3],
+      ['safety', 2],
+      ['pattern', 1],
+      ['git', 1]
+    ]);
+
+    const sorted = Array.from(conceptCounts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    expect(sorted[0].name).toBe('trust');
+    expect(sorted[0].count).toBe(3);
+    expect(sorted[1].name).toBe('safety');
+  });
+
+  it('should calculate time ranges correctly', () => {
+    const now = Date.now();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+    // Verify 7 days in milliseconds
+    expect(now - sevenDaysAgo).toBe(604800000);
+
+    // Verify date boundary calculations
+    const dayStart = now - (7 - 0) * 24 * 60 * 60 * 1000;
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+    expect(dayEnd - dayStart).toBe(86400000); // 1 day in ms
+  });
+});
