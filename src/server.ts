@@ -20,15 +20,70 @@ import url from 'url';
 import fs from 'fs';
 import Database from 'better-sqlite3';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+// ES Module compatibility for __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const PORT = process.env.ORACLE_PORT || 37778;
 const REPO_ROOT = process.env.ORACLE_REPO_ROOT || '/Users/nat/Code/github.com/laris-co/Nat-s-Agents';
 const DB_PATH = path.join(REPO_ROOT, 'ψ/lab/oracle-v2/oracle.db');
 const UI_PATH = path.join(REPO_ROOT, 'ψ/lab/oracle-v2/src/ui.html');
 const ARTHUR_UI_PATH = path.join(REPO_ROOT, 'ψ/lab/oracle-jarvis/index.html');
+const DASHBOARD_PATH = path.join(__dirname, 'dashboard.html');
 
 // Initialize database
 const db = new Database(DB_PATH);
+
+// Initialize logging tables
+function initLoggingTables() {
+  // Search query log
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS search_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      query TEXT NOT NULL,
+      type TEXT,
+      mode TEXT,
+      results_count INTEGER,
+      search_time_ms INTEGER,
+      created_at INTEGER NOT NULL
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_search_created ON search_log(created_at)`);
+
+  // Learning log
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS learn_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id TEXT NOT NULL,
+      pattern_preview TEXT,
+      source TEXT,
+      concepts TEXT,
+      created_at INTEGER NOT NULL
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_learn_created ON learn_log(created_at)`);
+
+  // Document access log
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS document_access (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id TEXT NOT NULL,
+      access_type TEXT,
+      created_at INTEGER NOT NULL
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_access_doc ON document_access(document_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_access_created ON document_access(created_at)`);
+}
+
+// Initialize tables on startup
+try {
+  initLoggingTables();
+} catch (e) {
+  console.error('Failed to initialize logging tables:', e);
+}
 
 interface SearchResult {
   id: string;
@@ -46,9 +101,52 @@ interface SearchResponse {
 }
 
 /**
+ * Log search query
+ */
+function logSearch(query: string, type: string, mode: string, resultsCount: number, searchTimeMs: number) {
+  try {
+    db.prepare(`
+      INSERT INTO search_log (query, type, mode, results_count, search_time_ms, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(query, type, mode, resultsCount, searchTimeMs, Date.now());
+  } catch (e) {
+    console.error('Failed to log search:', e);
+  }
+}
+
+/**
+ * Log document access
+ */
+function logDocumentAccess(documentId: string, accessType: string) {
+  try {
+    db.prepare(`
+      INSERT INTO document_access (document_id, access_type, created_at)
+      VALUES (?, ?, ?)
+    `).run(documentId, accessType, Date.now());
+  } catch (e) {
+    console.error('Failed to log access:', e);
+  }
+}
+
+/**
+ * Log learning addition
+ */
+function logLearning(documentId: string, patternPreview: string, source: string, concepts: string[]) {
+  try {
+    db.prepare(`
+      INSERT INTO learn_log (document_id, pattern_preview, source, concepts, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(documentId, patternPreview.substring(0, 100), source || 'Oracle Learn', JSON.stringify(concepts), Date.now());
+  } catch (e) {
+    console.error('Failed to log learning:', e);
+  }
+}
+
+/**
  * Search Oracle knowledge base with pagination
  */
 function handleSearch(query: string, type: string = 'all', limit: number = 10, offset: number = 0): SearchResponse {
+  const startTime = Date.now();
   // Remove FTS5 special characters: ? * + - ( ) ^ ~ " ' : (colon is column prefix)
   const safeQuery = query.replace(/[?*+\-()^~"':]/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -83,6 +181,10 @@ function handleSearch(query: string, type: string = 'all', limit: number = 10, o
       source: 'fts' as const
     }));
 
+    // Log search and document access
+    logSearch(query, type, 'fts', total, Date.now() - startTime);
+    results.forEach(r => logDocumentAccess(r.id, 'search'));
+
     return { results, total, offset, limit };
   } else {
     // Get total count with type filter
@@ -111,6 +213,10 @@ function handleSearch(query: string, type: string = 'all', limit: number = 10, o
       concepts: JSON.parse(row.concepts || '[]'),
       source: 'fts' as const
     }));
+
+    // Log search and document access
+    logSearch(query, type, 'fts', total, Date.now() - startTime);
+    results.forEach(r => logDocumentAccess(r.id, 'search'));
 
     return { results, total, offset, limit };
   }
@@ -494,6 +600,9 @@ function handleLearn(pattern: string, source?: string, concepts?: string[]) {
     conceptsList.join(' ')
   );
 
+  // Log the learning
+  logLearning(id, pattern, source || 'Oracle Learn', conceptsList);
+
   return {
     success: true,
     file: `ψ/memory/learnings/${filename}`,
@@ -529,6 +638,219 @@ function synthesizeGuidance(decision: string, principles: any[], patterns: any[]
   }
 
   return guidance;
+}
+
+// ============================================================================
+// Dashboard API Endpoints
+// ============================================================================
+
+/**
+ * Dashboard summary - aggregated stats for the dashboard
+ */
+function handleDashboardSummary() {
+  // Document counts
+  const totalDocs = db.prepare('SELECT COUNT(*) as count FROM oracle_documents').get() as { count: number };
+  const byType = db.prepare(`
+    SELECT type, COUNT(*) as count
+    FROM oracle_documents
+    GROUP BY type
+  `).all() as { type: string; count: number }[];
+
+  // Concept counts
+  const conceptsResult = db.prepare(`
+    SELECT concepts FROM oracle_documents WHERE concepts IS NOT NULL AND concepts != '[]'
+  `).all() as { concepts: string }[];
+
+  const conceptCounts = new Map<string, number>();
+  for (const row of conceptsResult) {
+    try {
+      const concepts = JSON.parse(row.concepts);
+      if (Array.isArray(concepts)) {
+        concepts.forEach((c: string) => {
+          conceptCounts.set(c, (conceptCounts.get(c) || 0) + 1);
+        });
+      }
+    } catch {}
+  }
+
+  const topConcepts = Array.from(conceptCounts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+
+  // Activity counts (last 7 days)
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  let consultations7d = 0;
+  let searches7d = 0;
+  let learnings7d = 0;
+
+  try {
+    const consultResult = db.prepare(`
+      SELECT COUNT(*) as count FROM consult_log WHERE created_at > ?
+    `).get(sevenDaysAgo) as { count: number };
+    consultations7d = consultResult.count;
+  } catch {}
+
+  try {
+    const searchResult = db.prepare(`
+      SELECT COUNT(*) as count FROM search_log WHERE created_at > ?
+    `).get(sevenDaysAgo) as { count: number };
+    searches7d = searchResult.count;
+  } catch {}
+
+  try {
+    const learnResult = db.prepare(`
+      SELECT COUNT(*) as count FROM learn_log WHERE created_at > ?
+    `).get(sevenDaysAgo) as { count: number };
+    learnings7d = learnResult.count;
+  } catch {}
+
+  // Health status
+  const lastIndexed = db.prepare(`
+    SELECT MAX(indexed_at) as last_indexed FROM oracle_documents
+  `).get() as { last_indexed: number | null };
+
+  return {
+    documents: {
+      total: totalDocs.count,
+      by_type: byType.reduce((acc, row) => ({ ...acc, [row.type]: row.count }), {})
+    },
+    concepts: {
+      total: conceptCounts.size,
+      top: topConcepts
+    },
+    activity: {
+      consultations_7d: consultations7d,
+      searches_7d: searches7d,
+      learnings_7d: learnings7d
+    },
+    health: {
+      fts_status: totalDocs.count > 0 ? 'healthy' : 'empty',
+      last_indexed: lastIndexed.last_indexed
+        ? new Date(lastIndexed.last_indexed).toISOString()
+        : null
+    }
+  };
+}
+
+/**
+ * Dashboard activity - recent consultations, searches, learnings
+ */
+function handleDashboardActivity(days: number = 7) {
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  // Recent consultations
+  let consultations: any[] = [];
+  try {
+    consultations = db.prepare(`
+      SELECT decision, principles_found, patterns_found, created_at
+      FROM consult_log
+      WHERE created_at > ?
+      ORDER BY created_at DESC
+      LIMIT 20
+    `).all(since).map((row: any) => ({
+      decision: row.decision.substring(0, 100),
+      principles_found: row.principles_found,
+      patterns_found: row.patterns_found,
+      created_at: new Date(row.created_at).toISOString()
+    }));
+  } catch {}
+
+  // Recent searches
+  let searches: any[] = [];
+  try {
+    searches = db.prepare(`
+      SELECT query, type, results_count, search_time_ms, created_at
+      FROM search_log
+      WHERE created_at > ?
+      ORDER BY created_at DESC
+      LIMIT 20
+    `).all(since).map((row: any) => ({
+      query: row.query.substring(0, 100),
+      type: row.type,
+      results_count: row.results_count,
+      search_time_ms: row.search_time_ms,
+      created_at: new Date(row.created_at).toISOString()
+    }));
+  } catch {}
+
+  // Recent learnings
+  let learnings: any[] = [];
+  try {
+    learnings = db.prepare(`
+      SELECT document_id, pattern_preview, source, concepts, created_at
+      FROM learn_log
+      WHERE created_at > ?
+      ORDER BY created_at DESC
+      LIMIT 20
+    `).all(since).map((row: any) => ({
+      document_id: row.document_id,
+      pattern_preview: row.pattern_preview,
+      source: row.source,
+      concepts: JSON.parse(row.concepts || '[]'),
+      created_at: new Date(row.created_at).toISOString()
+    }));
+  } catch {}
+
+  return { consultations, searches, learnings, days };
+}
+
+/**
+ * Dashboard growth - documents and activity over time
+ */
+function handleDashboardGrowth(period: string = 'week') {
+  const daysMap: Record<string, number> = {
+    week: 7,
+    month: 30,
+    quarter: 90
+  };
+  const days = daysMap[period] || 7;
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  // Get daily document counts
+  const data: { date: string; documents: number; consultations: number; searches: number }[] = [];
+
+  for (let i = 0; i < days; i++) {
+    const dayStart = Date.now() - (days - i) * 24 * 60 * 60 * 1000;
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+    const date = new Date(dayStart).toISOString().split('T')[0];
+
+    // Documents created that day
+    const docsResult = db.prepare(`
+      SELECT COUNT(*) as count FROM oracle_documents
+      WHERE created_at >= ? AND created_at < ?
+    `).get(dayStart, dayEnd) as { count: number };
+
+    // Consultations that day
+    let consultCount = 0;
+    try {
+      const consultResult = db.prepare(`
+        SELECT COUNT(*) as count FROM consult_log
+        WHERE created_at >= ? AND created_at < ?
+      `).get(dayStart, dayEnd) as { count: number };
+      consultCount = consultResult.count;
+    } catch {}
+
+    // Searches that day
+    let searchCount = 0;
+    try {
+      const searchResult = db.prepare(`
+        SELECT COUNT(*) as count FROM search_log
+        WHERE created_at >= ? AND created_at < ?
+      `).get(dayStart, dayEnd) as { count: number };
+      searchCount = searchResult.count;
+    } catch {}
+
+    data.push({
+      date,
+      documents: docsResult.count,
+      consultations: consultCount,
+      searches: searchCount
+    });
+  }
+
+  return { period, days, data };
 }
 
 /**
@@ -598,6 +920,12 @@ const server = http.createServer((req, res) => {
         res.end(fs.readFileSync(ARTHUR_UI_PATH, 'utf-8'));
         return;
 
+      case '/dashboard/ui':
+        // Serve Dashboard UI
+        res.setHeader('Content-Type', 'text/html');
+        res.end(fs.readFileSync(DASHBOARD_PATH, 'utf-8'));
+        return;
+
       case '/health':
         result = { status: 'ok', server: 'oracle-v2', port: PORT };
         break;
@@ -653,6 +981,24 @@ const server = http.createServer((req, res) => {
         result = handleGraph();
         break;
 
+      // Dashboard endpoints
+      case '/dashboard':
+      case '/dashboard/summary':
+        result = handleDashboardSummary();
+        break;
+
+      case '/dashboard/activity':
+        result = handleDashboardActivity(
+          parseInt(query.days as string) || 7
+        );
+        break;
+
+      case '/dashboard/growth':
+        result = handleDashboardGrowth(
+          (query.period as string) || 'week'
+        );
+        break;
+
       case '/file':
         // Return full file content
         const filePath = query.path as string;
@@ -701,7 +1047,10 @@ const server = http.createServer((req, res) => {
             'GET /reflect - Random wisdom',
             'GET /stats - Database stats',
             'GET /graph - Knowledge graph data',
-            'POST /learn - Add new pattern/learning'
+            'POST /learn - Add new pattern/learning',
+            'GET /dashboard - Dashboard summary',
+            'GET /dashboard/activity?days=7 - Recent activity',
+            'GET /dashboard/growth?period=week - Growth over time'
           ]
         };
     }
