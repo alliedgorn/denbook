@@ -115,15 +115,47 @@ interface SearchResponse {
 }
 
 /**
- * Log search query
+ * Log search query with full details
  */
-function logSearch(query: string, type: string, mode: string, resultsCount: number, searchTimeMs: number) {
+function logSearch(
+  query: string,
+  type: string,
+  mode: string,
+  resultsCount: number,
+  searchTimeMs: number,
+  results: any[] = []
+) {
   try {
     db.prepare(`
       INSERT INTO search_log (query, type, mode, results_count, search_time_ms, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(query, type, mode, resultsCount, searchTimeMs, Date.now());
-    console.log(`[SEARCH] "${query}" (${type}) → ${resultsCount} results in ${searchTimeMs}ms`);
+
+    // Comprehensive console logging
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`[SEARCH] ${new Date().toISOString()}`);
+    console.log(`  Query: "${query}"`);
+    console.log(`  Type: ${type} | Mode: ${mode}`);
+    console.log(`  Results: ${resultsCount} in ${searchTimeMs}ms`);
+
+    if (results.length > 0) {
+      console.log(`  Top Results:`);
+      results.slice(0, 5).forEach((r, i) => {
+        console.log(`    ${i + 1}. [${r.type}] score=${r.score || 'N/A'} id=${r.id}`);
+        console.log(`       ${r.content?.substring(0, 80)}...`);
+      });
+    }
+
+    // Log any unexpected fields
+    if (results.length > 0) {
+      const expectedFields = ['id', 'type', 'content', 'source_file', 'concepts', 'source', 'score'];
+      const firstResult = results[0];
+      const unknownFields = Object.keys(firstResult).filter(k => !expectedFields.includes(k));
+      if (unknownFields.length > 0) {
+        console.log(`  [UNKNOWN FIELDS]: ${unknownFields.join(', ')}`);
+      }
+    }
+    console.log(`${'='.repeat(60)}\n`);
   } catch (e) {
     console.error('Failed to log search:', e);
   }
@@ -158,15 +190,64 @@ function logLearning(documentId: string, patternPreview: string, source: string,
 }
 
 /**
- * Log consultation
+ * Log consultation with full details
  */
-function logConsult(decision: string, context: string, principlesFound: number, patternsFound: number, guidance: string) {
+function logConsult(
+  decision: string,
+  context: string,
+  principlesFound: number,
+  patternsFound: number,
+  guidance: string,
+  principles: any[] = [],
+  patterns: any[] = []
+) {
   try {
     db.prepare(`
       INSERT INTO consult_log (decision, context, principles_found, patterns_found, guidance, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(decision, context || '', principlesFound, patternsFound, guidance.substring(0, 500), Date.now());
-    console.log(`[CONSULT] "${decision}" → ${principlesFound} principles, ${patternsFound} patterns`);
+
+    // Comprehensive console logging
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`[CONSULT] ${new Date().toISOString()}`);
+    console.log(`  Decision: "${decision}"`);
+    if (context) console.log(`  Context: "${context}"`);
+    console.log(`  Found: ${principlesFound} principles, ${patternsFound} patterns`);
+
+    if (principles.length > 0) {
+      console.log(`  Principles:`);
+      principles.forEach((p, i) => {
+        console.log(`    ${i + 1}. score=${p.score || 'N/A'} id=${p.id || 'N/A'}`);
+        console.log(`       ${p.content?.substring(0, 80)}...`);
+      });
+    }
+
+    if (patterns.length > 0) {
+      console.log(`  Patterns:`);
+      patterns.forEach((p, i) => {
+        console.log(`    ${i + 1}. score=${p.score || 'N/A'} id=${p.id || 'N/A'}`);
+        console.log(`       ${p.content?.substring(0, 80)}...`);
+      });
+    }
+
+    // Log guidance summary
+    console.log(`  Guidance Preview: ${guidance.substring(0, 100)}...`);
+
+    // Log any unexpected data
+    const allResults = [...principles, ...patterns];
+    if (allResults.length > 0) {
+      const expectedFields = ['id', 'content', 'source_file', 'source', 'score'];
+      const unknownFields = new Set<string>();
+      allResults.forEach(r => {
+        Object.keys(r).forEach(k => {
+          if (!expectedFields.includes(k)) unknownFields.add(k);
+        });
+      });
+      if (unknownFields.size > 0) {
+        console.log(`  [UNKNOWN FIELDS]: ${Array.from(unknownFields).join(', ')}`);
+      }
+    }
+    console.log(`${'='.repeat(60)}\n`);
   } catch (e) {
     console.error('Failed to log consult:', e);
   }
@@ -193,9 +274,9 @@ function handleSearch(query: string, type: string = 'all', limit: number = 10, o
     `);
     const { total } = countStmt.get(safeQuery) as { total: number };
 
-    // Get paginated results
+    // Get paginated results with rank score
     stmt = db.prepare(`
-      SELECT f.id, f.content, d.type, d.source_file, d.concepts
+      SELECT f.id, f.content, d.type, d.source_file, d.concepts, rank as score
       FROM oracle_fts f
       JOIN oracle_documents d ON f.id = d.id
       WHERE oracle_fts MATCH ?
@@ -208,11 +289,12 @@ function handleSearch(query: string, type: string = 'all', limit: number = 10, o
       content: row.content.substring(0, 500),
       source_file: row.source_file,
       concepts: JSON.parse(row.concepts || '[]'),
-      source: 'fts' as const
+      source: 'fts' as const,
+      score: row.score
     }));
 
-    // Log search and document access
-    logSearch(query, type, 'fts', total, Date.now() - startTime);
+    // Log search with full results
+    logSearch(query, type, 'fts', total, Date.now() - startTime, results);
     results.forEach(r => logDocumentAccess(r.id, 'search'));
 
     return { results, total, offset, limit };
@@ -226,9 +308,9 @@ function handleSearch(query: string, type: string = 'all', limit: number = 10, o
     `);
     const { total } = countStmt.get(safeQuery, type) as { total: number };
 
-    // Get paginated results
+    // Get paginated results with rank score
     stmt = db.prepare(`
-      SELECT f.id, f.content, d.type, d.source_file, d.concepts
+      SELECT f.id, f.content, d.type, d.source_file, d.concepts, rank as score
       FROM oracle_fts f
       JOIN oracle_documents d ON f.id = d.id
       WHERE oracle_fts MATCH ? AND d.type = ?
@@ -241,11 +323,12 @@ function handleSearch(query: string, type: string = 'all', limit: number = 10, o
       content: row.content.substring(0, 500),
       source_file: row.source_file,
       concepts: JSON.parse(row.concepts || '[]'),
-      source: 'fts' as const
+      source: 'fts' as const,
+      score: row.score
     }));
 
-    // Log search and document access
-    logSearch(query, type, 'fts', total, Date.now() - startTime);
+    // Log search with full results
+    logSearch(query, type, 'fts', total, Date.now() - startTime, results);
     results.forEach(r => logDocumentAccess(r.id, 'search'));
 
     return { results, total, offset, limit };
@@ -261,39 +344,43 @@ function handleConsult(decision: string, context: string = '') {
   const safeQuery = query.replace(/[?*+\-()^~"':]/g, ' ').replace(/\s+/g, ' ').trim();
 
   const principleStmt = db.prepare(`
-    SELECT f.id, f.content, d.source_file
+    SELECT f.id, f.content, d.source_file, rank as score
     FROM oracle_fts f
     JOIN oracle_documents d ON f.id = d.id
     WHERE oracle_fts MATCH ? AND d.type = 'principle'
     ORDER BY rank
     LIMIT 3
   `);
-  const principles = principleStmt.all(safeQuery);
+  const principlesRaw = principleStmt.all(safeQuery) as any[];
 
   const learningStmt = db.prepare(`
-    SELECT f.id, f.content, d.source_file
+    SELECT f.id, f.content, d.source_file, rank as score
     FROM oracle_fts f
     JOIN oracle_documents d ON f.id = d.id
     WHERE oracle_fts MATCH ? AND d.type = 'learning'
     ORDER BY rank
     LIMIT 3
   `);
-  const patterns = learningStmt.all(safeQuery);
+  const patternsRaw = learningStmt.all(safeQuery) as any[];
 
-  const guidance = synthesizeGuidance(decision, principles, patterns);
+  const guidance = synthesizeGuidance(decision, principlesRaw, patternsRaw);
 
-  // Log the consultation
-  logConsult(decision, context, principles.length, patterns.length, guidance);
+  // Log the consultation with full details
+  logConsult(decision, context, principlesRaw.length, patternsRaw.length, guidance, principlesRaw, patternsRaw);
 
   return {
     decision,
-    principles: principles.map((p: any) => ({
+    principles: principlesRaw.map((p: any) => ({
+      id: p.id,
       content: p.content.substring(0, 300),
-      source: p.source_file
+      source: p.source_file,
+      score: p.score
     })),
-    patterns: patterns.map((p: any) => ({
+    patterns: patternsRaw.map((p: any) => ({
+      id: p.id,
       content: p.content.substring(0, 300),
-      source: p.source_file
+      source: p.source_file,
+      score: p.score
     })),
     guidance
   };
