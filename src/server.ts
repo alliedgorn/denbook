@@ -134,7 +134,7 @@ const server = http.createServer((req, res) => {
         return;
 
       case '/health':
-        result = { status: 'ok', server: 'oracle-v2', port: PORT };
+        result = { status: 'ok', server: 'oracle-v2', port: PORT, oracleV2: 'connected' };
         break;
 
       case '/search':
