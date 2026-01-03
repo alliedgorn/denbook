@@ -12,28 +12,84 @@
       background: #0a0a0f;
       color: #e0e0e0;
       min-height: 100vh;
-      padding: 20px;
     }
 
+    /* Header */
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 24px;
-      padding-bottom: 16px;
+      padding: 16px 24px;
       border-bottom: 1px solid #2a2a3a;
+      background: #0f0f1a;
     }
 
     .header h1 {
-      font-size: 24px;
+      font-size: 20px;
       color: #a78bfa;
     }
 
-    .header .version {
-      color: #666;
-      font-size: 14px;
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
 
+    .session-stats {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .version {
+      color: #666;
+      font-size: 12px;
+    }
+
+    /* Tab Navigation */
+    .tab-nav {
+      display: flex;
+      gap: 4px;
+      padding: 12px 24px;
+      background: #0f0f1a;
+      border-bottom: 1px solid #2a2a3a;
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: #888;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      background: #1a1a2e;
+      color: #a78bfa;
+    }
+
+    .tab-btn.active {
+      background: #1a1a2e;
+      color: #a78bfa;
+      font-weight: 500;
+    }
+
+    /* Tab Content */
+    .tab-content {
+      display: none;
+      padding: 24px;
+      min-height: calc(100vh - 130px);
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Stats Grid */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -50,13 +106,13 @@
     }
 
     .stat-card .value {
-      font-size: 32px;
+      font-size: 28px;
       font-weight: 600;
       color: #a78bfa;
     }
 
     .stat-card .label {
-      font-size: 12px;
+      font-size: 11px;
       color: #888;
       margin-top: 4px;
       text-transform: uppercase;
@@ -64,12 +120,12 @@
 
     .stat-card.healthy .value { color: #4ade80; }
     .stat-card.warning .value { color: #fbbf24; }
-    .stat-card.error .value { color: #f87171; }
 
-    .dashboard-grid {
+    /* Panel Grid */
+    .panel-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-      gap: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 20px;
     }
 
     .panel {
@@ -80,61 +136,58 @@
     }
 
     .panel-header {
-      padding: 16px 20px;
+      padding: 14px 18px;
       border-bottom: 1px solid #2a2a3a;
       font-weight: 600;
+      font-size: 14px;
       color: #a78bfa;
     }
 
     .panel-content {
-      padding: 16px 20px;
-      max-height: 400px;
+      padding: 14px 18px;
+      max-height: 350px;
       overflow-y: auto;
     }
 
-    /* Consultations list */
+    /* Activity Items */
     .activity-item {
-      padding: 12px 0;
+      padding: 10px 0;
       border-bottom: 1px solid #2a2a3a;
     }
 
-    .activity-item:last-child {
-      border-bottom: none;
-    }
+    .activity-item:last-child { border-bottom: none; }
 
     .activity-item .query {
-      font-size: 14px;
+      font-size: 13px;
       color: #e0e0e0;
       margin-bottom: 4px;
     }
 
     .activity-item .meta {
-      font-size: 12px;
+      font-size: 11px;
       color: #666;
       display: flex;
-      gap: 12px;
+      gap: 10px;
     }
 
-    .activity-item .meta .count {
-      color: #4ade80;
-    }
+    .activity-item .meta .count { color: #4ade80; }
 
-    /* Concepts bar chart */
+    /* Concept Bars */
     .concept-bar {
       display: flex;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .concept-bar .name {
-      width: 100px;
-      font-size: 12px;
+      width: 80px;
+      font-size: 11px;
       color: #888;
     }
 
     .concept-bar .bar {
       flex: 1;
-      height: 20px;
+      height: 18px;
       background: #2a2a3a;
       border-radius: 4px;
       overflow: hidden;
@@ -145,23 +198,22 @@
       height: 100%;
       background: linear-gradient(90deg, #7c3aed, #a78bfa);
       border-radius: 4px;
-      transition: width 0.3s ease;
     }
 
     .concept-bar .count {
       width: 30px;
-      font-size: 12px;
+      font-size: 11px;
       color: #888;
       text-align: right;
     }
 
-    /* Growth chart */
+    /* Growth Chart */
     .growth-chart {
       display: flex;
       align-items: flex-end;
-      height: 150px;
+      height: 120px;
       gap: 4px;
-      padding-top: 20px;
+      padding-top: 16px;
     }
 
     .growth-bar {
@@ -176,31 +228,29 @@
       background: linear-gradient(180deg, #7c3aed, #4c1d95);
       border-radius: 4px 4px 0 0;
       min-height: 4px;
-      transition: height 0.3s ease;
     }
 
     .growth-bar .date {
-      font-size: 10px;
+      font-size: 9px;
       color: #666;
       margin-top: 4px;
       transform: rotate(-45deg);
-      white-space: nowrap;
     }
 
-    /* Health indicators */
+    /* Health Grid */
     .health-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
+      gap: 10px;
     }
 
     .health-item {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 12px;
+      padding: 8px 10px;
       background: #0a0a0f;
-      border-radius: 8px;
+      border-radius: 6px;
     }
 
     .health-item .dot {
@@ -213,126 +263,710 @@
     .health-item .dot.yellow { background: #fbbf24; }
     .health-item .dot.red { background: #f87171; }
 
-    .health-item .text {
-      font-size: 12px;
+    .health-item .text { font-size: 11px; }
+    .health-item .status { margin-left: auto; font-size: 10px; color: #666; }
+
+    /* Search Tab */
+    .search-container {
+      max-width: 800px;
+      margin: 0 auto;
     }
 
-    .health-item .status {
-      margin-left: auto;
+    .search-box {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .search-input {
+      flex: 1;
+      background: #1a1a2e;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: #e0e0e0;
+      font-size: 14px;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #a78bfa;
+    }
+
+    .search-select {
+      background: #1a1a2e;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: #e0e0e0;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .search-btn {
+      background: #7c3aed;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 24px;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .search-btn:hover { background: #6d28d9; }
+
+    .search-meta {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 16px;
+    }
+
+    .search-results {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .result-card {
+      background: #1a1a2e;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 16px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .result-card:hover { border-color: #a78bfa; }
+
+    .result-card .type {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 8px;
+      background: #2a2a3a;
+      border-radius: 4px;
+      color: #a78bfa;
+      margin-bottom: 8px;
+    }
+
+    .result-card .content {
+      font-size: 13px;
+      line-height: 1.5;
+      color: #e0e0e0;
+    }
+
+    .result-card .content.expanded {
+      white-space: pre-wrap;
+    }
+
+    .result-card .source {
       font-size: 11px;
       color: #666;
+      margin-top: 8px;
     }
 
-    /* Loading state */
+    /* Browse Tab */
+    .filter-buttons {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      background: #1a1a2e;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 8px 16px;
+      color: #888;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .filter-btn.active {
+      background: #7c3aed;
+      border-color: #7c3aed;
+      color: white;
+    }
+
+    .browse-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .browse-card {
+      background: #1a1a2e;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 16px;
+      cursor: pointer;
+    }
+
+    .browse-card:hover { border-color: #a78bfa; }
+
+    .load-more-btn {
+      display: block;
+      width: 100%;
+      max-width: 300px;
+      margin: 24px auto 0;
+      background: #2a2a3a;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      color: #a78bfa;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .load-more-btn:hover { background: #3a3a4a; }
+
+    /* Consult Tab */
+    .consult-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .consult-input {
+      width: 100%;
+      background: #1a1a2e;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: #e0e0e0;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    .consult-input:focus {
+      outline: none;
+      border-color: #a78bfa;
+    }
+
+    .consult-textarea {
+      width: 100%;
+      height: 100px;
+      background: #1a1a2e;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: #e0e0e0;
+      font-size: 14px;
+      resize: vertical;
+      margin-bottom: 12px;
+    }
+
+    .consult-results {
+      margin-top: 24px;
+    }
+
+    .guidance-box {
+      background: #1a1a2e;
+      border: 1px solid #7c3aed;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .guidance-box h3 {
+      color: #a78bfa;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+
+    .guidance-box pre {
+      white-space: pre-wrap;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* Graph Tab */
+    .graph-container {
+      position: relative;
+      background: #1a1a2e;
+      border-radius: 12px;
+      border: 1px solid #2a2a3a;
+      height: 500px;
+      overflow: hidden;
+    }
+
+    .graph-stats {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      font-size: 12px;
+      color: #888;
+      z-index: 10;
+    }
+
+    .graph-legend {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      gap: 16px;
+      font-size: 11px;
+      z-index: 10;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .legend-dot.principle { background: #a78bfa; }
+    .legend-dot.learning { background: #4ade80; }
+    .legend-dot.retro { background: #60a5fa; }
+
+    #graph-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    .node-tooltip {
+      position: absolute;
+      background: #0a0a0f;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 12px;
+      max-width: 300px;
+      font-size: 12px;
+      display: none;
+      z-index: 100;
+    }
+
+    /* Handoff Tab */
+    .handoff-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .handoff-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .handoff-stat {
+      background: #1a1a2e;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .handoff-stat .num {
+      font-size: 32px;
+      font-weight: 600;
+      color: #a78bfa;
+    }
+
+    .handoff-stat .label {
+      font-size: 12px;
+      color: #888;
+      margin-top: 4px;
+    }
+
+    .handoff-output {
+      background: #1a1a2e;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .handoff-output pre {
+      white-space: pre-wrap;
+      font-size: 13px;
+      font-family: 'SF Mono', Monaco, monospace;
+      color: #e0e0e0;
+    }
+
+    .copy-btn {
+      background: #7c3aed;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 24px;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .copy-btn:hover { background: #6d28d9; }
+
+    .copy-btn.copied {
+      background: #4ade80;
+    }
+
+    /* Quick Learn Button */
+    .quick-learn-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 56px;
+      height: 56px;
+      background: #7c3aed;
+      border: none;
+      border-radius: 50%;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
+      z-index: 100;
+    }
+
+    .quick-learn-btn:hover {
+      background: #6d28d9;
+      transform: scale(1.05);
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+
+    .modal-overlay.active { display: flex; }
+
+    .modal {
+      background: #1a1a2e;
+      border-radius: 12px;
+      padding: 24px;
+      width: 90%;
+      max-width: 500px;
+    }
+
+    .modal h2 {
+      color: #a78bfa;
+      font-size: 18px;
+      margin-bottom: 16px;
+    }
+
+    .modal-close {
+      float: right;
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 24px;
+      cursor: pointer;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 100px;
+      right: 24px;
+      background: #4ade80;
+      color: #0a0a0f;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      display: none;
+      z-index: 300;
+    }
+
+    .toast.error { background: #f87171; }
+    .toast.active { display: block; }
+
+    /* Loading */
     .loading {
       text-align: center;
       padding: 40px;
       color: #666;
     }
 
-    .error {
-      color: #f87171;
-      padding: 20px;
+    .empty-state {
       text-align: center;
+      padding: 60px 20px;
+      color: #666;
     }
 
-    /* Refresh button */
-    .refresh-btn {
-      background: #2a2a3a;
-      border: none;
-      color: #a78bfa;
-      padding: 8px 16px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 14px;
-    }
-
-    .refresh-btn:hover {
-      background: #3a3a4a;
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
     }
   </style>
 </head>
 <body>
+  <!-- Header -->
   <div class="header">
     <h1>Oracle Dashboard</h1>
-    <div>
-      <span class="version" id="version">v0.3.0</span>
-      <button class="refresh-btn" onclick="loadDashboard()">Refresh</button>
+    <div class="header-right">
+      <span class="session-stats" id="session-stats"></span>
+      <span class="version">v0.4.0</span>
     </div>
   </div>
 
-  <div class="stats-grid" id="stats-grid">
-    <div class="stat-card">
-      <div class="value" id="total-docs">-</div>
-      <div class="label">Documents</div>
+  <!-- Tab Navigation -->
+  <div class="tab-nav">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="search">Search</button>
+    <button class="tab-btn" data-tab="browse">Browse</button>
+    <button class="tab-btn" data-tab="consult">Consult</button>
+    <button class="tab-btn" data-tab="graph">Graph</button>
+    <button class="tab-btn" data-tab="handoff">Handoff</button>
+  </div>
+
+  <!-- Overview Tab -->
+  <div class="tab-content active" id="tab-overview">
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card">
+        <div class="value" id="total-docs">-</div>
+        <div class="label">Documents</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="total-concepts">-</div>
+        <div class="label">Concepts</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="consultations-7d">-</div>
+        <div class="label">Consults (7d)</div>
+      </div>
+      <div class="stat-card" id="health-card">
+        <div class="value" id="health-status">-</div>
+        <div class="label">Status</div>
+      </div>
     </div>
-    <div class="stat-card">
-      <div class="value" id="total-concepts">-</div>
-      <div class="label">Concepts</div>
-    </div>
-    <div class="stat-card">
-      <div class="value" id="consultations-7d">-</div>
-      <div class="label">Consults (7d)</div>
-    </div>
-    <div class="stat-card" id="health-card">
-      <div class="value" id="health-status">-</div>
-      <div class="label">Status</div>
+
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-header">Recent Consultations</div>
+        <div class="panel-content" id="consultations-list">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">Top Concepts</div>
+        <div class="panel-content" id="concepts-chart">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">Recent Searches</div>
+        <div class="panel-content" id="searches-list">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">Activity (Last 7 Days)</div>
+        <div class="panel-content" id="growth-chart">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">System Health</div>
+        <div class="panel-content" id="health-panel">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">Recent Learnings</div>
+        <div class="panel-content" id="learnings-list">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="dashboard-grid">
-    <!-- Recent Consultations -->
-    <div class="panel">
-      <div class="panel-header">Recent Consultations</div>
-      <div class="panel-content" id="consultations-list">
-        <div class="loading">Loading...</div>
+  <!-- Search Tab -->
+  <div class="tab-content" id="tab-search">
+    <div class="search-container">
+      <div class="search-box">
+        <input type="text" class="search-input" id="search-input" placeholder="Search Oracle knowledge..." />
+        <select class="search-select" id="search-type">
+          <option value="all">All Types</option>
+          <option value="principle">Principles</option>
+          <option value="learning">Learnings</option>
+          <option value="retro">Retrospectives</option>
+        </select>
+        <button class="search-btn" onclick="performSearch()">Search</button>
       </div>
-    </div>
-
-    <!-- Top Concepts -->
-    <div class="panel">
-      <div class="panel-header">Top Concepts</div>
-      <div class="panel-content" id="concepts-chart">
-        <div class="loading">Loading...</div>
-      </div>
-    </div>
-
-    <!-- Recent Searches -->
-    <div class="panel">
-      <div class="panel-header">Recent Searches</div>
-      <div class="panel-content" id="searches-list">
-        <div class="loading">Loading...</div>
-      </div>
-    </div>
-
-    <!-- Growth Chart -->
-    <div class="panel">
-      <div class="panel-header">Activity (Last 7 Days)</div>
-      <div class="panel-content" id="growth-chart">
-        <div class="loading">Loading...</div>
-      </div>
-    </div>
-
-    <!-- System Health -->
-    <div class="panel">
-      <div class="panel-header">System Health</div>
-      <div class="panel-content" id="health-panel">
-        <div class="loading">Loading...</div>
-      </div>
-    </div>
-
-    <!-- Recent Learnings -->
-    <div class="panel">
-      <div class="panel-header">Recent Learnings</div>
-      <div class="panel-content" id="learnings-list">
-        <div class="loading">Loading...</div>
+      <div class="search-meta" id="search-meta"></div>
+      <div class="search-results" id="search-results">
+        <div class="empty-state">
+          <div class="icon">🔍</div>
+          <div>Enter a query to search the Oracle knowledge base</div>
+        </div>
       </div>
     </div>
   </div>
+
+  <!-- Browse Tab -->
+  <div class="tab-content" id="tab-browse">
+    <div class="filter-buttons" id="browse-filters">
+      <button class="filter-btn active" data-type="all">All</button>
+      <button class="filter-btn" data-type="principle">Principles</button>
+      <button class="filter-btn" data-type="learning">Learnings</button>
+      <button class="filter-btn" data-type="retro">Retrospectives</button>
+    </div>
+    <div class="browse-grid" id="browse-grid">
+      <div class="loading">Loading...</div>
+    </div>
+    <button class="load-more-btn" id="load-more-btn" onclick="loadMoreBrowse()">Load More</button>
+  </div>
+
+  <!-- Consult Tab -->
+  <div class="tab-content" id="tab-consult">
+    <div class="consult-container">
+      <input type="text" class="consult-input" id="consult-decision" placeholder="What decision do you need guidance on?" />
+      <textarea class="consult-textarea" id="consult-context" placeholder="Additional context (optional)..."></textarea>
+      <button class="search-btn" onclick="performConsult()">Get Guidance</button>
+      <div class="consult-results" id="consult-results"></div>
+    </div>
+  </div>
+
+  <!-- Graph Tab -->
+  <div class="tab-content" id="tab-graph">
+    <div class="graph-container">
+      <div class="graph-stats" id="graph-stats">Loading graph...</div>
+      <div class="graph-legend">
+        <div class="legend-item"><div class="legend-dot principle"></div> Principle</div>
+        <div class="legend-item"><div class="legend-dot learning"></div> Learning</div>
+        <div class="legend-item"><div class="legend-dot retro"></div> Retro</div>
+      </div>
+      <canvas id="graph-canvas"></canvas>
+      <div class="node-tooltip" id="node-tooltip"></div>
+    </div>
+  </div>
+
+  <!-- Handoff Tab -->
+  <div class="tab-content" id="tab-handoff">
+    <div class="handoff-container">
+      <div class="handoff-summary" id="handoff-summary">
+        <div class="handoff-stat">
+          <div class="num" id="handoff-searches">-</div>
+          <div class="label">Searches Today</div>
+        </div>
+        <div class="handoff-stat">
+          <div class="num" id="handoff-consults">-</div>
+          <div class="label">Consultations</div>
+        </div>
+        <div class="handoff-stat">
+          <div class="num" id="handoff-learnings">-</div>
+          <div class="label">Learnings</div>
+        </div>
+      </div>
+      <button class="search-btn" onclick="generateHandoff()" style="margin-bottom: 16px;">Generate Handoff</button>
+      <div class="handoff-output" id="handoff-output" style="display: none;">
+        <pre id="handoff-text"></pre>
+      </div>
+      <button class="copy-btn" id="copy-handoff-btn" onclick="copyHandoff()" style="display: none;">Copy to Clipboard</button>
+    </div>
+  </div>
+
+  <!-- Quick Learn Button -->
+  <button class="quick-learn-btn" onclick="openLearnModal()" title="Quick Learn">+</button>
+
+  <!-- Learn Modal -->
+  <div class="modal-overlay" id="learn-modal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeLearnModal()">&times;</button>
+      <h2>Add Learning</h2>
+      <textarea class="consult-textarea" id="learn-pattern" placeholder="What pattern or insight did you learn?" style="height: 120px;"></textarea>
+      <input type="text" class="consult-input" id="learn-concepts" placeholder="Concepts (comma separated: git, safety, trust)" />
+      <button class="search-btn" onclick="submitLearning()">Save Learning</button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
 
   <script>
     const API_BASE = window.location.origin;
+    let browseOffset = 0;
+    let browseType = 'all';
+    let graphData = null;
 
+    // Session tracking
+    function initSession() {
+      const today = new Date().toDateString();
+      const stored = localStorage.getItem('oracle_session');
+      if (stored) {
+        const session = JSON.parse(stored);
+        if (session.date !== today) {
+          // Reset for new day
+          localStorage.setItem('oracle_session', JSON.stringify({
+            date: today,
+            start: Date.now(),
+            searches: 0,
+            learns: 0
+          }));
+        }
+      } else {
+        localStorage.setItem('oracle_session', JSON.stringify({
+          date: today,
+          start: Date.now(),
+          searches: 0,
+          learns: 0
+        }));
+      }
+      updateSessionStats();
+    }
+
+    function updateSessionStats() {
+      const stored = localStorage.getItem('oracle_session');
+      if (stored) {
+        const session = JSON.parse(stored);
+        const elapsed = Date.now() - session.start;
+        const hours = Math.floor(elapsed / 3600000);
+        const mins = Math.floor((elapsed % 3600000) / 60000);
+        const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+        document.getElementById('session-stats').textContent =
+          `Session: ${timeStr} | ${session.searches} searches | ${session.learns} learnings`;
+      }
+    }
+
+    function incrementStat(key) {
+      const stored = localStorage.getItem('oracle_session');
+      if (stored) {
+        const session = JSON.parse(stored);
+        session[key] = (session[key] || 0) + 1;
+        localStorage.setItem('oracle_session', JSON.stringify(session));
+        updateSessionStats();
+      }
+    }
+
+    // Tab navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+
+        // Load tab data on first view
+        if (btn.dataset.tab === 'browse' && document.getElementById('browse-grid').children[0]?.classList.contains('loading')) {
+          loadBrowse();
+        }
+        if (btn.dataset.tab === 'graph' && !graphData) {
+          loadGraph();
+        }
+        if (btn.dataset.tab === 'handoff') {
+          loadHandoffStats();
+        }
+      });
+    });
+
+    // Utility functions
     async function fetchJSON(endpoint) {
       const res = await fetch(`${API_BASE}${endpoint}`);
       return res.json();
@@ -342,16 +976,22 @@
       const date = new Date(isoString);
       const now = new Date();
       const diff = now - date;
-
       if (diff < 60000) return 'just now';
       if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
       if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
       return date.toLocaleDateString();
     }
 
-    async function loadDashboard() {
+    function showToast(message, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast active' + (isError ? ' error' : '');
+      setTimeout(() => toast.classList.remove('active'), 3000);
+    }
+
+    // Overview Tab
+    async function loadOverview() {
       try {
-        // Load summary
         const summary = await fetchJSON('/dashboard/summary');
 
         document.getElementById('total-docs').textContent = summary.documents.total;
@@ -368,22 +1008,20 @@
           healthCard.className = 'stat-card warning';
         }
 
-        // Render top concepts
+        // Concepts
         const conceptsHtml = summary.concepts.top.map(c => {
           const maxCount = summary.concepts.top[0]?.count || 1;
           const width = (c.count / maxCount) * 100;
-          return `
-            <div class="concept-bar">
-              <span class="name">${c.name}</span>
-              <div class="bar"><div class="fill" style="width: ${width}%"></div></div>
-              <span class="count">${c.count}</span>
-            </div>
-          `;
+          return `<div class="concept-bar">
+            <span class="name">${c.name}</span>
+            <div class="bar"><div class="fill" style="width: ${width}%"></div></div>
+            <span class="count">${c.count}</span>
+          </div>`;
         }).join('');
-        document.getElementById('concepts-chart').innerHTML = conceptsHtml || '<div class="loading">No concepts yet</div>';
+        document.getElementById('concepts-chart').innerHTML = conceptsHtml || '<div class="loading">No concepts</div>';
 
-        // Render health panel
-        const healthHtml = `
+        // Health
+        document.getElementById('health-panel').innerHTML = `
           <div class="health-grid">
             <div class="health-item">
               <div class="dot ${summary.health.fts_status === 'healthy' ? 'green' : 'red'}"></div>
@@ -405,15 +1043,12 @@
               <span class="text">Concepts</span>
               <span class="status">${summary.concepts.total}</span>
             </div>
-          </div>
-        `;
-        document.getElementById('health-panel').innerHTML = healthHtml;
+          </div>`;
 
-        // Load activity
+        // Activity
         const activity = await fetchJSON('/dashboard/activity?days=7');
 
-        // Render consultations
-        const consultHtml = activity.consultations.map(c => `
+        document.getElementById('consultations-list').innerHTML = activity.consultations.map(c => `
           <div class="activity-item">
             <div class="query">${c.decision}</div>
             <div class="meta">
@@ -421,11 +1056,9 @@
               <span>${formatTime(c.created_at)}</span>
             </div>
           </div>
-        `).join('');
-        document.getElementById('consultations-list').innerHTML = consultHtml || '<div class="loading">No consultations yet</div>';
+        `).join('') || '<div class="loading">No consultations</div>';
 
-        // Render searches
-        const searchHtml = activity.searches.map(s => `
+        document.getElementById('searches-list').innerHTML = activity.searches.map(s => `
           <div class="activity-item">
             <div class="query">${s.query}</div>
             <div class="meta">
@@ -434,11 +1067,9 @@
               <span>${formatTime(s.created_at)}</span>
             </div>
           </div>
-        `).join('');
-        document.getElementById('searches-list').innerHTML = searchHtml || '<div class="loading">No searches yet</div>';
+        `).join('') || '<div class="loading">No searches</div>';
 
-        // Render learnings
-        const learnHtml = activity.learnings.map(l => `
+        document.getElementById('learnings-list').innerHTML = activity.learnings.map(l => `
           <div class="activity-item">
             <div class="query">${l.pattern_preview}</div>
             <div class="meta">
@@ -446,42 +1077,363 @@
               <span>${formatTime(l.created_at)}</span>
             </div>
           </div>
-        `).join('');
-        document.getElementById('learnings-list').innerHTML = learnHtml || '<div class="loading">No learnings yet</div>';
+        `).join('') || '<div class="loading">No learnings</div>';
 
-        // Load growth
+        // Growth
         const growth = await fetchJSON('/dashboard/growth?period=week');
-
         const maxActivity = Math.max(...growth.data.map(d => d.consultations + d.searches + d.documents)) || 1;
-        const growthHtml = `
+        document.getElementById('growth-chart').innerHTML = `
           <div class="growth-chart">
             ${growth.data.map(d => {
               const total = d.consultations + d.searches + d.documents;
-              const height = (total / maxActivity) * 120;
-              return `
-                <div class="growth-bar">
-                  <div class="bar" style="height: ${Math.max(4, height)}px" title="${d.date}: ${total} activities"></div>
-                  <div class="date">${d.date.slice(5)}</div>
-                </div>
-              `;
+              const height = (total / maxActivity) * 100;
+              return `<div class="growth-bar">
+                <div class="bar" style="height: ${Math.max(4, height)}px" title="${d.date}: ${total}"></div>
+                <div class="date">${d.date.slice(5)}</div>
+              </div>`;
             }).join('')}
-          </div>
-        `;
-        document.getElementById('growth-chart').innerHTML = growthHtml;
+          </div>`;
 
       } catch (error) {
-        console.error('Dashboard error:', error);
-        document.querySelectorAll('.panel-content').forEach(el => {
-          el.innerHTML = `<div class="error">Error loading data: ${error.message}</div>`;
-        });
+        console.error('Overview error:', error);
       }
     }
 
-    // Initial load
-    loadDashboard();
+    // Search Tab
+    async function performSearch() {
+      const query = document.getElementById('search-input').value.trim();
+      if (!query) return;
 
-    // Auto-refresh every 30 seconds
-    setInterval(loadDashboard, 30000);
+      const type = document.getElementById('search-type').value;
+      const startTime = Date.now();
+
+      try {
+        const data = await fetchJSON(`/search?q=${encodeURIComponent(query)}&type=${type}&limit=20`);
+        const elapsed = Date.now() - startTime;
+
+        incrementStat('searches');
+
+        document.getElementById('search-meta').textContent =
+          `${data.total} results in ${elapsed}ms`;
+
+        document.getElementById('search-results').innerHTML = data.results.map(r => `
+          <div class="result-card" onclick="this.querySelector('.content').classList.toggle('expanded')">
+            <span class="type">${r.type}</span>
+            <div class="content">${r.content}</div>
+            <div class="source">${r.source_file}</div>
+          </div>
+        `).join('') || '<div class="empty-state">No results found</div>';
+
+      } catch (error) {
+        showToast('Search failed: ' + error.message, true);
+      }
+    }
+
+    document.getElementById('search-input').addEventListener('keypress', e => {
+      if (e.key === 'Enter') performSearch();
+    });
+
+    // Browse Tab
+    async function loadBrowse(reset = false) {
+      if (reset) browseOffset = 0;
+
+      try {
+        const data = await fetchJSON(`/list?type=${browseType}&limit=20&offset=${browseOffset}&group=false`);
+
+        const html = data.results.map(r => `
+          <div class="browse-card" onclick="this.querySelector('.content').classList.toggle('expanded')">
+            <span class="type">${r.type}</span>
+            <div class="content">${r.content}</div>
+            <div class="source">${r.source_file}</div>
+          </div>
+        `).join('');
+
+        if (reset || browseOffset === 0) {
+          document.getElementById('browse-grid').innerHTML = html || '<div class="empty-state">No documents found</div>';
+        } else {
+          document.getElementById('browse-grid').innerHTML += html;
+        }
+
+        document.getElementById('load-more-btn').style.display =
+          data.results.length < 20 ? 'none' : 'block';
+
+      } catch (error) {
+        showToast('Failed to load documents', true);
+      }
+    }
+
+    function loadMoreBrowse() {
+      browseOffset += 20;
+      loadBrowse();
+    }
+
+    document.querySelectorAll('#browse-filters .filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#browse-filters .filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        browseType = btn.dataset.type;
+        loadBrowse(true);
+      });
+    });
+
+    // Consult Tab
+    async function performConsult() {
+      const decision = document.getElementById('consult-decision').value.trim();
+      if (!decision) {
+        showToast('Please enter a decision', true);
+        return;
+      }
+
+      const context = document.getElementById('consult-context').value.trim();
+
+      try {
+        const url = `/consult?q=${encodeURIComponent(decision)}${context ? '&context=' + encodeURIComponent(context) : ''}`;
+        const data = await fetchJSON(url);
+
+        document.getElementById('consult-results').innerHTML = `
+          <div class="guidance-box">
+            <h3>Guidance</h3>
+            <pre>${data.guidance}</pre>
+          </div>
+          ${data.principles.length ? `
+            <div class="panel" style="margin-bottom: 16px;">
+              <div class="panel-header">Relevant Principles (${data.principles.length})</div>
+              <div class="panel-content">
+                ${data.principles.map(p => `
+                  <div class="activity-item">
+                    <div class="query">${p.content}</div>
+                    <div class="meta"><span>${p.source}</span></div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+          ${data.patterns.length ? `
+            <div class="panel">
+              <div class="panel-header">Relevant Patterns (${data.patterns.length})</div>
+              <div class="panel-content">
+                ${data.patterns.map(p => `
+                  <div class="activity-item">
+                    <div class="query">${p.content}</div>
+                    <div class="meta"><span>${p.source}</span></div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+        `;
+      } catch (error) {
+        showToast('Consultation failed: ' + error.message, true);
+      }
+    }
+
+    // Graph Tab
+    async function loadGraph() {
+      try {
+        graphData = await fetchJSON('/graph');
+        document.getElementById('graph-stats').textContent =
+          `${graphData.nodes.length} nodes, ${graphData.links.length} links`;
+        renderGraph();
+      } catch (error) {
+        document.getElementById('graph-stats').textContent = 'Failed to load graph';
+      }
+    }
+
+    function renderGraph() {
+      const canvas = document.getElementById('graph-canvas');
+      const ctx = canvas.getContext('2d');
+      const container = canvas.parentElement;
+
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+
+      if (!graphData || !graphData.nodes.length) return;
+
+      // Simple force-directed layout
+      const nodes = graphData.nodes.map((n, i) => ({
+        ...n,
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: 0,
+        vy: 0
+      }));
+
+      const nodeMap = new Map(nodes.map(n => [n.id, n]));
+
+      // Color mapping
+      const colors = {
+        principle: '#a78bfa',
+        learning: '#4ade80',
+        retro: '#60a5fa'
+      };
+
+      // Animation
+      function animate() {
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw links
+        ctx.strokeStyle = '#2a2a3a';
+        ctx.lineWidth = 0.5;
+        graphData.links.forEach(link => {
+          const source = nodeMap.get(link.source);
+          const target = nodeMap.get(link.target);
+          if (source && target) {
+            ctx.beginPath();
+            ctx.moveTo(source.x, source.y);
+            ctx.lineTo(target.x, target.y);
+            ctx.stroke();
+          }
+        });
+
+        // Draw nodes
+        nodes.forEach(node => {
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, 4, 0, Math.PI * 2);
+          ctx.fillStyle = colors[node.type] || '#888';
+          ctx.fill();
+        });
+
+        // Simple repulsion
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const dx = nodes[j].x - nodes[i].x;
+            const dy = nodes[j].y - nodes[i].y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            if (dist < 50) {
+              const force = (50 - dist) * 0.01;
+              nodes[i].vx -= dx / dist * force;
+              nodes[i].vy -= dy / dist * force;
+              nodes[j].vx += dx / dist * force;
+              nodes[j].vy += dy / dist * force;
+            }
+          }
+        }
+
+        // Apply velocity and bounds
+        nodes.forEach(node => {
+          node.x += node.vx;
+          node.y += node.vy;
+          node.vx *= 0.9;
+          node.vy *= 0.9;
+          node.x = Math.max(10, Math.min(canvas.width - 10, node.x));
+          node.y = Math.max(50, Math.min(canvas.height - 10, node.y));
+        });
+
+        requestAnimationFrame(animate);
+      }
+
+      animate();
+    }
+
+    // Handoff Tab
+    async function loadHandoffStats() {
+      try {
+        const activity = await fetchJSON('/dashboard/activity?days=1');
+        document.getElementById('handoff-searches').textContent = activity.searches.length;
+        document.getElementById('handoff-consults').textContent = activity.consultations.length;
+        document.getElementById('handoff-learnings').textContent = activity.learnings.length;
+      } catch (error) {
+        console.error('Handoff stats error:', error);
+      }
+    }
+
+    async function generateHandoff() {
+      try {
+        const activity = await fetchJSON('/dashboard/activity?days=1');
+        const summary = await fetchJSON('/dashboard/summary');
+
+        const handoffText = `## Session Handoff
+
+**Date**: ${new Date().toISOString().split('T')[0]}
+**Knowledge Base**: ${summary.documents.total} documents, ${summary.concepts.total} concepts
+
+### Activity Summary
+- Searches: ${activity.searches.length}
+- Consultations: ${activity.consultations.length}
+- Learnings: ${activity.learnings.length}
+
+### Recent Searches
+${activity.searches.slice(0, 5).map(s => `- "${s.query}" (${s.results_count} results)`).join('\n') || '- None'}
+
+### Recent Consultations
+${activity.consultations.slice(0, 5).map(c => `- "${c.decision}" (${c.principles_found}P/${c.patterns_found}L)`).join('\n') || '- None'}
+
+### Recent Learnings
+${activity.learnings.slice(0, 5).map(l => `- ${l.pattern_preview}`).join('\n') || '- None'}
+
+---
+*Generated by Oracle Dashboard*`;
+
+        document.getElementById('handoff-text').textContent = handoffText;
+        document.getElementById('handoff-output').style.display = 'block';
+        document.getElementById('copy-handoff-btn').style.display = 'inline-block';
+
+      } catch (error) {
+        showToast('Failed to generate handoff', true);
+      }
+    }
+
+    function copyHandoff() {
+      const text = document.getElementById('handoff-text').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copy-handoff-btn');
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy to Clipboard';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+
+    // Quick Learn Modal
+    function openLearnModal() {
+      document.getElementById('learn-modal').classList.add('active');
+    }
+
+    function closeLearnModal() {
+      document.getElementById('learn-modal').classList.remove('active');
+      document.getElementById('learn-pattern').value = '';
+      document.getElementById('learn-concepts').value = '';
+    }
+
+    async function submitLearning() {
+      const pattern = document.getElementById('learn-pattern').value.trim();
+      if (!pattern) {
+        showToast('Please enter a pattern', true);
+        return;
+      }
+
+      const conceptsStr = document.getElementById('learn-concepts').value.trim();
+      const concepts = conceptsStr ? conceptsStr.split(',').map(c => c.trim()).filter(Boolean) : [];
+
+      try {
+        const res = await fetch(`${API_BASE}/learn`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pattern, concepts })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          incrementStat('learns');
+          showToast('Learning saved!');
+          closeLearnModal();
+          loadOverview(); // Refresh
+        } else {
+          showToast(data.error || 'Failed to save', true);
+        }
+      } catch (error) {
+        showToast('Failed to save learning', true);
+      }
+    }
+
+    // Initialize
+    initSession();
+    loadOverview();
+    setInterval(updateSessionStats, 60000); // Update session stats every minute
   </script>
 </body>
 </html>

@@ -1,0 +1,171 @@
+import { useState, useEffect } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { getStats, reflect } from '../api/oracle';
+import type { Document, Stats } from '../api/oracle';
+import styles from './Overview.module.css';
+
+export function Overview() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [wisdom, setWisdom] = useState<Document | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    try {
+      const [statsData, wisdomData] = await Promise.all([
+        getStats(),
+        reflect()
+      ]);
+      setStats(statsData);
+      setWisdom(wisdomData);
+    } catch (e) {
+      console.error('Failed to load stats:', e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function refreshWisdom() {
+    const data = await reflect();
+    setWisdom(data);
+  }
+
+  if (loading) {
+    return <div className={styles.loading}>Loading...</div>;
+  }
+
+  return (
+    <div className={styles.container}>
+      <h1 className={styles.title}>Oracle Overview</h1>
+      <p className={styles.subtitle}>Your knowledge base at a glance</p>
+
+      <div className={styles.statsGrid}>
+        <div className={styles.statCard}>
+          <div className={styles.statValue}>{stats?.total?.toLocaleString() || 0}</div>
+          <div className={styles.statLabel}>Documents</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statValue}>{stats?.by_type?.principle || 0}</div>
+          <div className={styles.statLabel}>Principles</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statValue}>{stats?.by_type?.learning || 0}</div>
+          <div className={styles.statLabel}>Learnings</div>
+        </div>
+        <div className={`${styles.statCard} ${stats?.is_stale ? '' : styles.healthy}`}>
+          <div className={styles.statValue}>{stats?.is_stale ? 'Stale' : 'Healthy'}</div>
+          <div className={styles.statLabel}>Status</div>
+        </div>
+      </div>
+
+      {wisdom && (
+        <>
+          <div className={styles.wisdomCard} onClick={() => setShowModal(true)}>
+            <div className={styles.wisdomGlow}></div>
+            <div className={styles.wisdomInner}>
+              <div className={styles.wisdomHeader}>
+                <div className={styles.wisdomLabel}>
+                  <span className={styles.wisdomOrb}></span>
+                  <span>Oracle Wisdom</span>
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); refreshWisdom(); }}
+                  className={styles.refreshBtn}
+                  title="New wisdom"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                  </svg>
+                </button>
+              </div>
+              <div className={styles.wisdomQuote}>
+                <span className={styles.quoteOpen}>"</span>
+                <p className={styles.wisdomContent}>
+                  {wisdom.content.length > 200
+                    ? wisdom.content.slice(0, 200).trim() + '...'
+                    : wisdom.content}
+                </p>
+                <span className={styles.quoteClose}>"</span>
+              </div>
+              <div className={styles.wisdomFooter}>
+                <div className={styles.wisdomMeta}>
+                  <span className={styles.wisdomType}>{wisdom.type}</span>
+                  {wisdom.concepts && wisdom.concepts.length > 0 && (
+                    <div className={styles.wisdomTags}>
+                      {wisdom.concepts.slice(0, 4).map(c => (
+                        <span key={c} className={styles.wisdomTag}>{c}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <span className={styles.clickHint}>Click to read full</span>
+              </div>
+            </div>
+          </div>
+
+          {showModal && (
+            <div className={styles.modalOverlay} onClick={() => setShowModal(false)}>
+              <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.modalHeader}>
+                  <div className={styles.modalLabel}>
+                    <span className={styles.wisdomOrb}></span>
+                    <span>Oracle Wisdom</span>
+                  </div>
+                  <button onClick={() => setShowModal(false)} className={styles.closeBtn}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </div>
+                <div className={styles.modalContent}>
+                  <Markdown remarkPlugins={[remarkGfm]}>{wisdom.content}</Markdown>
+                </div>
+                <div className={styles.modalFooter}>
+                  <span className={styles.wisdomType}>{wisdom.type}</span>
+                  {wisdom.concepts && wisdom.concepts.length > 0 && (
+                    <div className={styles.wisdomTags}>
+                      {wisdom.concepts.map(c => (
+                        <span key={c} className={styles.wisdomTag}>{c}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className={styles.quickActions}>
+        <h2 className={styles.sectionTitle}>Quick Actions</h2>
+        <div className={styles.actionsGrid}>
+          <a href="/search" className={styles.actionCard}>
+            <span className={styles.actionIcon}>🔍</span>
+            <span className={styles.actionTitle}>Search</span>
+            <span className={styles.actionDesc}>Find patterns and learnings</span>
+          </a>
+          <a href="/consult" className={styles.actionCard}>
+            <span className={styles.actionIcon}>🔮</span>
+            <span className={styles.actionTitle}>Consult</span>
+            <span className={styles.actionDesc}>Get guidance on decisions</span>
+          </a>
+          <a href="/graph" className={styles.actionCard}>
+            <span className={styles.actionIcon}>🕸️</span>
+            <span className={styles.actionTitle}>Graph</span>
+            <span className={styles.actionDesc}>Visualize knowledge</span>
+          </a>
+          <a href="/handoff" className={styles.actionCard}>
+            <span className={styles.actionIcon}>📋</span>
+            <span className={styles.actionTitle}>Handoff</span>
+            <span className={styles.actionDesc}>Generate session summary</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}

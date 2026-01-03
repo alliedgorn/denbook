@@ -24,3 +24,9 @@ chroma/
 .idea/
 *.swp
 *.swo
+
+# Temporary files
+tmp/
+
+# Test coverage
+coverage/
