@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { learn } from '../api/oracle';
 import styles from './QuickLearn.module.css';
 
@@ -8,6 +8,23 @@ export function QuickLearn() {
   const [concepts, setConcepts] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Listen for quicklearn:open event from Activity page
+  useEffect(() => {
+    function handleQuickLearnOpen(e: CustomEvent<{ query: string }>) {
+      const topic = e.detail.query;
+      setPattern(`About "${topic}":\n\n`);
+      // Extract potential concepts from query
+      const words = topic.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      setConcepts(words.slice(0, 3).join(', '));
+      setIsOpen(true);
+    }
+
+    window.addEventListener('quicklearn:open', handleQuickLearnOpen as EventListener);
+    return () => {
+      window.removeEventListener('quicklearn:open', handleQuickLearnOpen as EventListener);
+    };
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

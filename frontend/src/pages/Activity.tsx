@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { getDashboardSummary, getDashboardActivity, getDashboardGrowth } from '../api/oracle';
 import type { DashboardSummary, DashboardActivity, DashboardGrowth } from '../api/oracle';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -8,7 +8,7 @@ import styles from './Activity.module.css';
 const PERIODS = ['week', 'month', 'quarter'] as const;
 type Period = typeof PERIODS[number];
 
-const TABS = ['searches', 'consultations', 'learnings'] as const;
+const TABS = ['gaps', 'searches', 'consultations', 'learnings'] as const;
 type Tab = typeof TABS[number];
 
 function formatTimeAgo(dateString: string): string {
@@ -31,9 +31,23 @@ export function Activity() {
   const [activity, setActivity] = useState<DashboardActivity | null>(null);
   const [growth, setGrowth] = useState<DashboardGrowth | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('searches');
+  const [activeTab, setActiveTab] = useState<Tab>('gaps');
 
   const period = (searchParams.get('period') as Period) || 'week';
+
+  // Knowledge gaps: searches and consultations with 0 results
+  const gaps = [
+    ...(activity?.searches.filter(s => s.results_count === 0).map(s => ({
+      type: 'search' as const,
+      query: s.query,
+      created_at: s.created_at
+    })) || []),
+    ...(activity?.consultations.filter(c => c.principles_found === 0 && c.patterns_found === 0).map(c => ({
+      type: 'consult' as const,
+      query: c.decision,
+      created_at: c.created_at
+    })) || [])
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   function setPeriod(newPeriod: Period) {
     setSearchParams({ period: newPeriod });
@@ -96,6 +110,12 @@ export function Activity() {
 
       {/* Summary Cards */}
       <div className={styles.summaryGrid}>
+        <div className={`${styles.statCard} ${gaps.length > 0 ? styles.gapCard : ''}`}>
+          <div className={styles.statIcon}>&#9888;&#65039;</div>
+          <div className={styles.statValue}>{gaps.length}</div>
+          <div className={styles.statLabel}>Knowledge Gaps</div>
+          <div className={styles.statMeta}>0 result queries</div>
+        </div>
         <div className={styles.statCard}>
           <div className={styles.statIcon}>&#128269;</div>
           <div className={styles.statValue}>{summary?.activity.searches_7d ?? 0}</div>
@@ -113,12 +133,6 @@ export function Activity() {
           <div className={styles.statValue}>{summary?.activity.learnings_7d ?? 0}</div>
           <div className={styles.statLabel}>Learnings</div>
           <div className={styles.statMeta}>this period</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statIcon}>&#127942;</div>
-          <div className={styles.statValue}>{summary?.concepts.top[0]?.name ?? '-'}</div>
-          <div className={styles.statLabel}>Top Concept</div>
-          <div className={styles.statMeta}>{summary?.concepts.top[0]?.count ?? 0} docs</div>
         </div>
       </div>
 
@@ -165,11 +179,12 @@ export function Activity() {
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
-              className={`${styles.tabBtn} ${activeTab === tab ? styles.active : ''}`}
+              className={`${styles.tabBtn} ${activeTab === tab ? styles.active : ''} ${tab === 'gaps' && gaps.length > 0 ? styles.gapTab : ''}`}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              <span className={styles.tabCount}>
-                {tab === 'searches' ? activity?.searches.length ?? 0 :
+              {tab === 'gaps' ? 'Knowledge Gaps' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              <span className={`${styles.tabCount} ${tab === 'gaps' && gaps.length > 0 ? styles.gapCount : ''}`}>
+                {tab === 'gaps' ? gaps.length :
+                 tab === 'searches' ? activity?.searches.length ?? 0 :
                  tab === 'consultations' ? activity?.consultations.length ?? 0 :
                  activity?.learnings.length ?? 0}
               </span>
@@ -178,35 +193,89 @@ export function Activity() {
         </div>
 
         <div className={styles.activityList}>
+          {/* Knowledge Gaps Tab */}
+          {activeTab === 'gaps' && gaps.map((g, i) => (
+            <div key={i} className={`${styles.activityItem} ${styles.gapItem}`}>
+              <div className={styles.activityIcon}>{g.type === 'search' ? '🔍' : '💬'}</div>
+              <div className={styles.activityContent}>
+                <div className={styles.activityTitle}>"{g.query}"</div>
+                <div className={styles.activityMeta}>
+                  No results found &middot; {g.type === 'search' ? 'Search' : 'Consult'}
+                </div>
+              </div>
+              <div className={styles.gapActions}>
+                <Link
+                  to={`/search?q=${encodeURIComponent(g.query)}`}
+                  className={styles.actionBtn}
+                  title="Search again"
+                >
+                  🔄
+                </Link>
+                <button
+                  type="button"
+                  className={styles.learnBtn}
+                  onClick={() => {
+                    // Trigger QuickLearn with pre-filled query
+                    const event = new CustomEvent('quicklearn:open', { detail: { query: g.query } });
+                    window.dispatchEvent(event);
+                  }}
+                  title="Add knowledge about this topic"
+                >
+                  ➕ Learn
+                </button>
+              </div>
+            </div>
+          ))}
+          {activeTab === 'gaps' && gaps.length === 0 && (
+            <div className={styles.empty}>
+              <div className={styles.emptyIcon}>✨</div>
+              <div>No knowledge gaps! All searches found results.</div>
+            </div>
+          )}
+
+          {/* Searches Tab */}
           {activeTab === 'searches' && activity?.searches.map((s, i) => (
-            <div key={i} className={styles.activityItem}>
-              <div className={styles.activityIcon}>&#128269;</div>
+            <div key={i} className={`${styles.activityItem} ${s.results_count === 0 ? styles.gapItem : ''}`}>
+              <div className={styles.activityIcon}>🔍</div>
               <div className={styles.activityContent}>
                 <div className={styles.activityTitle}>"{s.query}"</div>
                 <div className={styles.activityMeta}>
-                  {s.results_count} results &middot; {s.search_time_ms}ms &middot; {s.type}
+                  {s.results_count === 0 ? (
+                    <span className={styles.noResults}>No results</span>
+                  ) : (
+                    <>{s.results_count} results</>
+                  )} &middot; {s.search_time_ms}ms &middot; {s.type}
                 </div>
               </div>
               <div className={styles.activityTime}>{formatTimeAgo(s.created_at)}</div>
             </div>
           ))}
 
-          {activeTab === 'consultations' && activity?.consultations.map((c, i) => (
-            <div key={i} className={styles.activityItem}>
-              <div className={styles.activityIcon}>&#128172;</div>
-              <div className={styles.activityContent}>
-                <div className={styles.activityTitle}>"{c.decision}"</div>
-                <div className={styles.activityMeta}>
-                  {c.principles_found} principles &middot; {c.patterns_found} patterns
+          {/* Consultations Tab */}
+          {activeTab === 'consultations' && activity?.consultations.map((c, i) => {
+            const hasResults = c.principles_found > 0 || c.patterns_found > 0;
+            return (
+              <div key={i} className={`${styles.activityItem} ${!hasResults ? styles.gapItem : ''}`}>
+                <div className={styles.activityIcon}>💬</div>
+                <div className={styles.activityContent}>
+                  <div className={styles.activityTitle}>"{c.decision}"</div>
+                  <div className={styles.activityMeta}>
+                    {!hasResults ? (
+                      <span className={styles.noResults}>No matches</span>
+                    ) : (
+                      <>{c.principles_found} principles &middot; {c.patterns_found} patterns</>
+                    )}
+                  </div>
                 </div>
+                <div className={styles.activityTime}>{formatTimeAgo(c.created_at)}</div>
               </div>
-              <div className={styles.activityTime}>{formatTimeAgo(c.created_at)}</div>
-            </div>
-          ))}
+            );
+          })}
 
+          {/* Learnings Tab */}
           {activeTab === 'learnings' && activity?.learnings.map((l, i) => (
             <div key={i} className={styles.activityItem}>
-              <div className={styles.activityIcon}>&#128218;</div>
+              <div className={styles.activityIcon}>📚</div>
               <div className={styles.activityContent}>
                 <div className={styles.activityTitle}>{l.pattern_preview}</div>
                 <div className={styles.activityMeta}>
@@ -217,10 +286,15 @@ export function Activity() {
             </div>
           ))}
 
-          {((activeTab === 'searches' && !activity?.searches.length) ||
-            (activeTab === 'consultations' && !activity?.consultations.length) ||
-            (activeTab === 'learnings' && !activity?.learnings.length)) && (
-            <div className={styles.empty}>No {activeTab} in this period</div>
+          {/* Empty States */}
+          {activeTab === 'searches' && !activity?.searches.length && (
+            <div className={styles.empty}>No searches in this period</div>
+          )}
+          {activeTab === 'consultations' && !activity?.consultations.length && (
+            <div className={styles.empty}>No consultations in this period</div>
+          )}
+          {activeTab === 'learnings' && !activity?.learnings.length && (
+            <div className={styles.empty}>No learnings added in this period</div>
           )}
         </div>
       </div>
