@@ -76,6 +76,20 @@ function initLoggingTables() {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_access_doc ON document_access(document_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_access_created ON document_access(created_at)`);
+
+  // Consult log
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS consult_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      decision TEXT NOT NULL,
+      context TEXT,
+      principles_found INTEGER,
+      patterns_found INTEGER,
+      guidance TEXT,
+      created_at INTEGER NOT NULL
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_consult_created ON consult_log(created_at)`);
 }
 
 // Initialize tables on startup
@@ -109,6 +123,7 @@ function logSearch(query: string, type: string, mode: string, resultsCount: numb
       INSERT INTO search_log (query, type, mode, results_count, search_time_ms, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(query, type, mode, resultsCount, searchTimeMs, Date.now());
+    console.log(`[SEARCH] "${query}" (${type}) → ${resultsCount} results in ${searchTimeMs}ms`);
   } catch (e) {
     console.error('Failed to log search:', e);
   }
@@ -139,6 +154,21 @@ function logLearning(documentId: string, patternPreview: string, source: string,
     `).run(documentId, patternPreview.substring(0, 100), source || 'Oracle Learn', JSON.stringify(concepts), Date.now());
   } catch (e) {
     console.error('Failed to log learning:', e);
+  }
+}
+
+/**
+ * Log consultation
+ */
+function logConsult(decision: string, context: string, principlesFound: number, patternsFound: number, guidance: string) {
+  try {
+    db.prepare(`
+      INSERT INTO consult_log (decision, context, principles_found, patterns_found, guidance, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(decision, context || '', principlesFound, patternsFound, guidance.substring(0, 500), Date.now());
+    console.log(`[CONSULT] "${decision}" → ${principlesFound} principles, ${patternsFound} patterns`);
+  } catch (e) {
+    console.error('Failed to log consult:', e);
   }
 }
 
@@ -250,6 +280,11 @@ function handleConsult(decision: string, context: string = '') {
   `);
   const patterns = learningStmt.all(safeQuery);
 
+  const guidance = synthesizeGuidance(decision, principles, patterns);
+
+  // Log the consultation
+  logConsult(decision, context, principles.length, patterns.length, guidance);
+
   return {
     decision,
     principles: principles.map((p: any) => ({
@@ -260,7 +295,7 @@ function handleConsult(decision: string, context: string = '') {
       content: p.content.substring(0, 300),
       source: p.source_file
     })),
-    guidance: synthesizeGuidance(decision, principles, patterns)
+    guidance
   };
 }
 

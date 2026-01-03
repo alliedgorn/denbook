@@ -485,6 +485,9 @@ class OracleMCPServer {
       metadata.warning = warning;
     }
 
+    // Log the search
+    console.error(`[MCP:SEARCH] "${query}" (${type}, ${mode}) → ${results.length} results in ${searchTime}ms`);
+
     return {
       content: [{
         type: 'text',
@@ -553,6 +556,9 @@ class OracleMCPServer {
       // Ignore logging errors - table may not exist yet
       console.error('[ConsultLog]', e instanceof Error ? e.message : String(e));
     }
+
+    // Log to console
+    console.error(`[MCP:CONSULT] "${decision}" → ${principles.length} principles, ${patterns.length} patterns`);
 
     return {
       content: [{
