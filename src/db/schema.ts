@@ -89,5 +89,45 @@ export const documentAccess = sqliteTable('document_access', {
   index('idx_access_doc').on(table.documentId),
 ]);
 
+// ============================================================================
+// Forum Tables (threaded discussions with Oracle)
+// ============================================================================
+
+// Forum threads - conversation topics
+export const forumThreads = sqliteTable('forum_threads', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  createdBy: text('created_by').default('human'),
+  status: text('status').default('active'), // active, answered, pending, closed
+  issueUrl: text('issue_url'),              // GitHub mirror URL
+  issueNumber: integer('issue_number'),
+  project: text('project'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+  syncedAt: integer('synced_at'),
+}, (table) => [
+  index('idx_thread_status').on(table.status),
+  index('idx_thread_project').on(table.project),
+  index('idx_thread_created').on(table.createdAt),
+]);
+
+// Forum messages - individual Q&A in threads
+export const forumMessages = sqliteTable('forum_messages', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  threadId: integer('thread_id').notNull().references(() => forumThreads.id),
+  role: text('role').notNull(),             // human, oracle, claude
+  content: text('content').notNull(),
+  author: text('author'),                   // GitHub username or "oracle"
+  principlesFound: integer('principles_found'),
+  patternsFound: integer('patterns_found'),
+  searchQuery: text('search_query'),
+  commentId: integer('comment_id'),         // GitHub comment ID if synced
+  createdAt: integer('created_at').notNull(),
+}, (table) => [
+  index('idx_message_thread').on(table.threadId),
+  index('idx_message_role').on(table.role),
+  index('idx_message_created').on(table.createdAt),
+]);
+
 // Note: FTS5 virtual table (oracle_fts) is managed via raw SQL
 // since Drizzle doesn't natively support FTS5

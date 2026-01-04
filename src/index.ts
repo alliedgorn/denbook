@@ -20,6 +20,12 @@ import Database from 'better-sqlite3';
 import { ChromaClient, Collection } from 'chromadb';
 import path from 'path';
 import fs from 'fs';
+import {
+  handleThreadMessage,
+  listThreads,
+  getFullThread,
+  getMessages,
+} from './forum/handler.js';
 
 interface OracleSearchInput {
   query: string;
@@ -60,6 +66,20 @@ interface OracleStatsInput {}
 interface OracleConceptsInput {
   limit?: number;
   type?: 'principle' | 'pattern' | 'learning' | 'retro' | 'all';
+}
+
+interface OracleThreadInput {
+  message: string;
+  threadId?: number;
+  title?: string;
+  role?: 'human' | 'claude';
+  model?: string;  // e.g., 'opus', 'sonnet'
+}
+
+interface OracleThreadsInput {
+  status?: 'active' | 'answered' | 'pending' | 'closed';
+  limit?: number;
+  offset?: number;
 }
 
 class OracleMCPServer {
@@ -286,6 +306,63 @@ class OracleMCPServer {
             },
             required: []
           }
+        },
+        {
+          name: 'oracle_thread',
+          description: 'Send a message to an Oracle discussion thread. Creates a new thread or continues an existing one. Oracle auto-responds from knowledge base. Use for multi-turn consultations.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              message: {
+                type: 'string',
+                description: 'Your question or message'
+              },
+              threadId: {
+                type: 'number',
+                description: 'Thread ID to continue (omit to create new thread)'
+              },
+              title: {
+                type: 'string',
+                description: 'Title for new thread (defaults to first 50 chars of message)'
+              },
+              role: {
+                type: 'string',
+                enum: ['human', 'claude'],
+                description: 'Who is sending (default: human)',
+                default: 'human'
+              },
+              model: {
+                type: 'string',
+                description: 'Model name for Claude calls (e.g., "opus", "sonnet")'
+              }
+            },
+            required: ['message']
+          }
+        },
+        {
+          name: 'oracle_threads',
+          description: 'List Oracle discussion threads. Filter by status to find pending questions or active discussions.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              status: {
+                type: 'string',
+                enum: ['active', 'answered', 'pending', 'closed'],
+                description: 'Filter by thread status'
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum threads to return (default: 20)',
+                default: 20
+              },
+              offset: {
+                type: 'number',
+                description: 'Pagination offset',
+                default: 0
+              }
+            },
+            required: []
+          }
         }
       ]
     }));
@@ -314,6 +391,12 @@ class OracleMCPServer {
 
           case 'oracle_concepts':
             return await this.handleConcepts(request.params.arguments as unknown as OracleConceptsInput);
+
+          case 'oracle_thread':
+            return await this.handleThread(request.params.arguments as unknown as OracleThreadInput);
+
+          case 'oracle_threads':
+            return await this.handleThreads(request.params.arguments as unknown as OracleThreadsInput);
 
           default:
             throw new Error(`Unknown tool: ${request.params.name}`);
@@ -1167,6 +1250,76 @@ class OracleMCPServer {
       console.error('[ChromaDB]', error instanceof Error ? error.message : String(error));
       return [];
     }
+  }
+
+  // ============================================================================
+  // Forum Handlers
+  // ============================================================================
+
+  /**
+   * Send message to thread, Oracle auto-responds
+   */
+  private async handleThread(input: OracleThreadInput) {
+    const result = await handleThreadMessage({
+      message: input.message,
+      threadId: input.threadId,
+      title: input.title,
+      role: input.role || 'claude',  // MCP calls are from Claude
+      model: input.model,            // e.g., 'opus', 'sonnet'
+    });
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          thread_id: result.threadId,
+          message_id: result.messageId,
+          status: result.status,
+          oracle_response: result.oracleResponse ? {
+            content: result.oracleResponse.content,
+            principles_found: result.oracleResponse.principlesFound,
+            patterns_found: result.oracleResponse.patternsFound,
+          } : null,
+          issue_url: result.issueUrl,
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * List threads with optional filters
+   */
+  private async handleThreads(input: OracleThreadsInput) {
+    const result = listThreads({
+      status: input.status as any,
+      limit: input.limit || 20,
+      offset: input.offset || 0,
+    });
+
+    // Get message count for each thread
+    const threadsWithCounts = result.threads.map(thread => {
+      const messages = getMessages(thread.id);
+      const lastMessage = messages[messages.length - 1];
+      return {
+        id: thread.id,
+        title: thread.title,
+        status: thread.status,
+        message_count: messages.length,
+        last_message: lastMessage?.content.substring(0, 100) || '',
+        created_at: new Date(thread.createdAt).toISOString(),
+        issue_url: thread.issueUrl,
+      };
+    });
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          threads: threadsWithCounts,
+          total: result.total,
+        }, null, 2)
+      }]
+    };
   }
 
   /**

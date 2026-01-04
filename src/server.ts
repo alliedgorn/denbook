@@ -51,6 +51,14 @@ import {
 
 import { handleContext } from './server/context.js';
 
+import {
+  handleThreadMessage,
+  listThreads,
+  getFullThread,
+  getMessages,
+  updateThreadStatus
+} from './forum/handler.js';
+
 import path from 'path';
 
 // Initialize logging tables on startup
@@ -83,6 +91,99 @@ const server = http.createServer((req, res) => {
 
   try {
     let result: any;
+
+    // POST /thread - Send message to thread
+    if (pathname === '/thread' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', async () => {
+        try {
+          const data = JSON.parse(body);
+          if (!data.message) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Missing required field: message' }));
+            return;
+          }
+          const result = await handleThreadMessage({
+            message: data.message,
+            threadId: data.thread_id,
+            title: data.title,
+            role: data.role || 'human'
+          });
+          res.end(JSON.stringify({
+            thread_id: result.threadId,
+            message_id: result.messageId,
+            status: result.status,
+            oracle_response: result.oracleResponse,
+            issue_url: result.issueUrl
+          }, null, 2));
+        } catch (error) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }));
+        }
+      });
+      return;
+    }
+
+    // GET /thread/:id - Get thread with messages
+    if (pathname?.startsWith('/thread/') && req.method === 'GET') {
+      const threadId = parseInt(pathname.replace('/thread/', ''), 10);
+      if (isNaN(threadId)) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: 'Invalid thread ID' }));
+        return;
+      }
+      const threadData = getFullThread(threadId);
+      if (!threadData) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: 'Thread not found' }));
+        return;
+      }
+      res.end(JSON.stringify({
+        thread: {
+          id: threadData.thread.id,
+          title: threadData.thread.title,
+          status: threadData.thread.status,
+          created_at: new Date(threadData.thread.createdAt).toISOString(),
+          issue_url: threadData.thread.issueUrl
+        },
+        messages: threadData.messages.map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          author: m.author,
+          principles_found: m.principlesFound,
+          patterns_found: m.patternsFound,
+          created_at: new Date(m.createdAt).toISOString()
+        }))
+      }, null, 2));
+      return;
+    }
+
+    // PATCH /thread/:id/status - Update thread status
+    if (pathname?.match(/^\/thread\/\d+\/status$/) && req.method === 'PATCH') {
+      const threadId = parseInt(pathname.split('/')[2], 10);
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          if (!data.status) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Missing required field: status' }));
+            return;
+          }
+          updateThreadStatus(threadId, data.status);
+          res.end(JSON.stringify({ success: true, thread_id: threadId, status: data.status }));
+        } catch (e) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
+      return;
+    }
 
     // POST /learn
     if (pathname === '/learn' && req.method === 'POST') {
@@ -247,6 +348,26 @@ const server = http.createServer((req, res) => {
         }
         break;
 
+      // Forum endpoints
+      case '/threads':
+        const threadList = listThreads({
+          status: query.status as any,
+          limit: parseInt(query.limit as string) || 20,
+          offset: parseInt(query.offset as string) || 0
+        });
+        result = {
+          threads: threadList.threads.map(t => ({
+            id: t.id,
+            title: t.title,
+            status: t.status,
+            message_count: getMessages(t.id).length,
+            created_at: new Date(t.createdAt).toISOString(),
+            issue_url: t.issueUrl
+          })),
+          total: threadList.total
+        };
+        break;
+
       default:
         res.statusCode = 404;
         result = {
@@ -263,7 +384,10 @@ const server = http.createServer((req, res) => {
             'POST /learn - Add new pattern/learning',
             'GET /dashboard - Dashboard summary',
             'GET /dashboard/activity?days=7 - Recent activity',
-            'GET /dashboard/growth?period=week - Growth over time'
+            'GET /dashboard/growth?period=week - Growth over time',
+            'GET /threads - List discussion threads',
+            'GET /thread/:id - Get thread with messages',
+            'POST /thread - Send message to thread (Oracle auto-responds)'
           ]
         };
     }

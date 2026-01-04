@@ -9,24 +9,25 @@
  * - Split large documents into smaller chunks
  * - Each principle/pattern becomes multiple vectors
  * - Enable concept-based filtering
+ *
+ * Uses chroma-mcp (Python) via MCP protocol for embeddings.
+ * This avoids pnpm/npm dynamic import issues with chromadb-default-embed.
  */
 
 import fs from 'fs';
 import path from 'path';
 import Database from 'better-sqlite3';
-import { ChromaClient } from 'chromadb';
+import { ChromaMcpClient } from './chroma-mcp.js';
 import type { OracleDocument, OracleMetadata, IndexerConfig } from './types.js';
 
 export class OracleIndexer {
   private db: Database.Database;
-  private chroma: ChromaClient;
+  private chromaClient: ChromaMcpClient | null = null;
   private config: IndexerConfig;
-  private collection: any;
 
   constructor(config: IndexerConfig) {
     this.config = config;
     this.db = new Database(config.dbPath);
-    this.chroma = new ChromaClient();
     this.initDatabase();
   }
 
@@ -123,17 +124,19 @@ export class OracleIndexer {
     this.db.exec('DELETE FROM oracle_fts');
     this.db.exec('DELETE FROM oracle_documents');
 
-    // Initialize Chroma collection (optional - skip if not available)
+    // Initialize ChromaMcpClient (uses chroma-mcp Python server)
     try {
-      await this.chroma.deleteCollection({ name: 'oracle_knowledge' });
-      this.collection = await this.chroma.getOrCreateCollection({
-        name: 'oracle_knowledge',
-        metadata: { description: 'Oracle philosophy and patterns' }
-      });
-      console.log('ChromaDB connected');
+      this.chromaClient = new ChromaMcpClient(
+        'oracle_knowledge',
+        this.config.chromaPath,
+        '3.12'  // Python version
+      );
+      await this.chromaClient.deleteCollection();
+      await this.chromaClient.ensureCollection();
+      console.log('ChromaDB connected via MCP');
     } catch (e) {
-      console.log('ChromaDB not available, using SQLite-only mode');
-      this.collection = null;
+      console.log('ChromaDB not available, using SQLite-only mode:', e instanceof Error ? e.message : e);
+      this.chromaClient = null;
     }
 
     const documents: OracleDocument[] = [];
@@ -446,8 +449,8 @@ export class OracleIndexer {
       });
     }
 
-    // Batch insert to Chroma in chunks of 100 (skip if no collection)
-    if (!this.collection) {
+    // Batch insert to Chroma in chunks of 100 (skip if no client)
+    if (!this.chromaClient) {
       console.log('Skipping Chroma indexing (SQLite-only mode)');
       return;
     }
@@ -461,11 +464,13 @@ export class OracleIndexer {
       const batchMetadatas = metadatas.slice(i, i + BATCH_SIZE);
 
       try {
-        await this.collection.upsert({
-          ids: batchIds,
-          documents: batchContents,
-          metadatas: batchMetadatas
-        });
+        // Format as ChromaDocument array for MCP client
+        const chromaDocs = batchIds.map((id, idx) => ({
+          id,
+          document: batchContents[idx],
+          metadata: batchMetadatas[idx]
+        }));
+        await this.chromaClient.addDocuments(chromaDocs);
         console.log(`Chroma batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(ids.length / BATCH_SIZE)} stored`);
       } catch (error) {
         console.error(`Chroma batch failed:`, error);
@@ -479,8 +484,11 @@ export class OracleIndexer {
   /**
    * Close database connections
    */
-  close(): void {
+  async close(): Promise<void> {
     this.db.close();
+    if (this.chromaClient) {
+      await this.chromaClient.close();
+    }
   }
 }
 
@@ -505,13 +513,13 @@ if (isMain) {
   const indexer = new OracleIndexer(config);
 
   indexer.index()
-    .then(() => {
+    .then(async () => {
       console.log('Indexing complete!');
-      indexer.close();
+      await indexer.close();
     })
-    .catch(err => {
+    .catch(async err => {
       console.error('Indexing failed:', err);
-      indexer.close();
+      await indexer.close();
       process.exit(1);
     });
 }

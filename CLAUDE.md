@@ -342,6 +342,7 @@ Closes #[issue-number]
 -   **Creating overly comprehensive initial plans** - Break complex projects into 1-hour phases instead
 -   **Trying to implement everything at once** - Start with minimum viable implementation, test, then expand
 -   **Skipping AI Diary and Honest Feedback in retrospectives** - These sections provide crucial context and self-reflection that technical documentation alone cannot capture
+-   **Inline SQL for new tables** - Use Drizzle schema (`src/db/schema.ts`) + `pnpm db:push` instead of `db.exec(CREATE TABLE...)` in code
 
 ### Useful Tricks Discovered
 -   **Parallel agents for analysis** - Using multiple agents to analyze different aspects speeds up planning significantly

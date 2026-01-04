@@ -7,6 +7,7 @@ const navItems = [
   { path: '/feed', label: 'Feed' },
   { path: '/search', label: 'Search' },
   { path: '/consult', label: 'Consult' },
+  { path: '/forum', label: 'Forum' },
   { path: '/graph', label: 'Graph' },
   { path: '/activity', label: 'Activity' },
   { path: '/handoff', label: 'Handoff' },
