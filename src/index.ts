@@ -25,6 +25,7 @@ import {
   listThreads,
   getFullThread,
   getMessages,
+  updateThreadStatus,
 } from './forum/handler.js';
 
 interface OracleSearchInput {
@@ -80,6 +81,16 @@ interface OracleThreadsInput {
   status?: 'active' | 'answered' | 'pending' | 'closed';
   limit?: number;
   offset?: number;
+}
+
+interface OracleThreadReadInput {
+  threadId: number;
+  limit?: number;
+}
+
+interface OracleThreadUpdateInput {
+  threadId: number;
+  status?: 'active' | 'closed' | 'answered' | 'pending';
 }
 
 class OracleMCPServer {
@@ -363,6 +374,43 @@ class OracleMCPServer {
             },
             required: []
           }
+        },
+        {
+          name: 'oracle_thread_read',
+          description: 'Read full message history from a thread. Use to review context before continuing a conversation.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              threadId: {
+                type: 'number',
+                description: 'Thread ID to read'
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum messages to return (default: all)',
+              }
+            },
+            required: ['threadId']
+          }
+        },
+        {
+          name: 'oracle_thread_update',
+          description: 'Update thread status. Use to close, reopen, or mark threads as answered/pending.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              threadId: {
+                type: 'number',
+                description: 'Thread ID to update'
+              },
+              status: {
+                type: 'string',
+                enum: ['active', 'closed', 'answered', 'pending'],
+                description: 'New status for the thread'
+              }
+            },
+            required: ['threadId', 'status']
+          }
         }
       ]
     }));
@@ -398,6 +446,12 @@ class OracleMCPServer {
           case 'oracle_threads':
             return await this.handleThreads(request.params.arguments as unknown as OracleThreadsInput);
 
+          case 'oracle_thread_read':
+            return await this.handleThreadRead(request.params.arguments as unknown as OracleThreadReadInput);
+
+          case 'oracle_thread_update':
+            return await this.handleThreadUpdate(request.params.arguments as unknown as OracleThreadUpdateInput);
+
           default:
             throw new Error(`Unknown tool: ${request.params.name}`);
         }
@@ -419,9 +473,9 @@ class OracleMCPServer {
    */
   private sanitizeFtsQuery(query: string): string {
     // Remove FTS5 special characters that could cause parse errors
-    // Includes: ? * + - ( ) ^ ~ " ' : . (all can cause FTS5 syntax errors)
+    // Includes: ? * + - ( ) ^ ~ " ' : . / (all can cause FTS5 syntax errors)
     let sanitized = query
-      .replace(/[?*+\-()^~"':.]/g, ' ')  // Remove FTS5 operators
+      .replace(/[?*+\-()^~"':.\/]/g, ' ')  // Remove FTS5 operators (incl /)
       .replace(/\s+/g, ' ')               // Normalize whitespace
       .trim();
 
@@ -1317,6 +1371,66 @@ class OracleMCPServer {
         text: JSON.stringify({
           threads: threadsWithCounts,
           total: result.total,
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Read full thread with message history
+   */
+  private async handleThreadRead(input: OracleThreadReadInput) {
+    const threadData = getFullThread(input.threadId);
+    if (!threadData) {
+      throw new Error(`Thread ${input.threadId} not found`);
+    }
+
+    let messages = threadData.messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      author: m.author,
+      content: m.content,
+      timestamp: new Date(m.createdAt).toISOString(),
+    }));
+
+    // Apply limit if specified
+    if (input.limit && input.limit > 0) {
+      messages = messages.slice(-input.limit);
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          thread_id: threadData.thread.id,
+          title: threadData.thread.title,
+          status: threadData.thread.status,
+          message_count: threadData.messages.length,
+          messages,
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Update thread status
+   */
+  private async handleThreadUpdate(input: OracleThreadUpdateInput) {
+    if (!input.status) {
+      throw new Error('status is required');
+    }
+
+    updateThreadStatus(input.threadId, input.status);
+    const threadData = getFullThread(input.threadId);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          success: true,
+          thread_id: input.threadId,
+          status: input.status,
+          title: threadData?.thread.title,
         }, null, 2)
       }]
     };

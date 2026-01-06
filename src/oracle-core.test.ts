@@ -37,12 +37,12 @@ function normalizeFtsScoreImproved(rank: number): number {
 
 /**
  * Sanitize FTS5 query to prevent parse errors
- * Includes: ? * + - ( ) ^ ~ " ' : . (all can cause FTS5 syntax errors)
+ * Includes: ? * + - ( ) ^ ~ " ' : . / (all can cause FTS5 syntax errors)
  */
 function sanitizeFtsQuery(query: string): string {
   // Remove/escape FTS5 special characters
   let sanitized = query
-    .replace(/[?*+\-()^~"':.]/g, ' ')
+    .replace(/[?*+\-()^~"':.\/]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -304,6 +304,12 @@ describe('FTS5 Query Sanitization', () => {
   it('should handle colons which break FTS5', () => {
     expect(sanitizeFtsQuery('error: no such column')).toBe('error no such column');
     expect(sanitizeFtsQuery('time: 15:30')).toBe('time 15 30');
+  });
+
+  it('should handle forward slashes which break FTS5', () => {
+    expect(sanitizeFtsQuery('Shopee/Lazada/TikTok')).toBe('Shopee Lazada TikTok');
+    expect(sanitizeFtsQuery('path/to/file')).toBe('path to file');
+    expect(sanitizeFtsQuery('and/or options')).toBe('and or options');
   });
 });
 

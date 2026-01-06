@@ -126,12 +126,20 @@ export function Overview() {
                   <Markdown remarkPlugins={[remarkGfm]}>{wisdom.content}</Markdown>
                 </div>
                 <div className={styles.modalFooter}>
-                  <span className={styles.wisdomType}>{wisdom.type}</span>
-                  {wisdom.concepts && wisdom.concepts.length > 0 && (
-                    <div className={styles.wisdomTags}>
-                      {wisdom.concepts.map(c => (
-                        <span key={c} className={styles.wisdomTag}>{c}</span>
-                      ))}
+                  <div className={styles.modalMeta}>
+                    <span className={styles.wisdomType}>{wisdom.type}</span>
+                    {wisdom.concepts && wisdom.concepts.length > 0 && (
+                      <div className={styles.wisdomTags}>
+                        {wisdom.concepts.map(c => (
+                          <span key={c} className={styles.wisdomTag}>{c}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {wisdom.source_file && (
+                    <div className={styles.sourceFile}>
+                      <span className={styles.sourceLabel}>Source:</span>
+                      <code>{wisdom.source_file}</code>
                     </div>
                   )}
                 </div>

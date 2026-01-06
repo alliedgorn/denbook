@@ -5,11 +5,11 @@ import styles from './Header.module.css';
 const navItems = [
   { path: '/', label: 'Overview' },
   { path: '/feed', label: 'Feed' },
-  { path: '/search', label: 'Search' },
-  { path: '/consult', label: 'Consult' },
   { path: '/forum', label: 'Forum' },
+  { path: '/search', label: 'Search' },
   { path: '/graph', label: 'Graph' },
   { path: '/activity', label: 'Activity' },
+  { path: '/consult', label: 'Consult' },
   { path: '/handoff', label: 'Handoff' },
 ];
 
