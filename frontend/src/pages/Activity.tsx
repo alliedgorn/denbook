@@ -171,7 +171,18 @@ export function Activity() {
 
       {/* Activity Timeline */}
       <div className={styles.timeline}>
-        <h2 className={styles.sectionTitle}>Recent Activity</h2>
+        <div className={styles.sectionHeader}>
+          <h2 className={styles.sectionTitle}>Recent Activity</h2>
+          <button
+            type="button"
+            onClick={() => loadData()}
+            className={`${styles.refreshBtn} ${loading ? styles.spinning : ''}`}
+            disabled={loading}
+            title="Refresh data"
+          >
+            ↻
+          </button>
+        </div>
 
         <div className={styles.tabs}>
           {TABS.map(tab => (

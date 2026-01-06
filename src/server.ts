@@ -474,22 +474,33 @@ const server = http.createServer((req, res) => {
         break;
 
       case '/search':
-        if (!query.q) {
-          res.statusCode = 400;
-          result = { error: 'Missing query parameter: q' };
-        } else {
-          const searchResult = handleSearch(
-            query.q as string,
-            (query.type as string) || 'all',
-            parseInt(query.limit as string) || 10,
-            parseInt(query.offset as string) || 0
-          );
-          result = {
-            ...searchResult,
-            query: query.q
-          };
-        }
-        break;
+        // Async handler for hybrid search via ChromaMcpClient
+        (async () => {
+          try {
+            if (!query.q) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: 'Missing query parameter: q' }));
+              return;
+            }
+            const searchResult = await handleSearch(
+              query.q as string,
+              (query.type as string) || 'all',
+              parseInt(query.limit as string) || 10,
+              parseInt(query.offset as string) || 0,
+              (query.mode as 'hybrid' | 'fts' | 'vector') || 'hybrid'
+            );
+            res.end(JSON.stringify({
+              ...searchResult,
+              query: query.q
+            }, null, 2));
+          } catch (error) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({
+              error: error instanceof Error ? error.message : 'Search failed'
+            }));
+          }
+        })();
+        return;
 
       case '/consult':
         if (!query.q) {

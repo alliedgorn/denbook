@@ -17,7 +17,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { Database } from 'bun:sqlite';
-import { ChromaClient, Collection } from 'chromadb';
+import { ChromaMcpClient } from './chroma-mcp.js';
 import path from 'path';
 import fs from 'fs';
 import {
@@ -146,15 +146,15 @@ class OracleMCPServer {
   private server: Server;
   private db: Database.Database;
   private repoRoot: string;
-  private chroma: ChromaClient;
-  private collection: Collection | null = null;
+  private chromaMcp: ChromaMcpClient;
   private chromaStatus: 'unknown' | 'connected' | 'unavailable' = 'unknown';
 
   constructor() {
     this.repoRoot = process.env.ORACLE_REPO_ROOT || '/Users/nat/Code/github.com/laris-co/Nat-s-Agents';
 
-    // Initialize ChromaDB client (connects to default server at localhost:8000)
-    this.chroma = new ChromaClient();
+    // Initialize ChromaMcpClient (uses same uvx/chroma-mcp as indexer)
+    const chromaPath = path.join(process.env.HOME || '/Users/nat', '.chromadb');
+    this.chromaMcp = new ChromaMcpClient('oracle_knowledge', chromaPath, '3.12');
 
     this.server = new Server(
       {
@@ -180,23 +180,18 @@ class OracleMCPServer {
   }
 
   /**
-   * Verify ChromaDB connection health
+   * Verify ChromaDB connection health via chroma-mcp
    * Non-blocking - logs status and sets chromaStatus flag
    */
   private async verifyChromaHealth(): Promise<void> {
     try {
-      const collections = await this.chroma.listCollections();
-      // ChromaDB returns array of collection names (strings) or objects with name property
-      const collectionNames = collections.map((c: string | { name: string }) =>
-        typeof c === 'string' ? c : c.name
-      );
-      const exists = collectionNames.includes('oracle_knowledge');
-      if (exists) {
+      const stats = await this.chromaMcp.getStats();
+      if (stats.count > 0) {
         this.chromaStatus = 'connected';
-        console.error('[ChromaDB] ✓ oracle_knowledge collection found');
+        console.error(`[ChromaDB] ✓ oracle_knowledge: ${stats.count} documents`);
       } else {
-        this.chromaStatus = 'unavailable';
-        console.error('[ChromaDB] ✗ Collection not found. Available:', collectionNames.join(', ') || 'none');
+        this.chromaStatus = 'connected';
+        console.error('[ChromaDB] ✓ Connected but collection empty');
       }
     } catch (e) {
       this.chromaStatus = 'unavailable';
@@ -217,6 +212,7 @@ class OracleMCPServer {
 
   private async cleanup(): Promise<void> {
     this.db.close();
+    await this.chromaMcp.close();
   }
 
   /**
@@ -755,10 +751,9 @@ class OracleMCPServer {
         warning = `Vector search unavailable: ${errorMessage}. Using FTS5 only.`;
       }
 
-      // Check if vectorSearch returned empty due to internal error (it catches and returns [])
-      // We can detect this if collection initialization failed
-      if (vectorResults.length === 0 && !this.collection && !vectorSearchError) {
-        // Collection never initialized - ChromaDB might be unavailable
+      // Check if vectorSearch returned empty due to internal error
+      if (vectorResults.length === 0 && !vectorSearchError) {
+        // Vector search returned no results
         warning = warning || 'Vector search returned no results. Using FTS5 results.';
       }
     }
@@ -1423,7 +1418,7 @@ class OracleMCPServer {
   }
 
   /**
-   * Private: Vector search using ChromaDB
+   * Private: Vector search using ChromaMcpClient (same uvx/chroma-mcp as indexer)
    * Performs semantic similarity search on the oracle_knowledge collection
    *
    * @param query - Natural language query
@@ -1445,37 +1440,22 @@ class OracleMCPServer {
     source: 'vector';
   }>> {
     try {
-      // Get or create the collection (lazy initialization)
-      if (!this.collection) {
-        this.collection = await this.chroma.getOrCreateCollection({
-          name: 'oracle_knowledge',
-        });
-      }
+      // Build where filter if type specified
+      const whereFilter = type !== 'all' ? { type } : undefined;
 
-      // Build query options
-      const queryOptions: {
-        queryTexts: string[];
-        nResults: number;
-        where?: { type: string };
-      } = {
-        queryTexts: [query],
-        nResults: limit,
-      };
+      console.error(`[VectorSearch] Query: "${query.substring(0, 50)}..." limit=${limit}`);
 
-      // Add type filter if not 'all'
-      if (type !== 'all') {
-        queryOptions.where = { type };
-      }
+      // Query via ChromaMcpClient (uses same embedding model as indexer)
+      const results = await this.chromaMcp.query(query, limit, whereFilter);
 
-      // Query the collection
-      const results = await this.collection.query(queryOptions);
+      console.error(`[VectorSearch] Results: ${results.ids?.length || 0} documents`);
 
       // If no results, return empty array
-      if (!results.ids || results.ids.length === 0 || !results.ids[0]) {
+      if (!results.ids || results.ids.length === 0) {
         return [];
       }
 
-      // Map ChromaDB results to our format
+      // Map results to our format
       const mappedResults: Array<{
         id: string;
         type: string;
@@ -1486,21 +1466,16 @@ class OracleMCPServer {
         source: 'vector';
       }> = [];
 
-      const ids = results.ids[0];
-      const documents = results.documents?.[0] || [];
-      const metadatas = results.metadatas?.[0] || [];
-      const distances = results.distances?.[0] || [];
-
-      for (let i = 0; i < ids.length; i++) {
-        const metadata = metadatas[i] as Record<string, unknown> | null;
+      for (let i = 0; i < results.ids.length; i++) {
+        const metadata = results.metadatas[i] as Record<string, unknown> | null;
 
         mappedResults.push({
-          id: ids[i],
+          id: results.ids[i],
           type: (metadata?.type as string) || 'unknown',
-          content: (documents[i] || '').substring(0, 500), // Truncate for readability
+          content: (results.documents[i] || '').substring(0, 500),
           source_file: (metadata?.source_file as string) || '',
           concepts: this.parseConceptsFromMetadata(metadata?.concepts),
-          score: distances[i] || 0,
+          score: results.distances[i] || 0,
           source: 'vector',
         });
       }
@@ -1508,7 +1483,11 @@ class OracleMCPServer {
       return mappedResults;
     } catch (error) {
       // Log error with [ChromaDB] prefix but don't throw - return empty array for graceful degradation
-      console.error('[ChromaDB]', error instanceof Error ? error.message : String(error));
+      const errorMsg = error instanceof Error ? error.stack || error.message : String(error);
+      console.error('[ChromaDB ERROR]', errorMsg);
+      // Also write to file for debugging
+      const fs = await import('fs');
+      fs.appendFileSync('/tmp/oracle-chroma-debug.log', `[${new Date().toISOString()}] ${errorMsg}\n`);
       return [];
     }
   }
@@ -1804,6 +1783,14 @@ class OracleMCPServer {
   }
 
   /**
+   * Pre-connect to chroma-mcp before MCP server starts
+   * This avoids stdio conflicts by establishing connection early
+   */
+  async preConnectChroma(): Promise<void> {
+    await this.chromaMcp.connect();
+  }
+
+  /**
    * Start the MCP server
    */
   async run(): Promise<void> {
@@ -1815,6 +1802,21 @@ class OracleMCPServer {
 
 /**
  * Main entry point
+ * Pre-connect to chroma-mcp BEFORE starting MCP server to avoid stdio conflicts
  */
-const server = new OracleMCPServer();
-server.run().catch(console.error);
+async function main() {
+  const server = new OracleMCPServer();
+
+  // Pre-connect to chroma-mcp before MCP server takes over stdio
+  try {
+    console.error('[Startup] Pre-connecting to chroma-mcp...');
+    await server.preConnectChroma();
+    console.error('[Startup] Chroma pre-connected successfully');
+  } catch (e) {
+    console.error('[Startup] Chroma pre-connect failed:', e instanceof Error ? e.message : e);
+  }
+
+  await server.run();
+}
+
+main().catch(console.error);

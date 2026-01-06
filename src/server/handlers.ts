@@ -7,87 +7,196 @@ import path from 'path';
 import { db, REPO_ROOT } from './db.js';
 import { logSearch, logDocumentAccess, logLearning, logConsult } from './logging.js';
 import type { SearchResult, SearchResponse } from './types.js';
+import { ChromaMcpClient } from '../chroma-mcp.js';
+
+// Singleton ChromaMcpClient for vector search
+// HTTP server can use this because it's NOT an MCP server (no stdio conflict)
+const CHROMA_PATH = path.join(process.env.HOME || '/Users/nat', '.chromadb');
+let chromaClient: ChromaMcpClient | null = null;
+
+function getChromaClient(): ChromaMcpClient {
+  if (!chromaClient) {
+    chromaClient = new ChromaMcpClient('oracle_knowledge', CHROMA_PATH, '3.12');
+  }
+  return chromaClient;
+}
 
 /**
- * Search Oracle knowledge base with pagination
+ * Search Oracle knowledge base with hybrid search (FTS5 + Vector)
+ * HTTP server can safely use ChromaMcpClient since it's not an MCP server
  */
-export function handleSearch(query: string, type: string = 'all', limit: number = 10, offset: number = 0): SearchResponse {
+export async function handleSearch(
+  query: string,
+  type: string = 'all',
+  limit: number = 10,
+  offset: number = 0,
+  mode: 'hybrid' | 'fts' | 'vector' = 'hybrid'
+): Promise<SearchResponse & { mode?: string; warning?: string }> {
   const startTime = Date.now();
   // Remove FTS5 special characters: ? * + - ( ) ^ ~ " ' : (colon is column prefix)
   const safeQuery = query.replace(/[?*+\-()^~"':]/g, ' ').replace(/\s+/g, ' ').trim();
 
-  let countStmt;
-  let stmt;
+  let warning: string | undefined;
 
-  if (type === 'all') {
-    // Get total count
-    countStmt = db.prepare(`
-      SELECT COUNT(*) as total
-      FROM oracle_fts f
-      JOIN oracle_documents d ON f.id = d.id
-      WHERE oracle_fts MATCH ?
-    `);
-    const { total } = countStmt.get(safeQuery) as { total: number };
+  // FTS5 search (skip if vector-only mode)
+  let ftsResults: SearchResult[] = [];
+  let ftsTotal = 0;
 
-    // Get paginated results with rank score
-    stmt = db.prepare(`
-      SELECT f.id, f.content, d.type, d.source_file, d.concepts, rank as score
-      FROM oracle_fts f
-      JOIN oracle_documents d ON f.id = d.id
-      WHERE oracle_fts MATCH ?
-      ORDER BY rank
-      LIMIT ? OFFSET ?
-    `);
-    const results = stmt.all(safeQuery, limit, offset).map((row: any) => ({
-      id: row.id,
-      type: row.type,
-      content: row.content.substring(0, 500),
-      source_file: row.source_file,
-      concepts: JSON.parse(row.concepts || '[]'),
-      source: 'fts' as const,
-      score: row.score
-    }));
+  if (mode !== 'vector') {
+    if (type === 'all') {
+      const countStmt = db.prepare(`
+        SELECT COUNT(*) as total
+        FROM oracle_fts f
+        JOIN oracle_documents d ON f.id = d.id
+        WHERE oracle_fts MATCH ?
+      `);
+      ftsTotal = (countStmt.get(safeQuery) as { total: number }).total;
 
-    // Log search with full results
-    logSearch(query, type, 'fts', total, Date.now() - startTime, results);
-    results.forEach(r => logDocumentAccess(r.id, 'search'));
+      const stmt = db.prepare(`
+        SELECT f.id, f.content, d.type, d.source_file, d.concepts, rank as score
+        FROM oracle_fts f
+        JOIN oracle_documents d ON f.id = d.id
+        WHERE oracle_fts MATCH ?
+        ORDER BY rank
+        LIMIT ?
+      `);
+      ftsResults = stmt.all(safeQuery, limit * 2).map((row: any) => ({
+        id: row.id,
+        type: row.type,
+        content: row.content.substring(0, 500),
+        source_file: row.source_file,
+        concepts: JSON.parse(row.concepts || '[]'),
+        source: 'fts' as const,
+        score: normalizeRank(row.score)
+      }));
+    } else {
+      const countStmt = db.prepare(`
+        SELECT COUNT(*) as total
+        FROM oracle_fts f
+        JOIN oracle_documents d ON f.id = d.id
+        WHERE oracle_fts MATCH ? AND d.type = ?
+      `);
+      ftsTotal = (countStmt.get(safeQuery, type) as { total: number }).total;
 
-    return { results, total, offset, limit };
-  } else {
-    // Get total count with type filter
-    countStmt = db.prepare(`
-      SELECT COUNT(*) as total
-      FROM oracle_fts f
-      JOIN oracle_documents d ON f.id = d.id
-      WHERE oracle_fts MATCH ? AND d.type = ?
-    `);
-    const { total } = countStmt.get(safeQuery, type) as { total: number };
-
-    // Get paginated results with rank score
-    stmt = db.prepare(`
-      SELECT f.id, f.content, d.type, d.source_file, d.concepts, rank as score
-      FROM oracle_fts f
-      JOIN oracle_documents d ON f.id = d.id
-      WHERE oracle_fts MATCH ? AND d.type = ?
-      ORDER BY rank
-      LIMIT ? OFFSET ?
-    `);
-    const results = stmt.all(safeQuery, type, limit, offset).map((row: any) => ({
-      id: row.id,
-      type: row.type,
-      content: row.content.substring(0, 500),
-      source_file: row.source_file,
-      concepts: JSON.parse(row.concepts || '[]'),
-      source: 'fts' as const,
-      score: row.score
-    }));
-
-    // Log search with full results
-    logSearch(query, type, 'fts', total, Date.now() - startTime, results);
-    results.forEach(r => logDocumentAccess(r.id, 'search'));
-
-    return { results, total, offset, limit };
+      const stmt = db.prepare(`
+        SELECT f.id, f.content, d.type, d.source_file, d.concepts, rank as score
+        FROM oracle_fts f
+        JOIN oracle_documents d ON f.id = d.id
+        WHERE oracle_fts MATCH ? AND d.type = ?
+        ORDER BY rank
+        LIMIT ?
+      `);
+      ftsResults = stmt.all(safeQuery, type, limit * 2).map((row: any) => ({
+        id: row.id,
+        type: row.type,
+        content: row.content.substring(0, 500),
+        source_file: row.source_file,
+        concepts: JSON.parse(row.concepts || '[]'),
+        source: 'fts' as const,
+        score: normalizeRank(row.score)
+      }));
+    }
   }
+
+  // Vector search (skip if fts-only mode)
+  let vectorResults: SearchResult[] = [];
+
+  if (mode !== 'fts') {
+    try {
+      console.log(`[Hybrid] Starting vector search for: "${query.substring(0, 30)}..."`);
+      const client = getChromaClient();
+      const whereFilter = type !== 'all' ? { type } : undefined;
+      const chromaResults = await client.query(query, limit * 2, whereFilter);
+
+      console.log(`[Hybrid] Vector returned ${chromaResults.ids?.length || 0} results`);
+      console.log(`[Hybrid] First 3 distances: ${chromaResults.distances?.slice(0, 3)}`);
+
+      if (chromaResults.ids && chromaResults.ids.length > 0) {
+        vectorResults = chromaResults.ids.map((id: string, i: number) => {
+          // Cosine distance: 0=identical, 1=orthogonal, 2=opposite
+          // Convert to similarity: 0.5=orthogonal, 1=identical, 0=opposite
+          const distance = chromaResults.distances?.[i] || 1;
+          const similarity = Math.max(0, 1 - distance / 2);
+          return {
+            id,
+            type: chromaResults.metadatas?.[i]?.type || 'unknown',
+            content: (chromaResults.documents?.[i] || '').substring(0, 500),
+            source_file: chromaResults.metadatas?.[i]?.source_file || '',
+            concepts: [],
+            source: 'vector' as const,
+            score: similarity
+          };
+        });
+        console.log(`[Hybrid] Mapped ${vectorResults.length} vector results, scores: ${vectorResults.slice(0, 3).map(r => r.score?.toFixed(3))}`);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[Vector Search Error]', msg);
+      warning = `Vector search unavailable: ${msg}. Using FTS5 only.`;
+    }
+  }
+
+  // Combine results using hybrid ranking
+  const combined = combineSearchResults(ftsResults, vectorResults);
+  const total = Math.max(ftsTotal, combined.length);
+
+  // Apply pagination
+  const results = combined.slice(offset, offset + limit);
+
+  // Log search
+  const searchTime = Date.now() - startTime;
+  logSearch(query, type, mode, total, searchTime, results);
+  results.forEach(r => logDocumentAccess(r.id, 'search'));
+
+  return {
+    results,
+    total,
+    offset,
+    limit,
+    mode,
+    ...(warning && { warning })
+  };
+}
+
+/**
+ * Normalize FTS5 rank score to 0-1 range (higher = better)
+ */
+function normalizeRank(rank: number): number {
+  // FTS5 rank is negative (more negative = better match)
+  // Convert to positive 0-1 score
+  return Math.min(1, Math.max(0, 1 / (1 + Math.abs(rank))));
+}
+
+/**
+ * Combine FTS and vector results with hybrid scoring
+ */
+function combineSearchResults(fts: SearchResult[], vector: SearchResult[]): SearchResult[] {
+  const seen = new Map<string, SearchResult>();
+
+  // Add FTS results first
+  for (const r of fts) {
+    seen.set(r.id, r);
+  }
+
+  // Merge vector results (boost score if found in both)
+  for (const r of vector) {
+    if (seen.has(r.id)) {
+      const existing = seen.get(r.id)!;
+      // Use max score + bonus for appearing in both (hybrid boost)
+      const maxScore = Math.max(existing.score || 0, r.score || 0);
+      const bonus = 0.1; // Bonus for appearing in both FTS and vector
+      seen.set(r.id, {
+        ...existing,
+        score: Math.min(1, maxScore + bonus), // Cap at 1.0
+        source: 'hybrid' as const
+      });
+    } else {
+      seen.set(r.id, r);
+    }
+  }
+
+  // Sort by score descending
+  return Array.from(seen.values()).sort((a, b) => (b.score || 0) - (a.score || 0));
 }
 
 /**

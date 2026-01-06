@@ -502,7 +502,7 @@ if (isMain) {
   const config: IndexerConfig = {
     repoRoot,
     dbPath: path.join(repoRoot, 'ψ/lab/oracle-v2/oracle.db'),
-    chromaPath: path.join(repoRoot, 'ψ/lab/oracle-v2/chroma'),
+    chromaPath: path.join(process.env.HOME || '/Users/nat', '.chromadb'),
     sourcePaths: {
       resonance: 'ψ/memory/resonance',
       learnings: 'ψ/memory/learnings',
