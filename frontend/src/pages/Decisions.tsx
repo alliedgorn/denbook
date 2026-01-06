@@ -114,13 +114,17 @@ export function Decisions() {
     loadDecisions();
   }, [statusFilter]);
 
+  // Load decision from URL param or auto-select first
   useEffect(() => {
     if (decisionIdParam) {
       selectDecision(parseInt(decisionIdParam, 10));
+    } else if (decisions.length > 0 && !showNew) {
+      // Auto-select first decision
+      setSearchParams({ decision: decisions[0].id.toString() });
     } else {
       setSelectedDecision(null);
     }
-  }, [decisionIdParam]);
+  }, [decisionIdParam, decisions]);
 
   async function loadDecisions() {
     const data = await fetchDecisions(statusFilter);

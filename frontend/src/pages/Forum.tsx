@@ -77,14 +77,17 @@ export function Forum() {
     loadThreads();
   }, []);
 
-  // Load thread from URL param
+  // Load thread from URL param or auto-select first
   useEffect(() => {
     if (threadIdParam) {
       selectThread(parseInt(threadIdParam, 10));
+    } else if (threads.length > 0 && !showNewThread) {
+      // Auto-select first thread
+      setSearchParams({ thread: threads[0].id.toString() });
     } else {
       setSelectedThread(null);
     }
-  }, [threadIdParam]);
+  }, [threadIdParam, threads]);
 
   async function loadThreads() {
     const data = await fetchThreads();
