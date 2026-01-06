@@ -28,6 +28,22 @@ import {
   updateThreadStatus,
 } from './forum/handler.js';
 
+import {
+  createDecision,
+  getDecision,
+  updateDecision,
+  listDecisions,
+  transitionStatus,
+  getDecisionCounts,
+} from './decisions/handler.js';
+
+import type {
+  DecisionStatus,
+  CreateDecisionInput,
+  UpdateDecisionInput,
+  ListDecisionsInput,
+} from './decisions/types.js';
+
 interface OracleSearchInput {
   query: string;
   type?: 'principle' | 'pattern' | 'learning' | 'retro' | 'all';
@@ -91,6 +107,39 @@ interface OracleThreadReadInput {
 interface OracleThreadUpdateInput {
   threadId: number;
   status?: 'active' | 'closed' | 'answered' | 'pending';
+}
+
+// Decision tracking interfaces
+interface OracleDecisionsListInput {
+  status?: DecisionStatus;
+  project?: string;
+  tags?: string[];
+  limit?: number;
+  offset?: number;
+}
+
+interface OracleDecisionsCreateInput {
+  title: string;
+  context?: string;
+  options?: Array<{ label: string; pros: string[]; cons: string[] }>;
+  tags?: string[];
+  project?: string;
+}
+
+interface OracleDecisionsGetInput {
+  id: number;
+}
+
+interface OracleDecisionsUpdateInput {
+  id: number;
+  title?: string;
+  context?: string;
+  options?: Array<{ label: string; pros: string[]; cons: string[] }>;
+  decision?: string;
+  rationale?: string;
+  tags?: string[];
+  status?: DecisionStatus;
+  decidedBy?: string;
 }
 
 class OracleMCPServer {
@@ -411,6 +460,151 @@ class OracleMCPServer {
             },
             required: ['threadId', 'status']
           }
+        },
+        // Decision tracking tools
+        {
+          name: 'oracle_decisions_list',
+          description: 'List decisions with optional filters. Returns decisions with status counts for dashboard view.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              status: {
+                type: 'string',
+                enum: ['pending', 'parked', 'researching', 'decided', 'implemented', 'closed'],
+                description: 'Filter by decision status'
+              },
+              project: {
+                type: 'string',
+                description: 'Filter by project (ghq path)'
+              },
+              tags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Filter by tags (matches any)'
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum decisions to return (default: 20)',
+                default: 20
+              },
+              offset: {
+                type: 'number',
+                description: 'Pagination offset',
+                default: 0
+              }
+            },
+            required: []
+          }
+        },
+        {
+          name: 'oracle_decisions_create',
+          description: 'Create a new decision to track. Starts in "pending" status.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              title: {
+                type: 'string',
+                description: 'Decision title (e.g., "Multiple psi directory architecture")'
+              },
+              context: {
+                type: 'string',
+                description: 'Why this decision matters, background information'
+              },
+              options: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    label: { type: 'string', description: 'Option name' },
+                    pros: { type: 'array', items: { type: 'string' }, description: 'Advantages' },
+                    cons: { type: 'array', items: { type: 'string' }, description: 'Disadvantages' }
+                  },
+                  required: ['label', 'pros', 'cons']
+                },
+                description: 'Available options with pros/cons'
+              },
+              tags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Tags for categorization (e.g., ["architecture", "urgent"])'
+              },
+              project: {
+                type: 'string',
+                description: 'Project context (auto-detected if not provided)'
+              }
+            },
+            required: ['title']
+          }
+        },
+        {
+          name: 'oracle_decisions_get',
+          description: 'Get a single decision with full details including options, decision, and rationale.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'number',
+                description: 'Decision ID'
+              }
+            },
+            required: ['id']
+          }
+        },
+        {
+          name: 'oracle_decisions_update',
+          description: 'Update a decision. Use to add decision/rationale, change status, or modify details. Status transitions are validated.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'number',
+                description: 'Decision ID to update'
+              },
+              title: {
+                type: 'string',
+                description: 'Updated title'
+              },
+              context: {
+                type: 'string',
+                description: 'Updated context'
+              },
+              options: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    label: { type: 'string' },
+                    pros: { type: 'array', items: { type: 'string' } },
+                    cons: { type: 'array', items: { type: 'string' } }
+                  }
+                },
+                description: 'Updated options'
+              },
+              decision: {
+                type: 'string',
+                description: 'The decision made (what was chosen)'
+              },
+              rationale: {
+                type: 'string',
+                description: 'Why this choice was made'
+              },
+              tags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Updated tags'
+              },
+              status: {
+                type: 'string',
+                enum: ['pending', 'parked', 'researching', 'decided', 'implemented', 'closed'],
+                description: 'New status (must be valid transition)'
+              },
+              decidedBy: {
+                type: 'string',
+                description: 'Who made the decision (e.g., "user", "opus")'
+              }
+            },
+            required: ['id']
+          }
         }
       ]
     }));
@@ -451,6 +645,19 @@ class OracleMCPServer {
 
           case 'oracle_thread_update':
             return await this.handleThreadUpdate(request.params.arguments as unknown as OracleThreadUpdateInput);
+
+          // Decision tracking handlers
+          case 'oracle_decisions_list':
+            return await this.handleDecisionsList(request.params.arguments as unknown as OracleDecisionsListInput);
+
+          case 'oracle_decisions_create':
+            return await this.handleDecisionsCreate(request.params.arguments as unknown as OracleDecisionsCreateInput);
+
+          case 'oracle_decisions_get':
+            return await this.handleDecisionsGet(request.params.arguments as unknown as OracleDecisionsGetInput);
+
+          case 'oracle_decisions_update':
+            return await this.handleDecisionsUpdate(request.params.arguments as unknown as OracleDecisionsUpdateInput);
 
           default:
             throw new Error(`Unknown tool: ${request.params.name}`);
@@ -1431,6 +1638,148 @@ class OracleMCPServer {
           thread_id: input.threadId,
           status: input.status,
           title: threadData?.thread.title,
+        }, null, 2)
+      }]
+    };
+  }
+
+  // ============================================================================
+  // Decision Tracking Handlers
+  // ============================================================================
+
+  /**
+   * List decisions with optional filters
+   */
+  private async handleDecisionsList(input: OracleDecisionsListInput) {
+    const result = listDecisions({
+      status: input.status,
+      project: input.project,
+      tags: input.tags,
+      limit: input.limit || 20,
+      offset: input.offset || 0,
+    });
+
+    const counts = getDecisionCounts();
+
+    console.error(`[MCP:DECISIONS_LIST] ${input.status || 'all'} → ${result.decisions.length} decisions`);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          decisions: result.decisions.map(d => ({
+            id: d.id,
+            title: d.title,
+            status: d.status,
+            context: d.context,
+            decision: d.decision,
+            project: d.project,
+            tags: d.tags,
+            created_at: new Date(d.createdAt).toISOString(),
+            updated_at: new Date(d.updatedAt).toISOString(),
+            decided_at: d.decidedAt ? new Date(d.decidedAt).toISOString() : null,
+            decided_by: d.decidedBy,
+          })),
+          total: result.total,
+          counts,
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Create a new decision
+   */
+  private async handleDecisionsCreate(input: OracleDecisionsCreateInput) {
+    const decision = createDecision({
+      title: input.title,
+      context: input.context,
+      options: input.options,
+      tags: input.tags,
+      project: input.project,
+    });
+
+    console.error(`[MCP:DECISIONS_CREATE] "${input.title}" → id=${decision.id}`);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          id: decision.id,
+          title: decision.title,
+          status: decision.status,
+          project: decision.project,
+          created_at: new Date(decision.createdAt).toISOString(),
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Get a single decision with full details
+   */
+  private async handleDecisionsGet(input: OracleDecisionsGetInput) {
+    const decision = getDecision(input.id);
+    if (!decision) {
+      throw new Error(`Decision ${input.id} not found`);
+    }
+
+    console.error(`[MCP:DECISIONS_GET] id=${input.id} → "${decision.title}"`);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          id: decision.id,
+          title: decision.title,
+          status: decision.status,
+          context: decision.context,
+          options: decision.options,
+          decision: decision.decision,
+          rationale: decision.rationale,
+          project: decision.project,
+          tags: decision.tags,
+          created_at: new Date(decision.createdAt).toISOString(),
+          updated_at: new Date(decision.updatedAt).toISOString(),
+          decided_at: decision.decidedAt ? new Date(decision.decidedAt).toISOString() : null,
+          decided_by: decision.decidedBy,
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Update a decision (fields and/or status)
+   */
+  private async handleDecisionsUpdate(input: OracleDecisionsUpdateInput) {
+    const decision = updateDecision({
+      id: input.id,
+      title: input.title,
+      context: input.context,
+      options: input.options,
+      decision: input.decision,
+      rationale: input.rationale,
+      tags: input.tags,
+      status: input.status,
+      decidedBy: input.decidedBy,
+    });
+
+    if (!decision) {
+      throw new Error(`Decision ${input.id} not found`);
+    }
+
+    console.error(`[MCP:DECISIONS_UPDATE] id=${input.id} → status=${decision.status}`);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          id: decision.id,
+          title: decision.title,
+          status: decision.status,
+          updated_at: new Date(decision.updatedAt).toISOString(),
+          decided_at: decision.decidedAt ? new Date(decision.decidedAt).toISOString() : null,
+          decided_by: decision.decidedBy,
         }, null, 2)
       }]
     };

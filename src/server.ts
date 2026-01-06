@@ -59,6 +59,15 @@ import {
   updateThreadStatus
 } from './forum/handler.js';
 
+import {
+  createDecision,
+  getDecision,
+  updateDecision,
+  listDecisions,
+  transitionStatus,
+  getDecisionCounts
+} from './decisions/handler.js';
+
 import path from 'path';
 
 // Initialize logging tables on startup
@@ -78,7 +87,7 @@ const server = http.createServer((req, res) => {
 
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Content-Type', 'application/json');
 
@@ -203,6 +212,178 @@ const server = http.createServer((req, res) => {
           res.statusCode = 500;
           res.end(JSON.stringify({
             error: error instanceof Error ? error.message : 'Unknown error'
+          }));
+        }
+      });
+      return;
+    }
+
+    // ========================================================================
+    // Decision Endpoints
+    // ========================================================================
+
+    // GET /decisions - List decisions with filters
+    if (pathname === '/decisions' && req.method === 'GET') {
+      const result = listDecisions({
+        status: query.status as any,
+        project: query.project as string,
+        tags: query.tags ? (query.tags as string).split(',') : undefined,
+        limit: parseInt(query.limit as string) || 20,
+        offset: parseInt(query.offset as string) || 0
+      });
+      res.end(JSON.stringify({
+        decisions: result.decisions.map(d => ({
+          id: d.id,
+          title: d.title,
+          status: d.status,
+          context: d.context,
+          decision: d.decision,
+          project: d.project,
+          tags: d.tags,
+          created_at: new Date(d.createdAt).toISOString(),
+          updated_at: new Date(d.updatedAt).toISOString(),
+          decided_at: d.decidedAt ? new Date(d.decidedAt).toISOString() : null,
+          decided_by: d.decidedBy
+        })),
+        total: result.total,
+        counts: getDecisionCounts()
+      }, null, 2));
+      return;
+    }
+
+    // GET /decisions/:id - Get single decision
+    if (pathname?.match(/^\/decisions\/\d+$/) && req.method === 'GET') {
+      const decisionId = parseInt(pathname.split('/')[2], 10);
+      const decision = getDecision(decisionId);
+      if (!decision) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: 'Decision not found' }));
+        return;
+      }
+      res.end(JSON.stringify({
+        id: decision.id,
+        title: decision.title,
+        status: decision.status,
+        context: decision.context,
+        options: decision.options,
+        decision: decision.decision,
+        rationale: decision.rationale,
+        project: decision.project,
+        tags: decision.tags,
+        created_at: new Date(decision.createdAt).toISOString(),
+        updated_at: new Date(decision.updatedAt).toISOString(),
+        decided_at: decision.decidedAt ? new Date(decision.decidedAt).toISOString() : null,
+        decided_by: decision.decidedBy
+      }, null, 2));
+      return;
+    }
+
+    // POST /decisions - Create new decision
+    if (pathname === '/decisions' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          if (!data.title) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Missing required field: title' }));
+            return;
+          }
+          const decision = createDecision({
+            title: data.title,
+            context: data.context,
+            options: data.options,
+            tags: data.tags,
+            project: data.project
+          });
+          res.statusCode = 201;
+          res.end(JSON.stringify({
+            id: decision.id,
+            title: decision.title,
+            status: decision.status,
+            created_at: new Date(decision.createdAt).toISOString()
+          }, null, 2));
+        } catch (error) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }));
+        }
+      });
+      return;
+    }
+
+    // PATCH /decisions/:id - Update decision
+    if (pathname?.match(/^\/decisions\/\d+$/) && req.method === 'PATCH') {
+      const decisionId = parseInt(pathname.split('/')[2], 10);
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const decision = updateDecision({
+            id: decisionId,
+            title: data.title,
+            context: data.context,
+            options: data.options,
+            decision: data.decision,
+            rationale: data.rationale,
+            tags: data.tags,
+            status: data.status,
+            decidedBy: data.decided_by
+          });
+          if (!decision) {
+            res.statusCode = 404;
+            res.end(JSON.stringify({ error: 'Decision not found' }));
+            return;
+          }
+          res.end(JSON.stringify({
+            id: decision.id,
+            title: decision.title,
+            status: decision.status,
+            updated_at: new Date(decision.updatedAt).toISOString()
+          }, null, 2));
+        } catch (error) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({
+            error: error instanceof Error ? error.message : 'Invalid request'
+          }));
+        }
+      });
+      return;
+    }
+
+    // POST /decisions/:id/transition - Transition status
+    if (pathname?.match(/^\/decisions\/\d+\/transition$/) && req.method === 'POST') {
+      const decisionId = parseInt(pathname.split('/')[2], 10);
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          if (!data.status) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Missing required field: status' }));
+            return;
+          }
+          const decision = transitionStatus(decisionId, data.status, data.decided_by);
+          if (!decision) {
+            res.statusCode = 404;
+            res.end(JSON.stringify({ error: 'Decision not found' }));
+            return;
+          }
+          res.end(JSON.stringify({
+            id: decision.id,
+            title: decision.title,
+            status: decision.status,
+            decided_at: decision.decidedAt ? new Date(decision.decidedAt).toISOString() : null,
+            decided_by: decision.decidedBy
+          }, null, 2));
+        } catch (error) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({
+            error: error instanceof Error ? error.message : 'Invalid request'
           }));
         }
       });
@@ -387,7 +568,12 @@ const server = http.createServer((req, res) => {
             'GET /dashboard/growth?period=week - Growth over time',
             'GET /threads - List discussion threads',
             'GET /thread/:id - Get thread with messages',
-            'POST /thread - Send message to thread (Oracle auto-responds)'
+            'POST /thread - Send message to thread (Oracle auto-responds)',
+            'GET /decisions - List decisions',
+            'GET /decisions/:id - Get single decision',
+            'POST /decisions - Create decision',
+            'PATCH /decisions/:id - Update decision',
+            'POST /decisions/:id/transition - Transition status'
           ]
         };
     }

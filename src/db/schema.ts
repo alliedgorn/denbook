@@ -131,3 +131,28 @@ export const forumMessages = sqliteTable('forum_messages', {
 
 // Note: FTS5 virtual table (oracle_fts) is managed via raw SQL
 // since Drizzle doesn't natively support FTS5
+
+// ============================================================================
+// Decision Tracking Tables
+// ============================================================================
+
+// Decisions - structured decision tracking with lifecycle
+export const decisions = sqliteTable('decisions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  status: text('status').default('pending').notNull(), // pending, parked, researching, decided, implemented, closed
+  context: text('context'),                            // Why this decision matters
+  options: text('options'),                            // JSON: [{label, pros, cons}]
+  decision: text('decision'),                          // What was decided
+  rationale: text('rationale'),                        // Why this choice
+  project: text('project'),                            // ghq path (optional)
+  tags: text('tags'),                                  // JSON array
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+  decidedAt: integer('decided_at'),                    // When status → decided
+  decidedBy: text('decided_by'),                       // user or model name
+}, (table) => [
+  index('idx_decisions_status').on(table.status),
+  index('idx_decisions_project').on(table.project),
+  index('idx_decisions_created').on(table.createdAt),
+]);
