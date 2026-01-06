@@ -244,6 +244,34 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // POST /ask - Arthur AI chat endpoint (wraps /consult)
+    if (pathname === '/ask' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          if (!data.question) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Missing required field: question' }));
+            return;
+          }
+          const consultResult = handleConsult(data.question, data.context || '');
+          res.end(JSON.stringify({
+            response: consultResult.guidance || 'I found some relevant information but couldn\'t formulate a specific response.',
+            principles: consultResult.principles?.length || 0,
+            patterns: consultResult.patterns?.length || 0
+          }, null, 2));
+        } catch (error) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }));
+        }
+      });
+      return;
+    }
+
     // ========================================================================
     // Decision Endpoints
     // ========================================================================
