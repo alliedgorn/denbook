@@ -32,9 +32,49 @@ export function initFts5() {
     CREATE VIRTUAL TABLE IF NOT EXISTS oracle_fts USING fts5(
       id UNINDEXED,
       content,
-      concepts
+      concepts,
+      tokenize='porter unicode61'
     )
   `);
+}
+
+/**
+ * Rebuild FTS5 table with Porter stemmer
+ * Required when upgrading from non-stemmed to stemmed FTS
+ */
+export function rebuildFts5WithStemmer() {
+  console.log('[FTS5] Starting rebuild with Porter stemmer...');
+
+  // Backup existing data
+  const existingData = sqlite.prepare('SELECT id, content, concepts FROM oracle_fts').all() as {
+    id: string;
+    content: string;
+    concepts: string;
+  }[];
+  console.log(`[FTS5] Backed up ${existingData.length} documents`);
+
+  // Drop old table
+  sqlite.exec('DROP TABLE IF EXISTS oracle_fts');
+
+  // Create new table with Porter stemmer
+  sqlite.exec(`
+    CREATE VIRTUAL TABLE oracle_fts USING fts5(
+      id UNINDEXED,
+      content,
+      concepts,
+      tokenize='porter unicode61'
+    )
+  `);
+  console.log('[FTS5] Created new table with Porter stemmer');
+
+  // Re-insert data
+  const insertStmt = sqlite.prepare('INSERT INTO oracle_fts (id, content, concepts) VALUES (?, ?, ?)');
+  for (const row of existingData) {
+    insertStmt.run(row.id, row.content, row.concepts);
+  }
+  console.log(`[FTS5] Re-inserted ${existingData.length} documents`);
+
+  return existingData.length;
 }
 
 /**

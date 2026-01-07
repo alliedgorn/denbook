@@ -230,22 +230,27 @@ export function synthesizeGuidance(decision: string, principles: any[], patterns
 }
 
 /**
- * Get guidance on a decision
+ * Get guidance on a decision (always hybrid: FTS + vector)
  */
-export function handleConsult(decision: string, context: string = '') {
+export async function handleConsult(decision: string, context: string = '') {
   const query = context ? `${decision} ${context}` : decision;
   // Remove FTS5 special characters: ? * + - ( ) ^ ~ " ' : (colon is column prefix)
   const safeQuery = query.replace(/[?*+\-()^~"':]/g, ' ').replace(/\s+/g, ' ').trim();
 
+  // Run FTS search
   const principleStmt = db.prepare(`
     SELECT f.id, f.content, d.source_file, rank as score
     FROM oracle_fts f
     JOIN oracle_documents d ON f.id = d.id
     WHERE oracle_fts MATCH ? AND d.type = 'principle'
     ORDER BY rank
-    LIMIT 3
+    LIMIT 5
   `);
-  const principlesRaw = principleStmt.all(safeQuery) as any[];
+  const ftsPrinciples = principleStmt.all(safeQuery).map((row: any) => ({
+    ...row,
+    score: normalizeRank(row.score),
+    source: 'fts' as const
+  }));
 
   const learningStmt = db.prepare(`
     SELECT f.id, f.content, d.source_file, rank as score
@@ -253,9 +258,55 @@ export function handleConsult(decision: string, context: string = '') {
     JOIN oracle_documents d ON f.id = d.id
     WHERE oracle_fts MATCH ? AND d.type = 'learning'
     ORDER BY rank
-    LIMIT 3
+    LIMIT 5
   `);
-  const patternsRaw = learningStmt.all(safeQuery) as any[];
+  const ftsPatterns = learningStmt.all(safeQuery).map((row: any) => ({
+    ...row,
+    score: normalizeRank(row.score),
+    source: 'fts' as const
+  }));
+
+  // Run vector search (always, not just fallback)
+  let vectorPrinciples: any[] = [];
+  let vectorPatterns: any[] = [];
+
+  try {
+    const client = getChromaClient();
+    console.log('[Consult] Hybrid search for:', query);
+
+    const vectorResults = await client.query(query, 15);
+    console.log('[Consult] Vector returned:', vectorResults.ids?.length || 0, 'results');
+
+    if (vectorResults.ids?.length > 0) {
+      for (let i = 0; i < vectorResults.ids.length; i++) {
+        const docType = vectorResults.metadatas?.[i]?.type;
+        const distance = vectorResults.distances?.[i] || 1;
+        const similarity = Math.max(0, 1 - distance / 2);
+
+        const doc = {
+          id: vectorResults.ids[i],
+          content: vectorResults.documents?.[i] || '',
+          source_file: vectorResults.metadatas?.[i]?.source_file || '',
+          score: similarity,
+          source: 'vector' as const
+        };
+
+        if (docType === 'principle' && vectorPrinciples.length < 5) {
+          vectorPrinciples.push(doc);
+        } else if (docType === 'learning' && vectorPatterns.length < 5) {
+          vectorPatterns.push(doc);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[Consult Vector Search Error]', error);
+  }
+
+  // Merge FTS and vector results (dedupe by id, boost score if in both)
+  const principlesRaw = mergeConsultResults(ftsPrinciples, vectorPrinciples, 3);
+  const patternsRaw = mergeConsultResults(ftsPatterns, vectorPatterns, 3);
+
+  console.log('[Consult] Final:', principlesRaw.length, 'principles,', patternsRaw.length, 'patterns');
 
   const guidance = synthesizeGuidance(decision, principlesRaw, patternsRaw);
 
@@ -267,17 +318,52 @@ export function handleConsult(decision: string, context: string = '') {
     principles: principlesRaw.map((p: any) => ({
       id: p.id,
       content: p.content.substring(0, 300),
-      source: p.source_file,
-      score: p.score
+      source_file: p.source_file,
+      score: p.score,
+      source: p.source
     })),
     patterns: patternsRaw.map((p: any) => ({
       id: p.id,
       content: p.content.substring(0, 300),
-      source: p.source_file,
-      score: p.score
+      source_file: p.source_file,
+      score: p.score,
+      source: p.source
     })),
     guidance
   };
+}
+
+/**
+ * Merge FTS and vector results for consult (dedupe, boost, limit)
+ */
+function mergeConsultResults(fts: any[], vector: any[], limit: number): any[] {
+  const seen = new Map<string, any>();
+
+  // Add FTS results
+  for (const r of fts) {
+    seen.set(r.id, r);
+  }
+
+  // Merge vector results
+  for (const r of vector) {
+    if (seen.has(r.id)) {
+      const existing = seen.get(r.id)!;
+      // Boost for appearing in both
+      const maxScore = Math.max(existing.score || 0, r.score || 0);
+      seen.set(r.id, {
+        ...existing,
+        score: Math.min(1, maxScore + 0.1),
+        source: 'hybrid'
+      });
+    } else {
+      seen.set(r.id, r);
+    }
+  }
+
+  // Sort by score and limit
+  return Array.from(seen.values())
+    .sort((a, b) => (b.score || 0) - (a.score || 0))
+    .slice(0, limit);
 }
 
 /**

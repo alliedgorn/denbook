@@ -8,7 +8,8 @@ export interface Document {
   content: string;
   source_file: string;
   concepts: string[];
-  source?: string;
+  source?: 'fts' | 'vector' | 'hybrid';  // search source type
+  score?: number;                         // relevance score 0-1
   created_at?: string;
 }
 

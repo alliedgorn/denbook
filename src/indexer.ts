@@ -49,11 +49,12 @@ export class OracleIndexer {
       CREATE INDEX IF NOT EXISTS idx_type ON oracle_documents(type);
       CREATE INDEX IF NOT EXISTS idx_source ON oracle_documents(source_file);
 
-      -- FTS5 for keyword search
+      -- FTS5 for keyword search (with Porter stemmer for tire/tired matching)
       CREATE VIRTUAL TABLE IF NOT EXISTS oracle_fts USING fts5(
         id UNINDEXED,
         content,
-        concepts
+        concepts,
+        tokenize='porter unicode61'
       );
 
       -- Consult log for tracking oracle_consult queries

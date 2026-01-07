@@ -57,6 +57,7 @@ import {
 } from './server/dashboard.js';
 
 import { handleContext } from './server/context.js';
+import { asyncHandlerWithValidation } from './server/utils.js';
 
 import {
   handleThreadMessage,
@@ -248,7 +249,7 @@ const server = http.createServer((req, res) => {
     if (pathname === '/ask' && req.method === 'POST') {
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', () => {
+      req.on('end', async () => {
         try {
           const data = JSON.parse(body);
           if (!data.question) {
@@ -256,7 +257,7 @@ const server = http.createServer((req, res) => {
             res.end(JSON.stringify({ error: 'Missing required field: question' }));
             return;
           }
-          const consultResult = handleConsult(data.question, data.context || '');
+          const consultResult = await handleConsult(data.question, data.context || '');
           res.end(JSON.stringify({
             response: consultResult.guidance || 'I found some relevant information but couldn\'t formulate a specific response.',
             principles: consultResult.principles?.length || 0,
@@ -474,45 +475,26 @@ const server = http.createServer((req, res) => {
         break;
 
       case '/search':
-        // Async handler for hybrid search via ChromaMcpClient
-        (async () => {
-          try {
-            if (!query.q) {
-              res.statusCode = 400;
-              res.end(JSON.stringify({ error: 'Missing query parameter: q' }));
-              return;
-            }
-            const searchResult = await handleSearch(
-              query.q as string,
-              (query.type as string) || 'all',
-              parseInt(query.limit as string) || 10,
-              parseInt(query.offset as string) || 0,
-              (query.mode as 'hybrid' | 'fts' | 'vector') || 'hybrid'
-            );
-            res.end(JSON.stringify({
-              ...searchResult,
-              query: query.q
-            }, null, 2));
-          } catch (error) {
-            res.statusCode = 500;
-            res.end(JSON.stringify({
-              error: error instanceof Error ? error.message : 'Search failed'
-            }));
-          }
-        })();
+        asyncHandlerWithValidation(res, query, ['q'], async () => {
+          const result = await handleSearch(
+            query.q as string,
+            (query.type as string) || 'all',
+            parseInt(query.limit as string) || 10,
+            parseInt(query.offset as string) || 0,
+            (query.mode as 'hybrid' | 'fts' | 'vector') || 'hybrid'
+          );
+          return { ...result, query: query.q };
+        });
         return;
 
       case '/consult':
-        if (!query.q) {
-          res.statusCode = 400;
-          result = { error: 'Missing query parameter: q (decision)' };
-        } else {
-          result = handleConsult(
+        asyncHandlerWithValidation(res, query, ['q'], async () => {
+          return await handleConsult(
             query.q as string,
             (query.context as string) || ''
           );
-        }
-        break;
+        });
+        return;
 
       case '/reflect':
         result = handleReflect();
@@ -521,6 +503,22 @@ const server = http.createServer((req, res) => {
       case '/stats':
         result = handleStats(DB_PATH);
         break;
+
+      case '/fts-rebuild':
+        // Rebuild FTS5 index with Porter stemmer (for tire/tired matching)
+        (async () => {
+          try {
+            const { rebuildFts5WithStemmer } = await import('./db/index.js');
+            const count = rebuildFts5WithStemmer();
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: true, message: 'Rebuilt FTS5 with Porter stemmer', documents: count }));
+          } catch (error) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Rebuild failed' }));
+          }
+        })();
+        return;
 
       case '/list':
         result = handleList(

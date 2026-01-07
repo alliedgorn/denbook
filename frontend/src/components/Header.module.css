@@ -19,6 +19,14 @@
 .nav {
   display: flex;
   gap: 4px;
+  align-items: center;
+}
+
+.divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 8px;
 }
 
 .navLink {

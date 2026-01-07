@@ -2,17 +2,20 @@ import { Link, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import styles from './Header.module.css';
 
+// Grouped with separators (no labels)
 const navItems = [
   { path: '/', label: 'Overview' },
   { path: '/feed', label: 'Feed' },
-  { path: '/forum', label: 'Forum' },
-  { path: '/decisions', label: 'Decisions' },
   { path: '/search', label: 'Search' },
-  { path: '/graph', label: 'Graph' },
-  { path: '/activity', label: 'Activity' },
+  { divider: true },
+  { path: '/forum', label: 'Forum' },
   { path: '/consult', label: 'Consult' },
+  { divider: true },
+  { path: '/decisions', label: 'Decisions' },
+  { path: '/activity', label: 'Activity' },
+  { divider: true },
   { path: '/handoff', label: 'Handoff' },
-];
+] as const;
 
 interface SessionStats {
   searches: number;
@@ -68,15 +71,19 @@ export function Header() {
       </Link>
 
       <nav className={styles.nav}>
-        {navItems.map(item => (
-          <Link
-            key={item.path}
-            to={item.path}
-            className={`${styles.navLink} ${location.pathname === item.path ? styles.active : ''}`}
-          >
-            {item.label}
-          </Link>
-        ))}
+        {navItems.map((item, i) =>
+          'divider' in item ? (
+            <span key={i} className={styles.divider} />
+          ) : (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`${styles.navLink} ${location.pathname === item.path ? styles.active : ''}`}
+            >
+              {item.label}
+            </Link>
+          )
+        )}
       </nav>
 
       <div className={styles.sessionStats}>

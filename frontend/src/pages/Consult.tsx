@@ -3,11 +3,18 @@ import { consult } from '../api/oracle';
 import type { ConsultResult } from '../api/oracle';
 import styles from './Consult.module.css';
 
+interface PopupContent {
+  title: string;
+  content: string;
+  source: string;
+}
+
 export function Consult() {
   const [decision, setDecision] = useState('');
   const [context, setContext] = useState('');
   const [result, setResult] = useState<ConsultResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [popup, setPopup] = useState<PopupContent | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -59,7 +66,14 @@ export function Consult() {
 
       {result && (
         <div className={styles.result}>
-          <div className={styles.guidance}>
+          <div
+            className={styles.guidance}
+            onClick={() => setPopup({
+              title: 'Guidance',
+              content: result.guidance,
+              source: 'Oracle Synthesis'
+            })}
+          >
             <h2 className={styles.guidanceTitle}>Guidance</h2>
             <p className={styles.guidanceText}>{result.guidance}</p>
           </div>
@@ -68,9 +82,21 @@ export function Consult() {
             <div className={styles.section}>
               <h3 className={styles.sectionTitle}>Relevant Principles</h3>
               {result.principles.map((p, i) => (
-                <div key={i} className={styles.item}>
+                <div
+                  key={i}
+                  className={styles.item}
+                  onClick={() => setPopup({
+                    title: 'Principle',
+                    content: p.content,
+                    source: p.source_file
+                  })}
+                >
                   <p className={styles.itemContent}>{p.content}</p>
-                  <p className={styles.itemSource}>{p.source_file}</p>
+                  <div className={styles.itemMeta}>
+                    <span className={styles.itemSource}>{p.source_file}</span>
+                    {p.source && <span className={`${styles.badge} ${styles[p.source]}`}>{p.source}</span>}
+                    {p.score !== undefined && <span className={styles.score}>{(p.score * 100).toFixed(0)}%</span>}
+                  </div>
                 </div>
               ))}
             </div>
@@ -80,13 +106,44 @@ export function Consult() {
             <div className={styles.section}>
               <h3 className={styles.sectionTitle}>Matching Patterns</h3>
               {result.patterns.map((p, i) => (
-                <div key={i} className={styles.item}>
+                <div
+                  key={i}
+                  className={styles.item}
+                  onClick={() => setPopup({
+                    title: 'Pattern',
+                    content: p.content,
+                    source: p.source_file
+                  })}
+                >
                   <p className={styles.itemContent}>{p.content}</p>
-                  <p className={styles.itemSource}>{p.source_file}</p>
+                  <div className={styles.itemMeta}>
+                    <span className={styles.itemSource}>{p.source_file}</span>
+                    {p.source && <span className={`${styles.badge} ${styles[p.source]}`}>{p.source}</span>}
+                    {p.score !== undefined && <span className={styles.score}>{(p.score * 100).toFixed(0)}%</span>}
+                  </div>
                 </div>
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {popup && (
+        <div className={styles.overlay} onClick={() => setPopup(null)}>
+          <div className={styles.popup} onClick={e => e.stopPropagation()}>
+            <div className={styles.popupHeader}>
+              <h3 className={styles.popupTitle}>{popup.title}</h3>
+              <button className={styles.popupClose} onClick={() => setPopup(null)}>×</button>
+            </div>
+            <div className={styles.popupContent}>
+              {popup.content.split('\n').map((line, i) => (
+                <p key={i} className={styles.popupLine}>{line || '\u00A0'}</p>
+              ))}
+            </div>
+            <div className={styles.popupFooter}>
+              <span className={styles.popupSource}>{popup.source}</span>
+            </div>
+          </div>
         </div>
       )}
     </div>
