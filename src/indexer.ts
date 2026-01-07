@@ -177,11 +177,15 @@ export class OracleIndexer {
   /**
    * Parse resonance markdown into granular documents
    * Following claude-mem's pattern of splitting by sections
+   * Now reads frontmatter tags and inherits them to all chunks
    */
   private parseResonanceFile(filename: string, content: string): OracleDocument[] {
     const documents: OracleDocument[] = [];
     const sourceFile = `ψ/memory/resonance/${filename}`;
     const now = Date.now();
+
+    // Extract file-level tags from frontmatter
+    const fileTags = this.parseFrontmatterTags(content);
 
     // Split by ### headers (principles, sections)
     const sections = content.split(/^###\s+/m).filter(s => s.trim());
@@ -195,12 +199,13 @@ export class OracleIndexer {
 
       // Main document for this principle/section
       const id = `resonance_${filename.replace('.md', '')}_${index}`;
+      const extractedConcepts = this.extractConcepts(title, body);
       documents.push({
         id,
         type: 'principle',
         source_file: sourceFile,
         content: `${title}: ${body}`,
-        concepts: this.extractConcepts(title, body),
+        concepts: this.mergeConceptsWithTags(extractedConcepts, fileTags),
         created_at: now,
         updated_at: now
       });
@@ -210,12 +215,13 @@ export class OracleIndexer {
       if (bullets) {
         bullets.forEach((bullet, bulletIndex) => {
           const bulletText = bullet.replace(/^[-*]\s+/, '').trim();
+          const bulletConcepts = this.extractConcepts(bulletText);
           documents.push({
             id: `${id}_sub_${bulletIndex}`,
             type: 'principle',
             source_file: sourceFile,
             content: bulletText,
-            concepts: this.extractConcepts(bulletText),
+            concepts: this.mergeConceptsWithTags(bulletConcepts, fileTags),
             created_at: now,
             updated_at: now
           });
@@ -249,11 +255,15 @@ export class OracleIndexer {
 
   /**
    * Parse learning markdown into documents
+   * Now reads frontmatter tags and inherits them to all chunks
    */
   private parseLearningFile(filename: string, content: string): OracleDocument[] {
     const documents: OracleDocument[] = [];
     const sourceFile = `ψ/memory/learnings/${filename}`;
     const now = Date.now();
+
+    // Extract file-level tags from frontmatter
+    const fileTags = this.parseFrontmatterTags(content);
 
     // Extract title from frontmatter or filename
     const titleMatch = content.match(/^title:\s*(.+)$/m);
@@ -270,12 +280,13 @@ export class OracleIndexer {
       if (!body) return;
 
       const id = `learning_${filename.replace('.md', '')}_${index}`;
+      const extractedConcepts = this.extractConcepts(sectionTitle, body);
       documents.push({
         id,
         type: 'learning',
         source_file: sourceFile,
         content: `${title} - ${sectionTitle}: ${body}`,
-        concepts: this.extractConcepts(sectionTitle, body),
+        concepts: this.mergeConceptsWithTags(extractedConcepts, fileTags),
         created_at: now,
         updated_at: now
       });
@@ -283,12 +294,13 @@ export class OracleIndexer {
 
     // If no sections, treat whole file as one document
     if (documents.length === 0) {
+      const extractedConcepts = this.extractConcepts(title, content);
       documents.push({
         id: `learning_${filename.replace('.md', '')}`,
         type: 'learning',
         source_file: sourceFile,
         content: content,
-        concepts: this.extractConcepts(title, content),
+        concepts: this.mergeConceptsWithTags(extractedConcepts, fileTags),
         created_at: now,
         updated_at: now
       });
@@ -341,10 +353,14 @@ export class OracleIndexer {
 
   /**
    * Parse retrospective markdown
+   * Now reads frontmatter tags and inherits them to all chunks
    */
   private parseRetroFile(relativePath: string, content: string): OracleDocument[] {
     const documents: OracleDocument[] = [];
     const now = Date.now();
+
+    // Extract file-level tags from frontmatter
+    const fileTags = this.parseFrontmatterTags(content);
 
     // Extract key sections (AI Diary, What I Learned, etc.)
     const sections = content.split(/^##\s+/m).filter(s => s.trim());
@@ -358,13 +374,14 @@ export class OracleIndexer {
 
       const filename = path.basename(relativePath, '.md');
       const id = `retro_${filename}_${index}`;
+      const extractedConcepts = this.extractConcepts(sectionTitle, body);
 
       documents.push({
         id,
         type: 'retro',
         source_file: relativePath,
         content: `${sectionTitle}: ${body}`,
-        concepts: this.extractConcepts(sectionTitle, body),
+        concepts: this.mergeConceptsWithTags(extractedConcepts, fileTags),
         created_at: now,
         updated_at: now
       });
@@ -374,18 +391,42 @@ export class OracleIndexer {
   }
 
   /**
+   * Parse frontmatter tags from markdown content
+   * Supports: tags: [a, b, c] or tags: a, b, c
+   */
+  private parseFrontmatterTags(content: string): string[] {
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    if (!frontmatterMatch) return [];
+
+    const frontmatter = frontmatterMatch[1];
+
+    // Match tags: [tag1, tag2] or tags: tag1, tag2
+    const tagsMatch = frontmatter.match(/^tags:\s*\[?([^\]\n]+)\]?/m);
+    if (!tagsMatch) return [];
+
+    return tagsMatch[1]
+      .split(',')
+      .map(t => t.trim().toLowerCase())
+      .filter(t => t.length > 0);
+  }
+
+  /**
    * Extract concept tags from text
-   * Simple keyword extraction - could be enhanced with NLP
+   * Combines keyword matching with optional file-level tags
    */
   private extractConcepts(...texts: string[]): string[] {
     const combined = texts.join(' ').toLowerCase();
     const concepts = new Set<string>();
 
-    // Common Oracle concepts
+    // Common Oracle concepts (expanded list)
     const keywords = [
       'trust', 'pattern', 'mirror', 'append', 'history', 'context',
       'delete', 'behavior', 'intention', 'decision', 'human', 'external',
-      'brain', 'command', 'oracle', 'timestamp', 'immutable', 'preserve'
+      'brain', 'command', 'oracle', 'timestamp', 'immutable', 'preserve',
+      // Additional keywords for better coverage
+      'learn', 'memory', 'session', 'workflow', 'api', 'mcp', 'claude',
+      'git', 'code', 'file', 'config', 'test', 'debug', 'error', 'fix',
+      'feature', 'refactor', 'style', 'docs', 'plan', 'task', 'issue'
     ];
 
     for (const keyword of keywords) {
@@ -395,6 +436,13 @@ export class OracleIndexer {
     }
 
     return Array.from(concepts);
+  }
+
+  /**
+   * Merge extracted concepts with file-level tags
+   */
+  private mergeConceptsWithTags(extracted: string[], fileTags: string[]): string[] {
+    return [...new Set([...extracted, ...fileTags])];
   }
 
   /**
