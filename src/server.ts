@@ -57,7 +57,6 @@ import {
 } from './server/dashboard.js';
 
 import { handleContext } from './server/context.js';
-import { asyncHandlerWithValidation } from './server/utils.js';
 
 import {
   handleThreadMessage,
@@ -83,6 +82,15 @@ try {
   initLoggingTables();
 } catch (e) {
   console.error('Failed to initialize logging tables:', e);
+}
+
+// Reset stale indexing status on startup
+// If server is starting, indexer isn't running - clear any stuck status
+try {
+  db.prepare('UPDATE indexing_status SET is_indexing = 0 WHERE id = 1').run();
+  console.log('🔮 Reset indexing status on startup');
+} catch (e) {
+  // Table might not exist yet - that's fine
 }
 
 // Configure process lifecycle management
@@ -249,7 +257,7 @@ const server = http.createServer((req, res) => {
     if (pathname === '/ask' && req.method === 'POST') {
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', async () => {
+      req.on('end', () => {
         try {
           const data = JSON.parse(body);
           if (!data.question) {
@@ -257,7 +265,7 @@ const server = http.createServer((req, res) => {
             res.end(JSON.stringify({ error: 'Missing required field: question' }));
             return;
           }
-          const consultResult = await handleConsult(data.question, data.context || '');
+          const consultResult = handleConsult(data.question, data.context || '');
           res.end(JSON.stringify({
             response: consultResult.guidance || 'I found some relevant information but couldn\'t formulate a specific response.',
             principles: consultResult.principles?.length || 0,
@@ -475,26 +483,34 @@ const server = http.createServer((req, res) => {
         break;
 
       case '/search':
-        asyncHandlerWithValidation(res, query, ['q'], async () => {
-          const result = await handleSearch(
+        if (!query.q) {
+          res.statusCode = 400;
+          result = { error: 'Missing query parameter: q' };
+        } else {
+          const searchResult = handleSearch(
             query.q as string,
             (query.type as string) || 'all',
             parseInt(query.limit as string) || 10,
-            parseInt(query.offset as string) || 0,
-            (query.mode as 'hybrid' | 'fts' | 'vector') || 'hybrid'
+            parseInt(query.offset as string) || 0
           );
-          return { ...result, query: query.q };
-        });
-        return;
+          result = {
+            ...searchResult,
+            query: query.q
+          };
+        }
+        break;
 
       case '/consult':
-        asyncHandlerWithValidation(res, query, ['q'], async () => {
-          return await handleConsult(
+        if (!query.q) {
+          res.statusCode = 400;
+          result = { error: 'Missing query parameter: q (decision)' };
+        } else {
+          result = handleConsult(
             query.q as string,
             (query.context as string) || ''
           );
-        });
-        return;
+        }
+        break;
 
       case '/reflect':
         result = handleReflect();
@@ -504,21 +520,20 @@ const server = http.createServer((req, res) => {
         result = handleStats(DB_PATH);
         break;
 
-      case '/fts-rebuild':
-        // Rebuild FTS5 index with Porter stemmer (for tire/tired matching)
-        (async () => {
-          try {
-            const { rebuildFts5WithStemmer } = await import('./db/index.js');
-            const count = rebuildFts5WithStemmer();
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ success: true, message: 'Rebuilt FTS5 with Porter stemmer', documents: count }));
-          } catch (error) {
-            res.statusCode = 500;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Rebuild failed' }));
-          }
-        })();
-        return;
+      case '/logs':
+        // Return recent search logs for debugging
+        try {
+          const logs = db.prepare(`
+            SELECT query, type, mode, results_count, search_time_ms, created_at, project
+            FROM search_log
+            ORDER BY created_at DESC
+            LIMIT ?
+          `).all(parseInt(query.limit as string) || 20);
+          result = { logs, total: logs.length };
+        } catch (e) {
+          result = { logs: [], error: 'Log table not found' };
+        }
+        break;
 
       case '/list':
         result = handleList(
