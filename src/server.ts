@@ -115,7 +115,7 @@ registerSignalHandlers(async () => {
 /**
  * HTTP request handler
  */
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url || '', true);
   const pathname = parsedUrl.pathname;
   const query = parsedUrl.query;
@@ -487,7 +487,7 @@ const server = http.createServer((req, res) => {
           res.statusCode = 400;
           result = { error: 'Missing query parameter: q' };
         } else {
-          const searchResult = handleSearch(
+          const searchResult = await handleSearch(
             query.q as string,
             (query.type as string) || 'all',
             parseInt(query.limit as string) || 10,
