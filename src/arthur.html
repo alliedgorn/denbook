@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arthur AI — Stark Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0a0a0f;
+            color: #fff;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Animated background grid */
+        .grid-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(rgba(0, 195, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 195, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+
+        /* Header bar */
+        .header-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: linear-gradient(180deg, rgba(10, 10, 15, 0.95) 0%, rgba(10, 10, 15, 0) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1.5rem;
+            z-index: 100;
+            border-bottom: 1px solid rgba(0, 195, 255, 0.1);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        /* Main container */
+        .container {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 2rem;
+            padding-top: 80px;
+        }
+
+        /* Oracle core visualization */
+        .oracle-core {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin-bottom: 3rem;
+        }
+
+        .core-ring {
+            position: absolute;
+            border: 2px solid rgba(0, 195, 255, 0.3);
+            border-radius: 50%;
+            animation: rotate 10s linear infinite;
+        }
+
+        .core-ring:nth-child(1) {
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+        }
+
+        .core-ring:nth-child(2) {
+            width: 80%;
+            height: 80%;
+            top: 10%;
+            left: 10%;
+            animation-duration: 8s;
+            animation-direction: reverse;
+        }
+
+        .core-ring:nth-child(3) {
+            width: 60%;
+            height: 60%;
+            top: 20%;
+            left: 20%;
+            animation-duration: 6s;
+        }
+
+        .core-center {
+            position: absolute;
+            width: 40%;
+            height: 40%;
+            top: 30%;
+            left: 30%;
+            background: radial-gradient(circle, rgba(0, 195, 255, 0.8) 0%, rgba(0, 195, 255, 0) 70%);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .core-center.listening {
+            background: radial-gradient(circle, rgba(255, 100, 100, 0.8) 0%, rgba(255, 100, 100, 0) 70%);
+            animation: pulse 0.5s ease-in-out infinite;
+        }
+
+        .core-center.speaking {
+            background: radial-gradient(circle, rgba(100, 255, 150, 0.8) 0%, rgba(100, 255, 150, 0) 70%);
+            animation: pulse 0.3s ease-in-out infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.2); opacity: 1; }
+        }
+
+        /* Status text */
+        .status {
+            font-size: 0.9rem;
+            color: rgba(0, 195, 255, 0.7);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 2rem;
+        }
+
+        /* Conversation display */
+        .conversation {
+            width: 100%;
+            max-width: 700px;
+            height: 450px;
+            overflow-y: auto;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: rgba(0, 195, 255, 0.05);
+            border: 1px solid rgba(0, 195, 255, 0.2);
+            border-radius: 10px;
+        }
+
+        .message {
+            margin-bottom: 1rem;
+            padding: 0.8rem 1rem;
+            border-radius: 8px;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            background: rgba(255, 255, 255, 0.1);
+            margin-left: 20%;
+            text-align: right;
+        }
+
+        .message.oracle {
+            background: rgba(0, 195, 255, 0.15);
+            margin-right: 20%;
+            border-left: 3px solid rgba(0, 195, 255, 0.5);
+        }
+
+        .message .label {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 0.3rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Voice button */
+        .voice-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 2px solid rgba(0, 195, 255, 0.5);
+            background: rgba(0, 195, 255, 0.1);
+            color: #fff;
+            font-size: 2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .voice-btn:hover {
+            background: rgba(0, 195, 255, 0.2);
+            transform: scale(1.05);
+        }
+
+        .voice-btn.listening {
+            border-color: #ff6464;
+            background: rgba(255, 100, 100, 0.2);
+            animation: pulseBtn 0.5s ease-in-out infinite;
+        }
+
+        @keyframes pulseBtn {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 100, 100, 0.4); }
+            50% { box-shadow: 0 0 0 20px rgba(255, 100, 100, 0); }
+        }
+
+        /* Info panel - inline in header */
+        .info-panel {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .info-panel h3 {
+            display: none;
+        }
+
+        .info-panel .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .info-panel .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: rgba(100, 255, 150, 0.8);
+        }
+
+        .info-panel .status-dot.warning {
+            background: rgba(255, 170, 100, 0.8);
+        }
+
+        .info-panel .status-dot.error {
+            background: rgba(255, 100, 100, 0.8);
+        }
+
+        #eventLog {
+            display: none;
+        }
+
+        /* Title - centered above conversation */
+        .title {
+            font-size: 1.8rem;
+            font-weight: 200;
+            letter-spacing: 8px;
+            color: rgba(0, 195, 255, 0.9);
+            text-align: center;
+            margin-bottom: 1.5rem;
+            text-shadow: 0 0 30px rgba(0, 195, 255, 0.5);
+        }
+
+        .title span {
+            display: block;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.7rem;
+            letter-spacing: 3px;
+            margin-top: 0.3rem;
+        }
+
+        /* Navigation link */
+        .nav-link {
+            padding: 0.5rem 1.2rem;
+            background: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 20px;
+            color: rgba(139, 92, 246, 0.9);
+            text-decoration: none;
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            transition: all 0.3s ease;
+        }
+        .nav-link:hover {
+            background: rgba(139, 92, 246, 0.25);
+            border-color: rgba(139, 92, 246, 0.5);
+            color: #fff;
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+        }
+
+        /* Hint text */
+        .hint {
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        /* Message popup modal */
+        .message-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+
+        .message-modal.show {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .message-modal-content {
+            background: rgba(0, 195, 255, 0.1);
+            border: 1px solid rgba(0, 195, 255, 0.3);
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            font-size: 1.2rem;
+            line-height: 1.6;
+        }
+
+        .message {
+            cursor: pointer;
+        }
+
+        .message:hover {
+            background: rgba(0, 195, 255, 0.25);
+        }
+
+        /* Scrollbar */
+        .conversation::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .conversation::-webkit-scrollbar-track {
+            background: rgba(0, 195, 255, 0.1);
+        }
+
+        .conversation::-webkit-scrollbar-thumb {
+            background: rgba(0, 195, 255, 0.3);
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-bg"></div>
+
+    <div class="header-bar">
+        <a href="/oracle" class="nav-link">ORACLE KNOWLEDGE</a>
+        <div class="info-panel">
+            <div class="status-item">
+                <span class="status-dot"></span>
+                <span id="time">--:--</span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot"></span>
+                <span>Voice: <span id="voice-status">Ready</span></span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot" id="memory-dot"></span>
+                <span>Memory: <span id="memory-status">Active</span></span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot" id="rag-dot"></span>
+                <span>RAG: <span id="rag-status">Checking...</span></span>
+            </div>
+            <div id="eventLog" style="display:none;"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="title">ARTHUR <span>AI ASSISTANT</span></div>
+
+        <div class="oracle-core">
+            <div class="core-ring"></div>
+            <div class="core-ring"></div>
+            <div class="core-ring"></div>
+            <div class="core-center" id="core"></div>
+        </div>
+
+        <div class="status" id="status">Awaiting Input</div>
+
+        <div class="conversation" id="conversation">
+            <div class="message oracle">
+                <div class="label">Arthur</div>
+                Good morning. I'm Arthur, your AI assistant. How may I help you today?
+            </div>
+        </div>
+
+        <div class="input-row" style="display:flex;gap:10px;width:100%;max-width:600px;margin-bottom:1rem;">
+            <input type="text" id="textInput" placeholder="Type your message..."
+                style="flex:1;padding:16px 20px;font-size:1.1rem;height:56px;background:rgba(0,195,255,0.1);border:1px solid rgba(0,195,255,0.3);border-radius:8px;color:#fff;outline:none;"
+                onkeypress="if(event.key==='Enter')sendText()">
+            <button onclick="sendText()" style="padding:16px 24px;height:56px;font-size:1.1rem;background:rgba(0,195,255,0.2);border:1px solid rgba(0,195,255,0.5);border-radius:8px;color:#fff;cursor:pointer;">Send</button>
+            <button id="stopBtn" onclick="stopSpeaking()" style="padding:16px 20px;height:56px;font-size:1.1rem;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.5);border-radius:8px;color:#fff;cursor:pointer;display:none;">Stop</button>
+        </div>
+
+        <button class="voice-btn" id="voiceBtn" onclick="toggleListening()">
+            🎤
+        </button>
+
+        <div class="hint">Click mic to speak, press Space, or type below</div>
+    </div>
+
+    <!-- Message popup modal - click anywhere to close -->
+    <div class="message-modal" id="messageModal" onclick="closeModal()">
+        <div class="message-modal-content" id="modalContent"></div>
+        <div style="margin-top:1rem;color:rgba(255,255,255,0.5);font-size:0.9rem">Click anywhere or press Esc to close</div>
+    </div>
+
+    <script>
+        // State
+        let isListening = false;
+        let recognition = null;
+        let synthesis = window.speechSynthesis;
+
+        // Server config
+        const API_URL = 'http://localhost:37778';
+        let useRealAI = false; // Toggle for demo vs real AI
+
+        // Event logging
+        function logEvent(msg) {
+            const log = document.getElementById('eventLog');
+            const time = new Date().toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'});
+            log.innerHTML = `<div style="color:rgba(0,195,255,0.8)">${time} ${msg}</div>` + log.innerHTML;
+            console.log('[Arthur]', msg);
+        }
+
+        // Demo responses (fallback when server not running)
+        const responses = {
+            'hello': "Hello! It's good to hear from you. How can I assist you today?",
+            'hi': "Hi there! Ready to help with whatever you need.",
+            'how are you': "I'm functioning optimally, thank you for asking. More importantly, how are you feeling today?",
+            'what time': `It's currently ${new Date().toLocaleTimeString()}. Based on your patterns, you're in your peak productivity window.`,
+            'what can you do': "I can help you with tasks, answer questions, manage your schedule, and provide proactive suggestions based on your work patterns. Think of me as your personal AI assistant.",
+            'status': "All systems operational. You have 3 pending tasks from yesterday. Your energy pattern suggests peak focus in about 2 hours.",
+            'thank': "You're welcome. I'm always here when you need me.",
+            'bye': "Goodbye! Remember to take breaks. I'll be here when you return.",
+            'arthur': "Yes, I'm Arthur — your personal AI assistant. I observe, I remember, I assist. How may I help?",
+            'jarvis': "Ah, you flatter me with the comparison. While I aspire to that level of integration, I'm here to serve in whatever capacity I can.",
+            'pattern': "Based on your recent activity: You work best between 13:00-15:00. You've averaged 32 commits per day. I'd recommend protecting your afternoon focus time.",
+            'help': "I can help with: checking your work patterns, managing tasks, answering questions, or just having a conversation. What would you like to explore?",
+            'default': "I understand. Let me think about how best to help you with that. In a full implementation, I'd connect to Claude API to provide intelligent responses."
+        };
+
+        // Check if server is available
+        async function checkServer() {
+            try {
+                const res = await fetch(`${API_URL}/health`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const wasConnected = useRealAI;
+                    useRealAI = true;
+                    document.getElementById('memory-status').textContent = 'Online';
+                    document.getElementById('memory-status').style.color = '#64ff96';
+                    const memDot = document.getElementById('memory-dot');
+                    if (memDot) memDot.className = 'status-dot';
+
+                    // Update RAG status
+                    const ragStatus = document.getElementById('rag-status');
+                    const ragDot = document.getElementById('rag-dot');
+                    if (data.oracleV2 === 'connected') {
+                        ragStatus.textContent = 'Active (5.5K)';
+                        ragStatus.style.color = '#64ff96';
+                        if (ragDot) ragDot.className = 'status-dot';
+                        if (!wasConnected) logEvent('Server + RAG connected');
+                    } else {
+                        ragStatus.textContent = 'Offline';
+                        ragStatus.style.color = '#ffaa64';
+                        if (ragDot) ragDot.className = 'status-dot warning';
+                        if (!wasConnected) logEvent('Server connected, RAG offline');
+                    }
+                }
+            } catch (e) {
+                if (useRealAI) logEvent('Server disconnected');
+                useRealAI = false;
+                document.getElementById('memory-status').textContent = 'Demo';
+                document.getElementById('memory-status').style.color = '#ffaa64';
+                const memDot = document.getElementById('memory-dot');
+                if (memDot) memDot.className = 'status-dot warning';
+                document.getElementById('rag-status').textContent = 'Offline';
+                document.getElementById('rag-status').style.color = '#ff6464';
+                const ragDot = document.getElementById('rag-dot');
+                if (ragDot) ragDot.className = 'status-dot error';
+            }
+        }
+
+        // Ask real Claude via server
+        async function askRealOracle(question) {
+            try {
+                const res = await fetch(`${API_URL}/ask`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question })
+                });
+                const data = await res.json();
+                return data.response || data.error || 'No response';
+            } catch (e) {
+                console.error('[Oracle] Server error:', e);
+                return 'I apologize, but I am having trouble connecting. Please try again.';
+            }
+        }
+
+        // Initialize
+        function init() {
+            updateTime();
+            setInterval(updateTime, 1000);
+
+            // Check server connection
+            checkServer();
+            setInterval(checkServer, 10000); // Re-check every 10s
+
+            // Setup speech recognition
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'en-US';
+
+                recognition.onresult = handleSpeechResult;
+                recognition.onend = stopListening;
+                recognition.onerror = (e) => {
+                    console.error('Speech error:', e);
+                    stopListening();
+                };
+            }
+
+            // Keyboard shortcut
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' && e.target === document.body) {
+                    e.preventDefault();
+                    toggleListening();
+                }
+            });
+
+            // Speak greeting on first user interaction (click or keypress)
+            let greetingSpoken = false;
+            function speakGreetingOnce() {
+                if (!greetingSpoken && voicesLoaded) {
+                    greetingSpoken = true;
+                    speak("Good morning. I'm Arthur, your AI assistant. How may I help you today?");
+                    document.removeEventListener('click', speakGreetingOnce);
+                    document.removeEventListener('keydown', speakGreetingOnce);
+                }
+            }
+            document.addEventListener('click', speakGreetingOnce);
+            document.addEventListener('keydown', speakGreetingOnce);
+        }
+
+        function updateTime() {
+            document.getElementById('time').textContent = new Date().toLocaleTimeString();
+        }
+
+        function toggleListening() {
+            if (isListening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            if (!recognition) {
+                addMessage('oracle', "Voice recognition not supported in this browser. Try Chrome.");
+                return;
+            }
+
+            isListening = true;
+            document.getElementById('voiceBtn').classList.add('listening');
+            document.getElementById('core').classList.add('listening');
+            document.getElementById('status').textContent = 'Listening...';
+            document.getElementById('voice-status').textContent = 'Listening';
+
+            recognition.start();
+        }
+
+        function stopListening() {
+            isListening = false;
+            document.getElementById('voiceBtn').classList.remove('listening');
+            document.getElementById('core').classList.remove('listening');
+            document.getElementById('status').textContent = 'Processing...';
+            document.getElementById('voice-status').textContent = 'Ready';
+
+            if (recognition) {
+                recognition.stop();
+            }
+        }
+
+        function handleSpeechResult(event) {
+            const transcript = event.results[0][0].transcript;
+            addMessage('user', transcript);
+            processInput(transcript);
+        }
+
+        async function processInput(text) {
+            document.getElementById('status').textContent = 'Thinking...';
+
+            let response;
+
+            if (useRealAI) {
+                // Real AI via server
+                response = await askRealOracle(text);
+            } else {
+                // Demo mode - use pre-programmed responses
+                const lower = text.toLowerCase();
+                response = responses.default;
+
+                for (const [key, value] of Object.entries(responses)) {
+                    if (lower.includes(key)) {
+                        response = value;
+                        break;
+                    }
+                }
+            }
+
+            document.getElementById('status').textContent = 'Awaiting Input';
+            addMessage('oracle', response);  // click to open modal
+            speak(response);
+        }
+
+        function sendText() {
+            const input = document.getElementById('textInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            input.value = '';
+            addMessage('user', text);
+            processInput(text);
+        }
+
+        function addMessage(type, text, autoOpen = false) {
+            const conv = document.getElementById('conversation');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.innerHTML = `<div class="label">${type === 'user' ? 'You' : 'Arthur'}</div>${renderMarkdown(text)}`;
+            msg.onclick = () => openModal(text, type);
+            conv.appendChild(msg);
+            conv.scrollTop = conv.scrollHeight;
+
+            // Auto-open modal for Arthur's responses
+            if (autoOpen && type === 'oracle') {
+                openModal(text, type);
+            }
+        }
+
+        // Simple markdown renderer
+        function renderMarkdown(text) {
+            return text
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                .replace(/`(.+?)`/g, '<code style="background:rgba(0,195,255,0.2);padding:2px 6px;border-radius:4px">$1</code>')
+                .replace(/^- (.+)$/gm, '<li>$1</li>')
+                .replace(/(<li>.*<\/li>)/s, '<ul style="margin:0.5rem 0;padding-left:1.5rem">$1</ul>')
+                .replace(/\n/g, '<br>');
+        }
+
+        function openModal(text, type) {
+            const modal = document.getElementById('messageModal');
+            const content = document.getElementById('modalContent');
+            content.innerHTML = `<div class="label" style="margin-bottom:1rem;color:rgba(0,195,255,0.7)">${type === 'user' ? 'YOU' : 'ARTHUR'}</div>${renderMarkdown(text)}`;
+            modal.classList.add('show');
+        }
+
+        function closeModal(event) {
+            document.getElementById('messageModal').classList.remove('show');
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        function stopSpeaking() {
+            if (synthesis) {
+                synthesis.cancel();
+                document.getElementById('core').classList.remove('speaking');
+                document.getElementById('status').textContent = 'Awaiting Input';
+                document.getElementById('stopBtn').style.display = 'none';
+            }
+        }
+
+        function speak(text) {
+            if (!synthesis) return;
+
+            // Chrome bug fix: cancel and resume
+            synthesis.cancel();
+
+            // Chrome workaround: need small delay after cancel
+            setTimeout(() => {
+                doSpeak(text);
+            }, 100);
+        }
+
+        function doSpeak(text) {
+            // Chrome bug: synthesis might be paused after refresh
+            if (synthesis.paused) {
+                synthesis.resume();
+            }
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.3;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+
+            // Try to find a good voice, fallback to first English voice
+            const voices = synthesis.getVoices();
+            let voice = voices.find(v => v.name.includes('Daniel') || v.name.includes('Alex') || v.name.includes('Google UK English Male'));
+            if (!voice) {
+                voice = voices.find(v => v.lang.startsWith('en'));
+            }
+            if (!voice && voices.length > 0) {
+                voice = voices[0];
+            }
+            if (voice) {
+                utterance.voice = voice;
+                console.log('[Arthur] Using voice:', voice.name);
+            }
+
+            document.getElementById('core').classList.add('speaking');
+            document.getElementById('status').textContent = 'Speaking...';
+            document.getElementById('stopBtn').style.display = 'block';
+
+            utterance.onstart = () => {
+                console.log('[Arthur] Speech started');
+            };
+
+            utterance.onend = () => {
+                console.log('[Arthur] Speech ended');
+                document.getElementById('core').classList.remove('speaking');
+                document.getElementById('status').textContent = 'Awaiting Input';
+                document.getElementById('stopBtn').style.display = 'none';
+            };
+
+            utterance.onerror = (e) => {
+                console.error('[Arthur] Speech error:', e.error);
+                document.getElementById('core').classList.remove('speaking');
+                document.getElementById('status').textContent = 'Voice Error';
+                document.getElementById('stopBtn').style.display = 'none';
+            };
+
+            synthesis.speak(utterance);
+        }
+
+        // Chrome bug workaround: keep synthesis alive
+        setInterval(() => {
+            if (synthesis && synthesis.speaking && !synthesis.paused) {
+                synthesis.pause();
+                synthesis.resume();
+            }
+        }, 5000);
+
+        // Load voices and speak greeting when ready
+        let voicesLoaded = false;
+
+        function speakGreeting() {
+            if (!voicesLoaded) return;
+            speak("Good morning. I'm Arthur, your AI assistant. How may I help you today?");
+        }
+
+        if (synthesis) {
+            // Try to get voices immediately
+            const voices = synthesis.getVoices();
+            if (voices.length > 0) {
+                voicesLoaded = true;
+            }
+
+            // Also listen for voices changed event
+            synthesis.onvoiceschanged = () => {
+                synthesis.getVoices();
+                voicesLoaded = true;
+            };
+        }
+
+        // Start
+        logEvent('Arthur initialized');
+        init();
+    </script>
+</body>
+</html>

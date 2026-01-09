@@ -17,10 +17,10 @@ export const ORACLE_DATA_DIR = process.env.ORACLE_DATA_DIR || path.join(HOME_DIR
 export const DB_PATH = process.env.ORACLE_DB_PATH || path.join(ORACLE_DATA_DIR, 'oracle.db');
 export const UI_PATH = path.join(__dirname, '..', 'ui.html');
 export const DASHBOARD_PATH = path.join(__dirname, '..', 'dashboard.html');
+export const ARTHUR_UI_PATH = path.join(__dirname, '..', 'arthur.html');
 
-// Legacy: REPO_ROOT for backward compatibility (used by some features)
+// Legacy: REPO_ROOT for features that need Nat-s-Agents context
 export const REPO_ROOT = process.env.ORACLE_REPO_ROOT || '/Users/nat/Code/github.com/laris-co/Nat-s-Agents';
-export const ARTHUR_UI_PATH = path.join(REPO_ROOT, 'ψ/lab/oracle-jarvis/index.html');
 
 // Initialize database connection
 export const db = new Database(DB_PATH);
