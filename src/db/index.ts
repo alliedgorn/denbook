@@ -7,9 +7,10 @@ import { Database } from 'bun:sqlite';
 import path from 'path';
 import * as schema from './schema.js';
 
-// Configuration (matches existing server/db.ts)
-const REPO_ROOT = process.env.ORACLE_REPO_ROOT || '/Users/nat/Code/github.com/laris-co/Nat-s-Agents';
-export const DB_PATH = path.join(REPO_ROOT, 'ψ/lab/oracle-v2/oracle.db');
+// Configuration - central location: ~/.oracle-v2/
+const HOME_DIR = process.env.HOME || process.env.USERPROFILE || '/tmp';
+const ORACLE_DATA_DIR = process.env.ORACLE_DATA_DIR || path.join(HOME_DIR, '.oracle-v2');
+export const DB_PATH = process.env.ORACLE_DB_PATH || path.join(ORACLE_DATA_DIR, 'oracle.db');
 
 // Create bun:sqlite connection
 const sqlite = new Database(DB_PATH);

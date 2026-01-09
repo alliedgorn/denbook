@@ -168,8 +168,10 @@ class OracleMCPServer {
       }
     );
 
-    // Initialize SQLite database
-    const dbPath = path.join(this.repoRoot, 'ψ/lab/oracle-v2/oracle.db');
+    // Initialize SQLite database (central location: ~/.oracle-v2/)
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp';
+    const oracleDataDir = process.env.ORACLE_DATA_DIR || path.join(homeDir, '.oracle-v2');
+    const dbPath = process.env.ORACLE_DB_PATH || path.join(oracleDataDir, 'oracle.db');
     this.db = new Database(dbPath);
 
     this.setupHandlers();

@@ -547,10 +547,12 @@ export class OracleIndexer {
 const isMain = import.meta.url.endsWith('indexer.ts') || import.meta.url.endsWith('indexer.js');
 if (isMain) {
   const repoRoot = process.env.ORACLE_REPO_ROOT || '/Users/nat/Code/github.com/laris-co/Nat-s-Agents';
+  const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp';
+  const oracleDataDir = process.env.ORACLE_DATA_DIR || path.join(homeDir, '.oracle-v2');
 
   const config: IndexerConfig = {
     repoRoot,
-    dbPath: path.join(repoRoot, 'ψ/lab/oracle-v2/oracle.db'),
+    dbPath: process.env.ORACLE_DB_PATH || path.join(oracleDataDir, 'oracle.db'),
     chromaPath: path.join(process.env.HOME || '/Users/nat', '.chromadb'),
     sourcePaths: {
       resonance: 'ψ/memory/resonance',
