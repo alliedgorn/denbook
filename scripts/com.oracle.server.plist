@@ -7,12 +7,14 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/nat/.bun/bin/bun</string>
-        <string>/Users/nat/Code/github.com/laris-co/oracle-v2/src/server.ts</string>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>pkill -f 'bun.*oracle-v2/src/server.ts' 2>/dev/null; sleep 1; exec /Users/nat/.bun/bin/bun /Users/nat/Code/github.com/laris-co/oracle-v2/src/server.ts</string>
     </array>
 
+    <!-- Set to true to auto-start at login -->
     <key>RunAtLoad</key>
-    <true/>
+    <false/>
 
     <key>KeepAlive</key>
     <dict>
