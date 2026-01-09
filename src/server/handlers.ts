@@ -530,16 +530,17 @@ export function handleStats(dbPath: string) {
     : null;
 
   // Get indexing status (if table exists)
-  let indexingStatus = { is_indexing: false, progress_current: 0, progress_total: 0 };
+  let indexingStatus = { is_indexing: false, progress_current: 0, progress_total: 0, completed_at: null as number | null };
   try {
     const status = db.prepare(`
-      SELECT is_indexing, progress_current, progress_total FROM indexing_status WHERE id = 1
-    `).get() as { is_indexing: number; progress_current: number; progress_total: number } | undefined;
+      SELECT is_indexing, progress_current, progress_total, completed_at FROM indexing_status WHERE id = 1
+    `).get() as { is_indexing: number; progress_current: number; progress_total: number; completed_at: number | null } | undefined;
     if (status) {
       indexingStatus = {
         is_indexing: status.is_indexing === 1,
         progress_current: status.progress_current,
-        progress_total: status.progress_total
+        progress_total: status.progress_total,
+        completed_at: status.completed_at
       };
     }
   } catch (e) {
@@ -560,6 +561,7 @@ export function handleStats(dbPath: string) {
         ? Math.round((indexingStatus.progress_current / indexingStatus.progress_total) * 100)
         : 0
     } : null,
+    indexing_completed_at: indexingStatus.completed_at,
     database: dbPath
   };
 }
