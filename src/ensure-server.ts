@@ -11,7 +11,7 @@ import {
   isProcessAlive,
   spawnDaemon,
   configure,
-  getPidFilePath,
+  removePidFile,
 } from './process-manager/index.js';
 import { waitForHealth, isPortInUse } from './process-manager/HealthMonitor.js';
 
@@ -28,6 +28,17 @@ export interface EnsureServerOptions {
   timeout?: number;
   /** If true, print status messages (default: false) */
   verbose?: boolean;
+}
+
+/**
+ * Clean up stale PID file if process is dead
+ */
+function cleanupStalePidFile(verbose = false): void {
+  const pidInfo = readPidFile();
+  if (pidInfo && !isProcessAlive(pidInfo.pid)) {
+    if (verbose) console.log(`🧹 Cleaning stale PID file (PID ${pidInfo.pid} is dead)`);
+    removePidFile();
+  }
 }
 
 /**
@@ -54,6 +65,9 @@ async function isServerHealthy(): Promise<boolean> {
  */
 export async function ensureServerRunning(options: EnsureServerOptions = {}): Promise<boolean> {
   const { timeout = 10000, verbose = false } = options;
+
+  // 0. Clean up stale PID file if process died unexpectedly
+  cleanupStalePidFile(verbose);
 
   // 1. Quick health check - maybe it's already running
   if (await isServerHealthy()) {
