@@ -1,24 +1,16 @@
 /**
- * Oracle v2 HTTP Server
+ * Oracle v2 HTTP Server - Hono.js Version
  *
- * Web viewer for Oracle knowledge base.
- * Exposes same functionality as MCP but via HTTP.
- *
- * Endpoints:
- * - GET /health          - Health check
- * - GET /search?q=...    - Search Oracle knowledge
- * - GET /list            - Browse all documents (no query needed)
- * - GET /consult?q=...   - Get guidance on decision
- * - GET /reflect         - Random wisdom
- * - GET /stats           - Database statistics
- * - GET /graph           - Knowledge graph data
- * - GET /context?cwd=... - Project context from ghq path
- * - POST /learn          - Add new pattern/learning
+ * Modern routing with Hono.js on Bun runtime.
+ * Same handlers, same DB, just cleaner HTTP layer.
  */
 
-import http from 'http';
-import url from 'url';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { serveStatic } from 'hono/bun';
 import fs from 'fs';
+import path from 'path';
+
 import {
   configure,
   writePidFile,
@@ -75,42 +67,8 @@ import {
   getDecisionCounts
 } from './decisions/handler.js';
 
-import path from 'path';
-
 // Frontend static file serving
 const FRONTEND_DIST = path.join(import.meta.dirname || __dirname, '..', 'frontend', 'dist');
-
-const MIME_TYPES: Record<string, string> = {
-  '.html': 'text/html',
-  '.js': 'application/javascript',
-  '.css': 'text/css',
-  '.json': 'application/json',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-};
-
-function serveStatic(res: http.ServerResponse, filePath: string): boolean {
-  const fullPath = path.join(FRONTEND_DIST, filePath);
-
-  // Security: prevent path traversal
-  const realPath = path.resolve(fullPath);
-  if (!realPath.startsWith(path.resolve(FRONTEND_DIST))) {
-    return false;
-  }
-
-  if (fs.existsSync(realPath) && fs.statSync(realPath).isFile()) {
-    const ext = path.extname(realPath);
-    const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
-    res.setHeader('Content-Type', mimeType);
-    res.end(fs.readFileSync(realPath));
-    return true;
-  }
-  return false;
-}
 
 // Initialize logging tables on startup
 try {
@@ -120,7 +78,6 @@ try {
 }
 
 // Reset stale indexing status on startup
-// If server is starting, indexer isn't running - clear any stuck status
 try {
   db.prepare('UPDATE indexing_status SET is_indexing = 0 WHERE id = 1').run();
   console.log('🔮 Reset indexing status on startup');
@@ -147,607 +104,502 @@ registerSignalHandlers(async () => {
   console.log('👋 Oracle v2 HTTP Server stopped.');
 });
 
-/**
- * HTTP request handler
- */
-const server = http.createServer(async (req, res) => {
-  const parsedUrl = url.parse(req.url || '', true);
-  const pathname = parsedUrl.pathname;
-  const query = parsedUrl.query;
+// Create Hono app
+const app = new Hono();
 
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Content-Type', 'application/json');
+// CORS middleware
+app.use('*', cors());
 
-  // Handle OPTIONS preflight
-  if (req.method === 'OPTIONS') {
-    res.statusCode = 204;
-    res.end();
-    return;
+// ============================================================================
+// API Routes
+// ============================================================================
+
+// Health check
+app.get('/api/health', (c) => {
+  return c.json({ status: 'ok', server: 'oracle-v2', port: PORT, oracleV2: 'connected' });
+});
+
+// Search
+app.get('/api/search', async (c) => {
+  const q = c.req.query('q');
+  if (!q) {
+    return c.json({ error: 'Missing query parameter: q' }, 400);
   }
+  const type = c.req.query('type') || 'all';
+  const limit = parseInt(c.req.query('limit') || '10');
+  const offset = parseInt(c.req.query('offset') || '0');
 
+  const result = await handleSearch(q, type, limit, offset);
+  return c.json({ ...result, query: q });
+});
+
+// Consult
+app.get('/api/consult', async (c) => {
+  const q = c.req.query('q');
+  if (!q) {
+    return c.json({ error: 'Missing query parameter: q (decision)' }, 400);
+  }
+  const context = c.req.query('context') || '';
+  const result = await handleConsult(q, context);
+  return c.json(result);
+});
+
+// Reflect
+app.get('/api/reflect', (c) => {
+  return c.json(handleReflect());
+});
+
+// Stats
+app.get('/api/stats', (c) => {
+  return c.json(handleStats(DB_PATH));
+});
+
+// Logs
+app.get('/api/logs', (c) => {
   try {
-    let result: any;
-
-    // POST /api/thread - Send message to thread
-    if (pathname === '/api/thread' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', async () => {
-        try {
-          const data = JSON.parse(body);
-          if (!data.message) {
-            res.statusCode = 400;
-            res.end(JSON.stringify({ error: 'Missing required field: message' }));
-            return;
-          }
-          const result = await handleThreadMessage({
-            message: data.message,
-            threadId: data.thread_id,
-            title: data.title,
-            role: data.role || 'human'
-          });
-          res.end(JSON.stringify({
-            thread_id: result.threadId,
-            message_id: result.messageId,
-            status: result.status,
-            oracle_response: result.oracleResponse,
-            issue_url: result.issueUrl
-          }, null, 2));
-        } catch (error) {
-          res.statusCode = 500;
-          res.end(JSON.stringify({
-            error: error instanceof Error ? error.message : 'Unknown error'
-          }));
-        }
-      });
-      return;
-    }
-
-    // GET /api/thread/:id - Get thread with messages
-    if (pathname?.startsWith('/api/thread/') && req.method === 'GET') {
-      const threadId = parseInt(pathname.replace('/api/thread/', ''), 10);
-      if (isNaN(threadId)) {
-        res.statusCode = 400;
-        res.end(JSON.stringify({ error: 'Invalid thread ID' }));
-        return;
-      }
-      const threadData = getFullThread(threadId);
-      if (!threadData) {
-        res.statusCode = 404;
-        res.end(JSON.stringify({ error: 'Thread not found' }));
-        return;
-      }
-      res.end(JSON.stringify({
-        thread: {
-          id: threadData.thread.id,
-          title: threadData.thread.title,
-          status: threadData.thread.status,
-          created_at: new Date(threadData.thread.createdAt).toISOString(),
-          issue_url: threadData.thread.issueUrl
-        },
-        messages: threadData.messages.map(m => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          author: m.author,
-          principles_found: m.principlesFound,
-          patterns_found: m.patternsFound,
-          created_at: new Date(m.createdAt).toISOString()
-        }))
-      }, null, 2));
-      return;
-    }
-
-    // PATCH /api/thread/:id/status - Update thread status
-    if (pathname?.match(/^\/api\/thread\/\d+\/status$/) && req.method === 'PATCH') {
-      const threadId = parseInt(pathname.split('/')[3], 10);
-      let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', () => {
-        try {
-          const data = JSON.parse(body);
-          if (!data.status) {
-            res.statusCode = 400;
-            res.end(JSON.stringify({ error: 'Missing required field: status' }));
-            return;
-          }
-          updateThreadStatus(threadId, data.status);
-          res.end(JSON.stringify({ success: true, thread_id: threadId, status: data.status }));
-        } catch (e) {
-          res.statusCode = 400;
-          res.end(JSON.stringify({ error: 'Invalid JSON' }));
-        }
-      });
-      return;
-    }
-
-    // POST /learn
-    if (pathname === '/api/learn' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', () => {
-        try {
-          const data = JSON.parse(body);
-          if (!data.pattern) {
-            res.statusCode = 400;
-            res.end(JSON.stringify({ error: 'Missing required field: pattern' }));
-            return;
-          }
-          const result = handleLearn(data.pattern, data.source, data.concepts);
-          res.end(JSON.stringify(result, null, 2));
-        } catch (error) {
-          res.statusCode = 500;
-          res.end(JSON.stringify({
-            error: error instanceof Error ? error.message : 'Unknown error'
-          }));
-        }
-      });
-      return;
-    }
-
-    // POST /ask - Arthur AI chat endpoint (wraps /consult)
-    if (pathname === '/api/ask' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', async () => {
-        try {
-          const data = JSON.parse(body);
-          if (!data.question) {
-            res.statusCode = 400;
-            res.end(JSON.stringify({ error: 'Missing required field: question' }));
-            return;
-          }
-          const consultResult = await handleConsult(data.question, data.context || '');
-          res.end(JSON.stringify({
-            response: consultResult.guidance || 'I found some relevant information but couldn\'t formulate a specific response.',
-            principles: consultResult.principles?.length || 0,
-            patterns: consultResult.patterns?.length || 0
-          }, null, 2));
-        } catch (error) {
-          res.statusCode = 500;
-          res.end(JSON.stringify({
-            error: error instanceof Error ? error.message : 'Unknown error'
-          }));
-        }
-      });
-      return;
-    }
-
-    // ========================================================================
-    // Decision Endpoints
-    // ========================================================================
-
-    // GET /decisions - List decisions with filters
-    if (pathname === '/api/decisions' && req.method === 'GET') {
-      const result = listDecisions({
-        status: query.status as any,
-        project: query.project as string,
-        tags: query.tags ? (query.tags as string).split(',') : undefined,
-        limit: parseInt(query.limit as string) || 20,
-        offset: parseInt(query.offset as string) || 0
-      });
-      res.end(JSON.stringify({
-        decisions: result.decisions.map(d => ({
-          id: d.id,
-          title: d.title,
-          status: d.status,
-          context: d.context,
-          decision: d.decision,
-          project: d.project,
-          tags: d.tags,
-          created_at: new Date(d.createdAt).toISOString(),
-          updated_at: new Date(d.updatedAt).toISOString(),
-          decided_at: d.decidedAt ? new Date(d.decidedAt).toISOString() : null,
-          decided_by: d.decidedBy
-        })),
-        total: result.total,
-        counts: getDecisionCounts()
-      }, null, 2));
-      return;
-    }
-
-    // GET /api/decisions/:id - Get single decision
-    if (pathname?.match(/^\/api\/decisions\/\d+$/) && req.method === 'GET') {
-      const decisionId = parseInt(pathname.split('/')[3], 10);
-      const decision = getDecision(decisionId);
-      if (!decision) {
-        res.statusCode = 404;
-        res.end(JSON.stringify({ error: 'Decision not found' }));
-        return;
-      }
-      res.end(JSON.stringify({
-        id: decision.id,
-        title: decision.title,
-        status: decision.status,
-        context: decision.context,
-        options: decision.options,
-        decision: decision.decision,
-        rationale: decision.rationale,
-        project: decision.project,
-        tags: decision.tags,
-        created_at: new Date(decision.createdAt).toISOString(),
-        updated_at: new Date(decision.updatedAt).toISOString(),
-        decided_at: decision.decidedAt ? new Date(decision.decidedAt).toISOString() : null,
-        decided_by: decision.decidedBy
-      }, null, 2));
-      return;
-    }
-
-    // POST /decisions - Create new decision
-    if (pathname === '/api/decisions' && req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', () => {
-        try {
-          const data = JSON.parse(body);
-          if (!data.title) {
-            res.statusCode = 400;
-            res.end(JSON.stringify({ error: 'Missing required field: title' }));
-            return;
-          }
-          const decision = createDecision({
-            title: data.title,
-            context: data.context,
-            options: data.options,
-            tags: data.tags,
-            project: data.project
-          });
-          res.statusCode = 201;
-          res.end(JSON.stringify({
-            id: decision.id,
-            title: decision.title,
-            status: decision.status,
-            created_at: new Date(decision.createdAt).toISOString()
-          }, null, 2));
-        } catch (error) {
-          res.statusCode = 500;
-          res.end(JSON.stringify({
-            error: error instanceof Error ? error.message : 'Unknown error'
-          }));
-        }
-      });
-      return;
-    }
-
-    // PATCH /api/decisions/:id - Update decision
-    if (pathname?.match(/^\/api\/decisions\/\d+$/) && req.method === 'PATCH') {
-      const decisionId = parseInt(pathname.split('/')[3], 10);
-      let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', () => {
-        try {
-          const data = JSON.parse(body);
-          const decision = updateDecision({
-            id: decisionId,
-            title: data.title,
-            context: data.context,
-            options: data.options,
-            decision: data.decision,
-            rationale: data.rationale,
-            tags: data.tags,
-            status: data.status,
-            decidedBy: data.decided_by
-          });
-          if (!decision) {
-            res.statusCode = 404;
-            res.end(JSON.stringify({ error: 'Decision not found' }));
-            return;
-          }
-          res.end(JSON.stringify({
-            id: decision.id,
-            title: decision.title,
-            status: decision.status,
-            updated_at: new Date(decision.updatedAt).toISOString()
-          }, null, 2));
-        } catch (error) {
-          res.statusCode = 400;
-          res.end(JSON.stringify({
-            error: error instanceof Error ? error.message : 'Invalid request'
-          }));
-        }
-      });
-      return;
-    }
-
-    // POST /api/decisions/:id/transition - Transition status
-    if (pathname?.match(/^\/api\/decisions\/\d+\/transition$/) && req.method === 'POST') {
-      const decisionId = parseInt(pathname.split('/')[3], 10);
-      let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', () => {
-        try {
-          const data = JSON.parse(body);
-          if (!data.status) {
-            res.statusCode = 400;
-            res.end(JSON.stringify({ error: 'Missing required field: status' }));
-            return;
-          }
-          const decision = transitionStatus(decisionId, data.status, data.decided_by);
-          if (!decision) {
-            res.statusCode = 404;
-            res.end(JSON.stringify({ error: 'Decision not found' }));
-            return;
-          }
-          res.end(JSON.stringify({
-            id: decision.id,
-            title: decision.title,
-            status: decision.status,
-            decided_at: decision.decidedAt ? new Date(decision.decidedAt).toISOString() : null,
-            decided_by: decision.decidedBy
-          }, null, 2));
-        } catch (error) {
-          res.statusCode = 400;
-          res.end(JSON.stringify({
-            error: error instanceof Error ? error.message : 'Invalid request'
-          }));
-        }
-      });
-      return;
-    }
-
-    switch (pathname) {
-      case '/':
-        // Serve React SPA at root
-        res.setHeader('Content-Type', 'text/html');
-        const rootIndex = path.join(FRONTEND_DIST, 'index.html');
-        if (fs.existsSync(rootIndex)) {
-          res.end(fs.readFileSync(rootIndex));
-        } else {
-          // Fallback to old Arthur UI if no build exists
-          res.end(fs.readFileSync(ARTHUR_UI_PATH, 'utf-8'));
-        }
-        return;
-
-      // Legacy HTML UIs
-      case '/legacy/arthur':
-        res.setHeader('Content-Type', 'text/html');
-        res.end(fs.readFileSync(ARTHUR_UI_PATH, 'utf-8'));
-        return;
-
-      case '/legacy/oracle':
-        res.setHeader('Content-Type', 'text/html');
-        res.end(fs.readFileSync(UI_PATH, 'utf-8'));
-        return;
-
-      case '/legacy/dashboard':
-        res.setHeader('Content-Type', 'text/html');
-        res.end(fs.readFileSync(DASHBOARD_PATH, 'utf-8'));
-        return;
-
-      case '/api/health':
-        result = { status: 'ok', server: 'oracle-v2', port: PORT, oracleV2: 'connected' };
-        break;
-
-      case '/api/search':
-        if (!query.q) {
-          res.statusCode = 400;
-          result = { error: 'Missing query parameter: q' };
-        } else {
-          const searchResult = await handleSearch(
-            query.q as string,
-            (query.type as string) || 'all',
-            parseInt(query.limit as string) || 10,
-            parseInt(query.offset as string) || 0
-          );
-          result = {
-            ...searchResult,
-            query: query.q
-          };
-        }
-        break;
-
-      case '/api/consult':
-        if (!query.q) {
-          res.statusCode = 400;
-          result = { error: 'Missing query parameter: q (decision)' };
-        } else {
-          result = handleConsult(
-            query.q as string,
-            (query.context as string) || ''
-          );
-        }
-        break;
-
-      case '/api/reflect':
-        result = handleReflect();
-        break;
-
-      case '/api/stats':
-        result = handleStats(DB_PATH);
-        break;
-
-      case '/api/logs':
-        // Return recent search logs for debugging
-        try {
-          const logs = db.prepare(`
-            SELECT query, type, mode, results_count, search_time_ms, created_at, project
-            FROM search_log
-            ORDER BY created_at DESC
-            LIMIT ?
-          `).all(parseInt(query.limit as string) || 20);
-          result = { logs, total: logs.length };
-        } catch (e) {
-          result = { logs: [], error: 'Log table not found' };
-        }
-        break;
-
-      case '/api/list':
-        result = handleList(
-          (query.type as string) || 'all',
-          parseInt(query.limit as string) || 10,
-          parseInt(query.offset as string) || 0,
-          query.group !== 'false'  // default true, pass group=false to disable
-        );
-        break;
-
-      case '/api/graph':
-        result = handleGraph();
-        break;
-
-      // Dashboard endpoints
-      case '/api/dashboard':
-      case '/api/dashboard/summary':
-        result = handleDashboardSummary();
-        break;
-
-      case '/api/dashboard/activity':
-        result = handleDashboardActivity(
-          parseInt(query.days as string) || 7
-        );
-        break;
-
-      case '/api/dashboard/growth':
-        result = handleDashboardGrowth(
-          (query.period as string) || 'week'
-        );
-        break;
-
-      case '/api/context':
-        // Return project context from ghq-format path
-        result = handleContext(query.cwd as string | undefined);
-        break;
-
-      case '/api/file':
-        // Return full file content
-        const filePath = query.path as string;
-        if (!filePath) {
-          result = { error: 'Missing path parameter' };
-        } else {
-          try {
-            const fullPath = path.join(REPO_ROOT, filePath);
-
-            // Security: resolve symlinks and verify path is within REPO_ROOT
-            // This prevents path traversal attacks via symlinks
-            let realPath: string;
-            try {
-              realPath = fs.realpathSync(fullPath);
-            } catch {
-              // File doesn't exist - use resolved path for bounds check
-              realPath = path.resolve(fullPath);
-            }
-
-            // Get real REPO_ROOT path (in case it contains symlinks)
-            const realRepoRoot = fs.realpathSync(REPO_ROOT);
-
-            if (!realPath.startsWith(realRepoRoot)) {
-              result = { error: 'Invalid path: outside repository bounds' };
-            } else if (fs.existsSync(fullPath)) {
-              const content = fs.readFileSync(fullPath, 'utf-8');
-              result = { path: filePath, content };
-            } else {
-              result = { error: 'File not found' };
-            }
-          } catch (e: any) {
-            result = { error: e.message };
-          }
-        }
-        break;
-
-      // Forum endpoints
-      case '/api/threads':
-        const threadList = listThreads({
-          status: query.status as any,
-          limit: parseInt(query.limit as string) || 20,
-          offset: parseInt(query.offset as string) || 0
-        });
-        result = {
-          threads: threadList.threads.map(t => ({
-            id: t.id,
-            title: t.title,
-            status: t.status,
-            message_count: getMessages(t.id).length,
-            created_at: new Date(t.createdAt).toISOString(),
-            issue_url: t.issueUrl
-          })),
-          total: threadList.total
-        };
-        break;
-
-      default:
-        // Try to serve static files from frontend/dist
-        if (pathname && serveStatic(res, pathname)) {
-          return;
-        }
-
-        // For SPA: serve index.html for non-API routes (client-side routing)
-        const indexPath = path.join(FRONTEND_DIST, 'index.html');
-        if (fs.existsSync(indexPath)) {
-          res.setHeader('Content-Type', 'text/html');
-          res.end(fs.readFileSync(indexPath));
-          return;
-        }
-
-        // Fallback: API 404
-        res.statusCode = 404;
-        result = {
-          error: 'Not found',
-          endpoints: [
-            'GET /health - Health check',
-            'GET /search?q=... - Search Oracle',
-            'GET /list - Browse all documents',
-            'GET /consult?q=... - Get guidance',
-            'GET /reflect - Random wisdom',
-            'GET /stats - Database stats',
-            'GET /graph - Knowledge graph data',
-            'GET /context?cwd=... - Project context from ghq path',
-            'POST /learn - Add new pattern/learning',
-            'GET /dashboard - Dashboard summary',
-            'GET /dashboard/activity?days=7 - Recent activity',
-            'GET /dashboard/growth?period=week - Growth over time',
-            'GET /threads - List discussion threads',
-            'GET /thread/:id - Get thread with messages',
-            'POST /thread - Send message to thread (Oracle auto-responds)',
-            'GET /decisions - List decisions',
-            'GET /decisions/:id - Get single decision',
-            'POST /decisions - Create decision',
-            'PATCH /decisions/:id - Update decision',
-            'POST /decisions/:id/transition - Transition status'
-          ]
-        };
-    }
-
-    res.end(JSON.stringify(result, null, 2));
-  } catch (error) {
-    res.statusCode = 500;
-    res.end(JSON.stringify({
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }));
+    const limit = parseInt(c.req.query('limit') || '20');
+    const logs = db.prepare(`
+      SELECT query, type, mode, results_count, search_time_ms, created_at, project
+      FROM search_log
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(limit);
+    return c.json({ logs, total: logs.length });
+  } catch (e) {
+    return c.json({ logs: [], error: 'Log table not found' });
   }
 });
 
-// Start server
-server.listen(PORT, () => {
-  console.log(`
-🔮 Oracle v2 HTTP Server running!
+// List documents
+app.get('/api/list', (c) => {
+  const type = c.req.query('type') || 'all';
+  const limit = parseInt(c.req.query('limit') || '10');
+  const offset = parseInt(c.req.query('offset') || '0');
+  const group = c.req.query('group') !== 'false';
+
+  return c.json(handleList(type, limit, offset, group));
+});
+
+// Graph
+app.get('/api/graph', (c) => {
+  return c.json(handleGraph());
+});
+
+// Context
+app.get('/api/context', (c) => {
+  const cwd = c.req.query('cwd');
+  return c.json(handleContext(cwd));
+});
+
+// File
+app.get('/api/file', (c) => {
+  const filePath = c.req.query('path');
+  if (!filePath) {
+    return c.json({ error: 'Missing path parameter' }, 400);
+  }
+
+  try {
+    const fullPath = path.join(REPO_ROOT, filePath);
+
+    // Security: resolve symlinks and verify path is within REPO_ROOT
+    let realPath: string;
+    try {
+      realPath = fs.realpathSync(fullPath);
+    } catch {
+      realPath = path.resolve(fullPath);
+    }
+
+    const realRepoRoot = fs.realpathSync(REPO_ROOT);
+
+    if (!realPath.startsWith(realRepoRoot)) {
+      return c.json({ error: 'Invalid path: outside repository bounds' }, 400);
+    }
+
+    if (fs.existsSync(fullPath)) {
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      return c.json({ path: filePath, content });
+    } else {
+      return c.json({ error: 'File not found' }, 404);
+    }
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ============================================================================
+// Dashboard Routes
+// ============================================================================
+
+app.get('/api/dashboard', (c) => c.json(handleDashboardSummary()));
+app.get('/api/dashboard/summary', (c) => c.json(handleDashboardSummary()));
+
+app.get('/api/dashboard/activity', (c) => {
+  const days = parseInt(c.req.query('days') || '7');
+  return c.json(handleDashboardActivity(days));
+});
+
+app.get('/api/dashboard/growth', (c) => {
+  const period = c.req.query('period') || 'week';
+  return c.json(handleDashboardGrowth(period));
+});
+
+// ============================================================================
+// Thread Routes
+// ============================================================================
+
+// List threads
+app.get('/api/threads', (c) => {
+  const status = c.req.query('status') as any;
+  const limit = parseInt(c.req.query('limit') || '20');
+  const offset = parseInt(c.req.query('offset') || '0');
+
+  const threadList = listThreads({ status, limit, offset });
+  return c.json({
+    threads: threadList.threads.map(t => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      message_count: getMessages(t.id).length,
+      created_at: new Date(t.createdAt).toISOString(),
+      issue_url: t.issueUrl
+    })),
+    total: threadList.total
+  });
+});
+
+// Create thread / send message
+app.post('/api/thread', async (c) => {
+  try {
+    const data = await c.req.json();
+    if (!data.message) {
+      return c.json({ error: 'Missing required field: message' }, 400);
+    }
+    const result = await handleThreadMessage({
+      message: data.message,
+      threadId: data.thread_id,
+      title: data.title,
+      role: data.role || 'human'
+    });
+    return c.json({
+      thread_id: result.threadId,
+      message_id: result.messageId,
+      status: result.status,
+      oracle_response: result.oracleResponse,
+      issue_url: result.issueUrl
+    });
+  } catch (error) {
+    return c.json({
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// Get thread by ID
+app.get('/api/thread/:id', (c) => {
+  const threadId = parseInt(c.req.param('id'), 10);
+  if (isNaN(threadId)) {
+    return c.json({ error: 'Invalid thread ID' }, 400);
+  }
+
+  const threadData = getFullThread(threadId);
+  if (!threadData) {
+    return c.json({ error: 'Thread not found' }, 404);
+  }
+
+  return c.json({
+    thread: {
+      id: threadData.thread.id,
+      title: threadData.thread.title,
+      status: threadData.thread.status,
+      created_at: new Date(threadData.thread.createdAt).toISOString(),
+      issue_url: threadData.thread.issueUrl
+    },
+    messages: threadData.messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      author: m.author,
+      principles_found: m.principlesFound,
+      patterns_found: m.patternsFound,
+      created_at: new Date(m.createdAt).toISOString()
+    }))
+  });
+});
+
+// Update thread status
+app.patch('/api/thread/:id/status', async (c) => {
+  const threadId = parseInt(c.req.param('id'), 10);
+  try {
+    const data = await c.req.json();
+    if (!data.status) {
+      return c.json({ error: 'Missing required field: status' }, 400);
+    }
+    updateThreadStatus(threadId, data.status);
+    return c.json({ success: true, thread_id: threadId, status: data.status });
+  } catch (e) {
+    return c.json({ error: 'Invalid JSON' }, 400);
+  }
+});
+
+// ============================================================================
+// Decision Routes
+// ============================================================================
+
+// List decisions
+app.get('/api/decisions', (c) => {
+  const status = c.req.query('status') as any;
+  const project = c.req.query('project');
+  const tagsRaw = c.req.query('tags');
+  const tags = tagsRaw ? tagsRaw.split(',') : undefined;
+  const limit = parseInt(c.req.query('limit') || '20');
+  const offset = parseInt(c.req.query('offset') || '0');
+
+  const result = listDecisions({ status, project, tags, limit, offset });
+  return c.json({
+    decisions: result.decisions.map(d => ({
+      id: d.id,
+      title: d.title,
+      status: d.status,
+      context: d.context,
+      decision: d.decision,
+      project: d.project,
+      tags: d.tags,
+      created_at: new Date(d.createdAt).toISOString(),
+      updated_at: new Date(d.updatedAt).toISOString(),
+      decided_at: d.decidedAt ? new Date(d.decidedAt).toISOString() : null,
+      decided_by: d.decidedBy
+    })),
+    total: result.total,
+    counts: getDecisionCounts()
+  });
+});
+
+// Get single decision
+app.get('/api/decisions/:id', (c) => {
+  const decisionId = parseInt(c.req.param('id'), 10);
+  const decision = getDecision(decisionId);
+
+  if (!decision) {
+    return c.json({ error: 'Decision not found' }, 404);
+  }
+
+  return c.json({
+    id: decision.id,
+    title: decision.title,
+    status: decision.status,
+    context: decision.context,
+    options: decision.options,
+    decision: decision.decision,
+    rationale: decision.rationale,
+    project: decision.project,
+    tags: decision.tags,
+    created_at: new Date(decision.createdAt).toISOString(),
+    updated_at: new Date(decision.updatedAt).toISOString(),
+    decided_at: decision.decidedAt ? new Date(decision.decidedAt).toISOString() : null,
+    decided_by: decision.decidedBy
+  });
+});
+
+// Create decision
+app.post('/api/decisions', async (c) => {
+  try {
+    const data = await c.req.json();
+    if (!data.title) {
+      return c.json({ error: 'Missing required field: title' }, 400);
+    }
+    const decision = createDecision({
+      title: data.title,
+      context: data.context,
+      options: data.options,
+      tags: data.tags,
+      project: data.project
+    });
+    return c.json({
+      id: decision.id,
+      title: decision.title,
+      status: decision.status,
+      created_at: new Date(decision.createdAt).toISOString()
+    }, 201);
+  } catch (error) {
+    return c.json({
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// Update decision
+app.patch('/api/decisions/:id', async (c) => {
+  const decisionId = parseInt(c.req.param('id'), 10);
+  try {
+    const data = await c.req.json();
+    const decision = updateDecision({
+      id: decisionId,
+      title: data.title,
+      context: data.context,
+      options: data.options,
+      decision: data.decision,
+      rationale: data.rationale,
+      tags: data.tags,
+      status: data.status,
+      decidedBy: data.decided_by
+    });
+
+    if (!decision) {
+      return c.json({ error: 'Decision not found' }, 404);
+    }
+
+    return c.json({
+      id: decision.id,
+      title: decision.title,
+      status: decision.status,
+      updated_at: new Date(decision.updatedAt).toISOString()
+    });
+  } catch (error) {
+    return c.json({
+      error: error instanceof Error ? error.message : 'Invalid request'
+    }, 400);
+  }
+});
+
+// Transition decision status
+app.post('/api/decisions/:id/transition', async (c) => {
+  const decisionId = parseInt(c.req.param('id'), 10);
+  try {
+    const data = await c.req.json();
+    if (!data.status) {
+      return c.json({ error: 'Missing required field: status' }, 400);
+    }
+    const decision = transitionStatus(decisionId, data.status, data.decided_by);
+
+    if (!decision) {
+      return c.json({ error: 'Decision not found' }, 404);
+    }
+
+    return c.json({
+      id: decision.id,
+      title: decision.title,
+      status: decision.status,
+      decided_at: decision.decidedAt ? new Date(decision.decidedAt).toISOString() : null,
+      decided_by: decision.decidedBy
+    });
+  } catch (error) {
+    return c.json({
+      error: error instanceof Error ? error.message : 'Invalid request'
+    }, 400);
+  }
+});
+
+// ============================================================================
+// Learn Route
+// ============================================================================
+
+app.post('/api/learn', async (c) => {
+  try {
+    const data = await c.req.json();
+    if (!data.pattern) {
+      return c.json({ error: 'Missing required field: pattern' }, 400);
+    }
+    const result = handleLearn(data.pattern, data.source, data.concepts);
+    return c.json(result);
+  } catch (error) {
+    return c.json({
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// Arthur AI chat endpoint
+app.post('/api/ask', async (c) => {
+  try {
+    const data = await c.req.json();
+    if (!data.question) {
+      return c.json({ error: 'Missing required field: question' }, 400);
+    }
+    const consultResult = await handleConsult(data.question, data.context || '');
+    return c.json({
+      response: consultResult.guidance || 'I found some relevant information but couldn\'t formulate a specific response.',
+      principles: consultResult.principles?.length || 0,
+      patterns: consultResult.patterns?.length || 0
+    });
+  } catch (error) {
+    return c.json({
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// ============================================================================
+// Legacy HTML UIs
+// ============================================================================
+
+app.get('/legacy/arthur', (c) => {
+  const content = fs.readFileSync(ARTHUR_UI_PATH, 'utf-8');
+  return c.html(content);
+});
+
+app.get('/legacy/oracle', (c) => {
+  const content = fs.readFileSync(UI_PATH, 'utf-8');
+  return c.html(content);
+});
+
+app.get('/legacy/dashboard', (c) => {
+  const content = fs.readFileSync(DASHBOARD_PATH, 'utf-8');
+  return c.html(content);
+});
+
+// ============================================================================
+// Static Files + SPA Fallback
+// ============================================================================
+
+// Serve static files from frontend/dist
+app.use('/*', serveStatic({ root: './frontend/dist' }));
+
+// SPA fallback - serve index.html for unmatched routes
+app.get('*', (c) => {
+  const indexPath = path.join(FRONTEND_DIST, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    const content = fs.readFileSync(indexPath, 'utf-8');
+    return c.html(content);
+  }
+  // Fallback to Arthur UI if no build exists
+  const content = fs.readFileSync(ARTHUR_UI_PATH, 'utf-8');
+  return c.html(content);
+});
+
+// ============================================================================
+// Start Server
+// ============================================================================
+
+console.log(`
+🔮 Oracle v2 HTTP Server running! (Hono.js)
 
    URL: http://localhost:${PORT}
 
    Endpoints:
-   - GET /health          Health check
-   - GET /search?q=...    Search Oracle knowledge
-   - GET /list            Browse all documents
-   - GET /consult?q=...   Get guidance on decision
-   - GET /reflect         Random wisdom
-   - GET /stats           Database statistics
-   - GET /graph           Knowledge graph data
-   - GET /context         Project context (ghq format)
-   - POST /learn          Add new pattern/learning
+   - GET  /api/health          Health check
+   - GET  /api/search?q=...    Search Oracle knowledge
+   - GET  /api/list            Browse all documents
+   - GET  /api/consult?q=...   Get guidance on decision
+   - GET  /api/reflect         Random wisdom
+   - GET  /api/stats           Database statistics
+   - GET  /api/graph           Knowledge graph data
+   - GET  /api/context         Project context (ghq format)
+   - POST /api/learn           Add new pattern/learning
+   - POST /api/ask             Arthur AI chat
 
-   Examples:
-   curl http://localhost:${PORT}/health
-   curl http://localhost:${PORT}/search?q=nothing+deleted
-   curl http://localhost:${PORT}/list?type=learning&limit=5
-   curl http://localhost:${PORT}/consult?q=force+push
-   curl http://localhost:${PORT}/reflect
-   curl http://localhost:${PORT}/stats
-   curl http://localhost:${PORT}/graph
-   curl http://localhost:${PORT}/context
-   curl -X POST http://localhost:${PORT}/learn -H "Content-Type: application/json" \\
-     -d '{"pattern":"Always verify before destructive operations","concepts":["safety","git"]}'
+   Forum:
+   - GET  /api/threads         List threads
+   - GET  /api/thread/:id      Get thread
+   - POST /api/thread          Send message
+
+   Decisions:
+   - GET  /api/decisions       List decisions
+   - GET  /api/decisions/:id   Get decision
+   - POST /api/decisions       Create decision
+   - PATCH /api/decisions/:id  Update decision
 `);
-});
 
-// Note: Graceful shutdown is handled by bun-process-manager's registerSignalHandlers()
+export default {
+  port: Number(PORT),
+  fetch: app.fetch,
+};
