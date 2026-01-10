@@ -155,6 +155,13 @@ interface OracleDecisionsUpdateInput {
   decidedBy?: string;
 }
 
+// Issue #19: Supersede pattern
+interface OracleSupersededInput {
+  oldId: string;
+  newId: string;
+  reason?: string;
+}
+
 class OracleMCPServer {
   private server: Server;
   private db: Database.Database;
@@ -792,6 +799,31 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
             },
             required: ['traceId']
           }
+        },
+        // ============================================================================
+        // Supersede Tool (Issue #19) - "Nothing is Deleted" but can be outdated
+        // ============================================================================
+        {
+          name: 'oracle_supersede',
+          description: 'Mark an old learning/document as superseded by a newer one. Aligns with "Nothing is Deleted" - old doc preserved but marked outdated.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              oldId: {
+                type: 'string',
+                description: 'ID of the document being superseded (the outdated one)'
+              },
+              newId: {
+                type: 'string',
+                description: 'ID of the document that supersedes it (the current one)'
+              },
+              reason: {
+                type: 'string',
+                description: 'Why the old document is outdated (optional)'
+              }
+            },
+            required: ['oldId', 'newId']
+          }
         }
       ]
     }));
@@ -855,6 +887,10 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
 
           case 'oracle_trace_get':
             return await this.handleTraceGet(request.params.arguments as unknown as GetTraceInput);
+
+          // Supersede handler (Issue #19)
+          case 'oracle_supersede':
+            return await this.handleSupersede(request.params.arguments as unknown as OracleSupersededInput);
 
           default:
             throw new Error(`Unknown tool: ${request.params.name}`);
@@ -2086,6 +2122,50 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
             has_awakening: chain.hasAwakening,
             awakening_trace_id: chain.awakeningTraceId,
           } : undefined,
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Tool: oracle_supersede
+   * Mark an old document as superseded by a newer one (Issue #19)
+   */
+  private async handleSupersede(input: OracleSupersededInput) {
+    const { oldId, newId, reason } = input;
+    const now = Date.now();
+
+    // Verify both documents exist
+    const oldDoc = this.db.query('SELECT id, type FROM oracle_documents WHERE id = ?').get(oldId) as { id: string; type: string } | null;
+    const newDoc = this.db.query('SELECT id, type FROM oracle_documents WHERE id = ?').get(newId) as { id: string; type: string } | null;
+
+    if (!oldDoc) {
+      throw new Error(`Old document not found: ${oldId}`);
+    }
+    if (!newDoc) {
+      throw new Error(`New document not found: ${newId}`);
+    }
+
+    // Update the old document
+    this.db.run(
+      'UPDATE oracle_documents SET superseded_by = ?, superseded_at = ?, superseded_reason = ? WHERE id = ?',
+      [newId, now, reason || null, oldId]
+    );
+
+    console.error(`[MCP:SUPERSEDE] ${oldId} → superseded by → ${newId}`);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          success: true,
+          old_id: oldId,
+          old_type: oldDoc.type,
+          new_id: newId,
+          new_type: newDoc.type,
+          reason: reason || null,
+          superseded_at: new Date(now).toISOString(),
+          message: `"${oldId}" is now marked as superseded by "${newId}". It will still appear in searches with a warning.`
         }, null, 2)
       }]
     };

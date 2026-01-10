@@ -16,9 +16,14 @@ export const oracleDocuments = sqliteTable('oracle_documents', {
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
   indexedAt: integer('indexed_at').notNull(),
+  // Supersede pattern (Issue #19) - "Nothing is Deleted" but can be outdated
+  supersededBy: text('superseded_by'),      // ID of newer document
+  supersededAt: integer('superseded_at'),   // When it was superseded
+  supersededReason: text('superseded_reason'), // Why (optional)
 }, (table) => [
   index('idx_source').on(table.sourceFile),
   index('idx_type').on(table.type),
+  index('idx_superseded').on(table.supersededBy),
 ]);
 
 // Indexing status tracking
