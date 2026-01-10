@@ -261,8 +261,10 @@ class OracleMCPServer {
 3. LEARN & REMEMBER
    oracle_learn(pattern) → Add new patterns/learnings
    oracle_thread(message) → Multi-turn discussions
+   ⚠️ BEFORE adding: search for similar topics first!
+   If updating old info → use oracle_supersede(oldId, newId)
 
-4. TRACE & DISTILL (Issue #17)
+4. TRACE & DISTILL
    oracle_trace(query) → Log discovery sessions with dig points
    oracle_trace_list() → Find past traces
    oracle_trace_get(id) → Explore dig points (files, commits, issues)
@@ -270,6 +272,10 @@ class OracleMCPServer {
 5. DECIDE & TRACK
    oracle_decisions_create() → Track important decisions
    oracle_decisions_list() → Review pending decisions
+
+6. SUPERSEDE (when info changes)
+   oracle_supersede(oldId, newId, reason) → Mark old doc as outdated
+   "Nothing is Deleted" — old preserved, just marked superseded
 
 Philosophy: "Nothing is Deleted" — All interactions logged.`,
           inputSchema: {
