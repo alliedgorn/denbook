@@ -53,7 +53,7 @@ git clone [repository-url]
 cd [repository-name]
 
 # 2. Install dependencies
-# (e.g., pnpm install, npm install, pip install -r requirements.txt)
+# (e.g., bun install, npm install, pip install -r requirements.txt)
 [package-manager] install
 
 # 3. Setup environment variables
@@ -141,8 +141,8 @@ NEXT_PUBLIC_API_URL=
 ### Development Ports
 | Service | Port | Command |
 |---------|------|---------|
-| Backend (HTTP) | `47778` | `pnpm run server` |
-| Frontend (Vite) | `3000` | `cd frontend && pnpm dev` |
+| Backend (HTTP) | `47778` | `bun server` |
+| Frontend (Vite) | `3000` | `cd frontend && bun dev` |
 
 Note: Frontend proxies `/api/*` requests to backend on port 47778 (configured in `frontend/vite.config.ts`)
 
@@ -151,19 +151,19 @@ Note: Frontend proxies `/api/*` requests to backend on port 47778 (configured in
 **Development mode** (two processes):
 ```bash
 # Terminal 1: Backend API
-pnpm run server              # http://localhost:47778
+bun server              # http://localhost:47778
 
 # Terminal 2: Frontend with HMR
-cd frontend && pnpm dev      # http://localhost:3000
+cd frontend && bun dev      # http://localhost:3000
 ```
 
 **Production mode** (single process):
 ```bash
 # Build frontend
-cd frontend && pnpm build
+cd frontend && bun run build
 
 # Serve everything from backend
-pnpm run server              # http://localhost:47778
+bun server              # http://localhost:47778
 ```
 
 In production, the backend serves both API endpoints and the built React app from `frontend/dist/`.
@@ -364,7 +364,7 @@ Closes #[issue-number]
 -   **Creating overly comprehensive initial plans** - Break complex projects into 1-hour phases instead
 -   **Trying to implement everything at once** - Start with minimum viable implementation, test, then expand
 -   **Skipping AI Diary and Honest Feedback in retrospectives** - These sections provide crucial context and self-reflection that technical documentation alone cannot capture
--   **Inline SQL for new tables** - Use Drizzle schema (`src/db/schema.ts`) + `pnpm db:push` instead of `db.exec(CREATE TABLE...)` in code
+-   **Inline SQL for new tables** - Use Drizzle schema (`src/db/schema.ts`) + `bun db:push` instead of `db.exec(CREATE TABLE...)` in code
 
 ### Useful Tricks Discovered
 -   **Parallel agents for analysis** - Using multiple agents to analyze different aspects speeds up planning significantly
