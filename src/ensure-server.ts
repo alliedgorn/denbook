@@ -6,14 +6,20 @@
  */
 
 import path from 'path';
+import fs from 'fs';
 import {
   readPidFile,
   isProcessAlive,
   spawnDaemon,
   configure,
   removePidFile,
+  getDataDir,
 } from './process-manager/index.js';
 import { waitForHealth, isPortInUse } from './process-manager/HealthMonitor.js';
+
+// Simple file-based lock to prevent race conditions
+const LOCK_FILE = () => path.join(getDataDir(), 'oracle-http.lock');
+const LOCK_TIMEOUT = 30000; // 30 seconds max lock age
 
 const PORT = parseInt(process.env.ORACLE_PORT || '47778', 10);
 const HEALTH_URL = `http://localhost:${PORT}/api/health`;
@@ -28,6 +34,44 @@ export interface EnsureServerOptions {
   timeout?: number;
   /** If true, print status messages (default: false) */
   verbose?: boolean;
+}
+
+/**
+ * Acquire lock (prevents race conditions in parallel calls)
+ */
+function acquireLock(): boolean {
+  const lockFile = LOCK_FILE();
+  try {
+    // Check for stale lock
+    if (fs.existsSync(lockFile)) {
+      const stat = fs.statSync(lockFile);
+      const age = Date.now() - stat.mtimeMs;
+      if (age > LOCK_TIMEOUT) {
+        fs.unlinkSync(lockFile); // Stale lock, remove it
+      } else {
+        return false; // Lock held by another process
+      }
+    }
+    // Create lock with exclusive flag
+    fs.writeFileSync(lockFile, String(process.pid), { flag: 'wx' });
+    return true;
+  } catch {
+    return false; // Lock exists or write failed
+  }
+}
+
+/**
+ * Release lock
+ */
+function releaseLock(): void {
+  try {
+    const lockFile = LOCK_FILE();
+    if (fs.existsSync(lockFile)) {
+      fs.unlinkSync(lockFile);
+    }
+  } catch {
+    // Ignore errors
+  }
 }
 
 /**
@@ -91,38 +135,61 @@ export async function ensureServerRunning(options: EnsureServerOptions = {}): Pr
     if (verbose) console.log('⚠️ Oracle server process exists but not responding');
   }
 
-  // 3. Check if port is in use by something else
-  if (await isPortInUse(PORT)) {
-    if (verbose) console.log(`⚠️ Port ${PORT} is in use but server not responding`);
+  // 3. Acquire lock to prevent race conditions
+  if (!acquireLock()) {
+    if (verbose) console.log('🔒 Another process is starting the server, waiting...');
+    // Wait and re-check health
+    const healthy = await waitForHealthWithTimeout(timeout);
+    if (healthy) {
+      if (verbose) console.log('🔮 Oracle server is now healthy');
+      return true;
+    }
+    if (verbose) console.log('⚠️ Timed out waiting for other process to start server');
     return false;
   }
 
-  // 4. Start the server
-  if (verbose) console.log('🔮 Starting Oracle server...');
+  try {
+    // 4. Re-check health after acquiring lock (another process may have started it)
+    if (await isServerHealthy()) {
+      if (verbose) console.log('🔮 Oracle server already running');
+      return true;
+    }
 
-  const pid = spawnDaemon({
-    scriptPath: SERVER_SCRIPT,
-    port: PORT,
-    portEnvVar: 'ORACLE_PORT',
-    args: [], // No special args needed
-  });
+    // 5. Check if port is in use by something else
+    if (await isPortInUse(PORT)) {
+      if (verbose) console.log(`⚠️ Port ${PORT} is in use but server not responding`);
+      return false;
+    }
 
-  if (!pid) {
-    if (verbose) console.log('❌ Failed to spawn Oracle server');
-    return false;
-  }
+    // 5. Start the server
+    if (verbose) console.log('🔮 Starting Oracle server...');
 
-  if (verbose) console.log(`🔮 Oracle server spawned (PID ${pid}), waiting for health...`);
+    const pid = spawnDaemon({
+      scriptPath: SERVER_SCRIPT,
+      port: PORT,
+      portEnvVar: 'ORACLE_PORT',
+      args: [], // No special args needed
+    });
 
-  // 5. Wait for server to become healthy
-  const healthy = await waitForHealthWithTimeout(timeout);
+    if (!pid) {
+      if (verbose) console.log('❌ Failed to spawn Oracle server');
+      return false;
+    }
 
-  if (healthy) {
-    if (verbose) console.log('✅ Oracle server is ready');
-    return true;
-  } else {
-    if (verbose) console.log('❌ Oracle server failed to become healthy');
-    return false;
+    if (verbose) console.log(`🔮 Oracle server spawned (PID ${pid}), waiting for health...`);
+
+    // 6. Wait for server to become healthy
+    const healthy = await waitForHealthWithTimeout(timeout);
+
+    if (healthy) {
+      if (verbose) console.log('✅ Oracle server is ready');
+      return true;
+    } else {
+      if (verbose) console.log('❌ Oracle server failed to become healthy');
+      return false;
+    }
+  } finally {
+    releaseLock();
   }
 }
 
