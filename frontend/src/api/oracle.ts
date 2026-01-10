@@ -1,6 +1,7 @@
 // Oracle API client
-// Use /api prefix for Vite proxy
-const API_BASE = '/api';
+// Dev: /api prefix (Vite proxy strips it)
+// Prod: empty (same origin, no proxy)
+const API_BASE = import.meta.env.DEV ? '/api' : '';
 
 export interface Document {
   id: string;

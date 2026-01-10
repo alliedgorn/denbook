@@ -141,8 +141,8 @@ NEXT_PUBLIC_API_URL=
 ### Development Ports
 | Service | Port | Command |
 |---------|------|---------|
-| Backend (HTTP) | `47778` | `bun server` |
-| Frontend (Vite) | `3000` | `cd frontend && bun dev` |
+| Backend (HTTP) | `47778` | `bun run server` |
+| Frontend (Vite) | `3000` | `cd frontend && bun run dev` |
 
 Note: Frontend proxies `/api/*` requests to backend on port 47778 (configured in `frontend/vite.config.ts`)
 
@@ -151,10 +151,10 @@ Note: Frontend proxies `/api/*` requests to backend on port 47778 (configured in
 **Development mode** (two processes):
 ```bash
 # Terminal 1: Backend API
-bun server              # http://localhost:47778
+bun run server              # http://localhost:47778
 
 # Terminal 2: Frontend with HMR
-cd frontend && bun dev      # http://localhost:3000
+cd frontend && bun run dev      # http://localhost:3000
 ```
 
 **Production mode** (single process):
@@ -163,7 +163,7 @@ cd frontend && bun dev      # http://localhost:3000
 cd frontend && bun run build
 
 # Serve everything from backend
-bun server              # http://localhost:47778
+bun run server              # http://localhost:47778
 ```
 
 In production, the backend serves both API endpoints and the built React app from `frontend/dist/`.
