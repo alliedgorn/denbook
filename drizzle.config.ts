@@ -11,7 +11,7 @@ export default defineConfig({
   dbCredentials: {
     url: DB_PATH,
   },
-  // Exclude FTS5 internal tables (managed by SQLite, not Drizzle)
+  // Tables managed by Drizzle (excludes FTS5 internal tables)
   tablesFilter: [
     'oracle_documents',
     'indexing_status',
@@ -19,5 +19,9 @@ export default defineConfig({
     'consult_log',
     'learn_log',
     'document_access',
+    'forum_threads',
+    'forum_messages',
+    'decisions',
+    'trace_log',  // Issue #17
   ],
 });

@@ -44,6 +44,19 @@ import type {
   ListDecisionsInput,
 } from './decisions/types.js';
 
+import {
+  createTrace,
+  getTrace,
+  listTraces,
+  getTraceChain,
+} from './trace/handler.js';
+
+import type {
+  CreateTraceInput,
+  ListTracesInput,
+  GetTraceInput,
+} from './trace/types.js';
+
 interface OracleSearchInput {
   query: string;
   type?: 'principle' | 'pattern' | 'learning' | 'retro' | 'all';
@@ -603,6 +616,149 @@ class OracleMCPServer {
             },
             required: ['id']
           }
+        },
+        // ============================================================================
+        // Trace Log Tools (Issue #17)
+        // ============================================================================
+        {
+          name: 'oracle_trace',
+          description: 'Log a trace session with dig points (files, commits, issues found). Use to capture /trace command results for future exploration.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'What was traced (required)'
+              },
+              queryType: {
+                type: 'string',
+                enum: ['general', 'project', 'pattern', 'evolution'],
+                description: 'Type of trace query',
+                default: 'general'
+              },
+              foundFiles: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    path: { type: 'string' },
+                    type: { type: 'string', enum: ['learning', 'retro', 'resonance', 'other'] },
+                    matchReason: { type: 'string' },
+                    confidence: { type: 'string', enum: ['high', 'medium', 'low'] }
+                  }
+                },
+                description: 'Files discovered'
+              },
+              foundCommits: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    hash: { type: 'string' },
+                    shortHash: { type: 'string' },
+                    date: { type: 'string' },
+                    message: { type: 'string' }
+                  }
+                },
+                description: 'Commits discovered'
+              },
+              foundIssues: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    number: { type: 'number' },
+                    title: { type: 'string' },
+                    state: { type: 'string', enum: ['open', 'closed'] },
+                    url: { type: 'string' }
+                  }
+                },
+                description: 'GitHub issues discovered'
+              },
+              foundRetrospectives: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Retrospective file paths'
+              },
+              foundLearnings: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Learning file paths'
+              },
+              parentTraceId: {
+                type: 'string',
+                description: 'Parent trace ID if this is a dig from another trace'
+              },
+              project: {
+                type: 'string',
+                description: 'Project context (ghq format)'
+              },
+              agentCount: {
+                type: 'number',
+                description: 'Number of agents used in trace'
+              },
+              durationMs: {
+                type: 'number',
+                description: 'How long trace took in milliseconds'
+              }
+            },
+            required: ['query']
+          }
+        },
+        {
+          name: 'oracle_trace_list',
+          description: 'List recent traces with optional filters. Returns trace summaries for browsing.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Filter by query content'
+              },
+              project: {
+                type: 'string',
+                description: 'Filter by project'
+              },
+              status: {
+                type: 'string',
+                enum: ['raw', 'reviewed', 'distilling', 'distilled'],
+                description: 'Filter by distillation status'
+              },
+              depth: {
+                type: 'number',
+                description: 'Filter by recursion depth (0 = top-level traces)'
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum traces to return',
+                default: 20
+              },
+              offset: {
+                type: 'number',
+                description: 'Pagination offset',
+                default: 0
+              }
+            }
+          }
+        },
+        {
+          name: 'oracle_trace_get',
+          description: 'Get full details of a specific trace including all dig points (files, commits, issues).',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              traceId: {
+                type: 'string',
+                description: 'UUID of the trace'
+              },
+              includeChain: {
+                type: 'boolean',
+                description: 'Include parent/child trace chain',
+                default: false
+              }
+            },
+            required: ['traceId']
+          }
         }
       ]
     }));
@@ -656,6 +812,16 @@ class OracleMCPServer {
 
           case 'oracle_decisions_update':
             return await this.handleDecisionsUpdate(request.params.arguments as unknown as OracleDecisionsUpdateInput);
+
+          // Trace log handlers (Issue #17)
+          case 'oracle_trace':
+            return await this.handleTrace(request.params.arguments as unknown as CreateTraceInput);
+
+          case 'oracle_trace_list':
+            return await this.handleTraceList(request.params.arguments as unknown as ListTracesInput);
+
+          case 'oracle_trace_get':
+            return await this.handleTraceGet(request.params.arguments as unknown as GetTraceInput);
 
           default:
             throw new Error(`Unknown tool: ${request.params.name}`);
@@ -1761,6 +1927,132 @@ class OracleMCPServer {
           updated_at: new Date(decision.updatedAt).toISOString(),
           decided_at: decision.decidedAt ? new Date(decision.decidedAt).toISOString() : null,
           decided_by: decision.decidedBy,
+        }, null, 2)
+      }]
+    };
+  }
+
+  // ============================================================================
+  // Trace Log Handlers (Issue #17)
+  // ============================================================================
+
+  /**
+   * Tool: oracle_trace
+   * Log a trace session with dig points
+   */
+  private async handleTrace(input: CreateTraceInput) {
+    const result = createTrace(this.db, input);
+
+    console.error(`[MCP:TRACE] query="${input.query}" depth=${result.depth} digPoints=${result.summary.totalDigPoints}`);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          success: result.success,
+          trace_id: result.traceId,
+          depth: result.depth,
+          summary: {
+            file_count: result.summary.fileCount,
+            commit_count: result.summary.commitCount,
+            issue_count: result.summary.issueCount,
+            total_dig_points: result.summary.totalDigPoints,
+          },
+          message: `Trace logged. Use oracle_trace_get with trace_id="${result.traceId}" to explore dig points.`
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Tool: oracle_trace_list
+   * List recent traces with optional filters
+   */
+  private async handleTraceList(input: ListTracesInput) {
+    const result = listTraces(this.db, input);
+
+    console.error(`[MCP:TRACE_LIST] found=${result.total} returned=${result.traces.length}`);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          traces: result.traces.map(t => ({
+            trace_id: t.traceId,
+            query: t.query,
+            depth: t.depth,
+            file_count: t.fileCount,
+            commit_count: t.commitCount,
+            issue_count: t.issueCount,
+            status: t.status,
+            has_awakening: t.hasAwakening,
+            created_at: new Date(t.createdAt).toISOString(),
+          })),
+          total: result.total,
+          has_more: result.hasMore,
+        }, null, 2)
+      }]
+    };
+  }
+
+  /**
+   * Tool: oracle_trace_get
+   * Get full details of a specific trace
+   */
+  private async handleTraceGet(input: GetTraceInput) {
+    const trace = getTrace(this.db, input.traceId);
+
+    if (!trace) {
+      throw new Error(`Trace ${input.traceId} not found`);
+    }
+
+    console.error(`[MCP:TRACE_GET] id=${input.traceId} query="${trace.query}"`);
+
+    let chain = undefined;
+    if (input.includeChain) {
+      chain = getTraceChain(this.db, input.traceId);
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          trace_id: trace.traceId,
+          query: trace.query,
+          query_type: trace.queryType,
+          depth: trace.depth,
+          status: trace.status,
+          // Dig points
+          found_files: trace.foundFiles,
+          found_commits: trace.foundCommits,
+          found_issues: trace.foundIssues,
+          found_retrospectives: trace.foundRetrospectives,
+          found_learnings: trace.foundLearnings,
+          found_resonance: trace.foundResonance,
+          // Counts
+          file_count: trace.fileCount,
+          commit_count: trace.commitCount,
+          issue_count: trace.issueCount,
+          // Recursion
+          parent_trace_id: trace.parentTraceId,
+          child_trace_ids: trace.childTraceIds,
+          // Context
+          project: trace.project,
+          agent_count: trace.agentCount,
+          duration_ms: trace.durationMs,
+          // Distillation
+          awakening: trace.awakening,
+          distilled_to_id: trace.distilledToId,
+          // Timestamps
+          created_at: new Date(trace.createdAt).toISOString(),
+          updated_at: new Date(trace.updatedAt).toISOString(),
+          // Chain (if requested)
+          chain: chain ? {
+            traces: chain.chain,
+            total_depth: chain.totalDepth,
+            has_awakening: chain.hasAwakening,
+            awakening_trace_id: chain.awakeningTraceId,
+          } : undefined,
         }, null, 2)
       }]
     };

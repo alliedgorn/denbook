@@ -156,3 +156,55 @@ export const decisions = sqliteTable('decisions', {
   index('idx_decisions_project').on(table.project),
   index('idx_decisions_created').on(table.createdAt),
 ]);
+
+// ============================================================================
+// Trace Log Tables (discovery tracing with dig points)
+// ============================================================================
+
+// Trace log - captures /trace sessions with actionable dig points
+export const traceLog = sqliteTable('trace_log', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  traceId: text('trace_id').unique().notNull(),
+  query: text('query').notNull(),
+  queryType: text('query_type').default('general'),  // general, project, pattern, evolution
+
+  // Dig Points (JSON arrays)
+  foundFiles: text('found_files'),            // [{path, type, matchReason, confidence}]
+  foundCommits: text('found_commits'),        // [{hash, shortHash, date, message}]
+  foundIssues: text('found_issues'),          // [{number, title, state, url}]
+  foundRetrospectives: text('found_retrospectives'),  // [paths]
+  foundLearnings: text('found_learnings'),    // [paths]
+  foundResonance: text('found_resonance'),    // [paths]
+
+  // Counts (for quick stats)
+  fileCount: integer('file_count').default(0),
+  commitCount: integer('commit_count').default(0),
+  issueCount: integer('issue_count').default(0),
+
+  // Recursion
+  depth: integer('depth').default(0),         // 0 = initial, 1+ = dig from parent
+  parentTraceId: text('parent_trace_id'),     // Links to parent trace
+  childTraceIds: text('child_trace_ids').default('[]'),  // Links to child traces
+
+  // Context
+  project: text('project'),                   // ghq format project path
+  sessionId: text('session_id'),              // Claude session if available
+  agentCount: integer('agent_count').default(1),
+  durationMs: integer('duration_ms'),
+
+  // Distillation
+  status: text('status').default('raw'),      // raw, reviewed, distilling, distilled
+  awakening: text('awakening'),               // Extracted insight (markdown)
+  distilledToId: text('distilled_to_id'),     // Learning ID if promoted
+  distilledAt: integer('distilled_at'),
+
+  // Timestamps
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  index('idx_trace_query').on(table.query),
+  index('idx_trace_project').on(table.project),
+  index('idx_trace_status').on(table.status),
+  index('idx_trace_parent').on(table.parentTraceId),
+  index('idx_trace_created').on(table.createdAt),
+]);
