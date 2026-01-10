@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Configuration
-export const PORT = process.env.ORACLE_PORT || 37778;
+export const PORT = process.env.ORACLE_PORT || 47778;
 export const HOME_DIR = process.env.HOME || process.env.USERPROFILE || '/tmp';
 export const ORACLE_DATA_DIR = process.env.ORACLE_DATA_DIR || path.join(HOME_DIR, '.oracle-v2');
 export const DB_PATH = process.env.ORACLE_DB_PATH || path.join(ORACLE_DATA_DIR, 'oracle.db');
