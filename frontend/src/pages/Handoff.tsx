@@ -34,7 +34,13 @@ export function Handoff() {
   function loadSessionStats() {
     const stored = localStorage.getItem('oracle_session');
     if (stored) {
-      setSessionStats(JSON.parse(stored));
+      const parsed = JSON.parse(stored);
+      // Validate startTime exists and is a valid number
+      if (!parsed.startTime || isNaN(parsed.startTime)) {
+        parsed.startTime = Date.now();
+        localStorage.setItem('oracle_session', JSON.stringify(parsed));
+      }
+      setSessionStats(parsed);
     } else {
       const initial: SessionStats = {
         searches: 0,
