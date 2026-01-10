@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "bun src/index.ts",
     "server": "bun src/server.ts",
+    "server:ensure": "bun src/ensure-server.ts",
+    "server:status": "bun src/ensure-server.ts --status",
     "server:legacy": "bun src/server-legacy.ts",
     "serve": "bun dist/server.js",
     "index": "bun src/indexer.ts",
