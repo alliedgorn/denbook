@@ -128,9 +128,11 @@ app.get('/api/search', async (c) => {
   const type = c.req.query('type') || 'all';
   const limit = parseInt(c.req.query('limit') || '10');
   const offset = parseInt(c.req.query('offset') || '0');
+  const mode = (c.req.query('mode') || 'hybrid') as 'hybrid' | 'fts' | 'vector';
+  const project = c.req.query('project'); // If set: project + universal. If omitted: universal only
 
-  const result = await handleSearch(q, type, limit, offset);
-  return c.json({ ...result, query: q });
+  const result = await handleSearch(q, type, limit, offset, mode, project);
+  return c.json({ ...result, query: q, project });
 });
 
 // Consult
@@ -499,7 +501,13 @@ app.post('/api/learn', async (c) => {
     if (!data.pattern) {
       return c.json({ error: 'Missing required field: pattern' }, 400);
     }
-    const result = handleLearn(data.pattern, data.source, data.concepts);
+    const result = handleLearn(
+      data.pattern,
+      data.source,
+      data.concepts,
+      data.origin,   // 'mother' | 'arthur' | 'volt' | 'human' (null = universal)
+      data.project   // ghq-style project path (null = universal)
+    );
     return c.json(result);
   } catch (error) {
     return c.json({

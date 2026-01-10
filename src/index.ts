@@ -1252,10 +1252,10 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
     // Index into database
     const id = `learning_${dateStr}_${slug}`;
 
-    // Insert metadata
+    // Insert metadata with provenance
     this.db.prepare(`
-      INSERT INTO oracle_documents (id, type, source_file, concepts, created_at, updated_at, indexed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO oracle_documents (id, type, source_file, concepts, created_at, updated_at, indexed_at, origin, project, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       'learning',
@@ -1263,7 +1263,10 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
       JSON.stringify(conceptsList),
       now.getTime(),
       now.getTime(),
-      now.getTime()
+      now.getTime(),
+      null,           // origin: null = universal/mother
+      null,           // project: null = universal
+      'oracle_learn'  // created_by
     );
 
     // Insert into FTS

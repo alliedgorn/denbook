@@ -30,7 +30,8 @@ export async function handleSearch(
   type: string = 'all',
   limit: number = 10,
   offset: number = 0,
-  mode: 'hybrid' | 'fts' | 'vector' = 'hybrid'
+  mode: 'hybrid' | 'fts' | 'vector' = 'hybrid',
+  project?: string  // If set: project + universal. If null/undefined: universal only
 ): Promise<SearchResponse & { mode?: string; warning?: string }> {
   const startTime = Date.now();
   // Remove FTS5 special characters: ? * + - ( ) ^ ~ " ' : (colon is column prefix)
@@ -42,30 +43,38 @@ export async function handleSearch(
   let ftsResults: SearchResult[] = [];
   let ftsTotal = 0;
 
+  // Project filter: if project specified, include project + universal (NULL)
+  // If no project, only return universal (NULL)
+  const projectFilter = project
+    ? '(d.project = ? OR d.project IS NULL)'
+    : 'd.project IS NULL';
+  const projectParams = project ? [project] : [];
+
   if (mode !== 'vector') {
     if (type === 'all') {
       const countStmt = db.prepare(`
         SELECT COUNT(*) as total
         FROM oracle_fts f
         JOIN oracle_documents d ON f.id = d.id
-        WHERE oracle_fts MATCH ?
+        WHERE oracle_fts MATCH ? AND ${projectFilter}
       `);
-      ftsTotal = (countStmt.get(safeQuery) as { total: number }).total;
+      ftsTotal = (countStmt.get(safeQuery, ...projectParams) as { total: number }).total;
 
       const stmt = db.prepare(`
-        SELECT f.id, f.content, d.type, d.source_file, d.concepts, rank as score
+        SELECT f.id, f.content, d.type, d.source_file, d.concepts, d.project, rank as score
         FROM oracle_fts f
         JOIN oracle_documents d ON f.id = d.id
-        WHERE oracle_fts MATCH ?
+        WHERE oracle_fts MATCH ? AND ${projectFilter}
         ORDER BY rank
         LIMIT ?
       `);
-      ftsResults = stmt.all(safeQuery, limit * 2).map((row: any) => ({
+      ftsResults = stmt.all(safeQuery, ...projectParams, limit * 2).map((row: any) => ({
         id: row.id,
         type: row.type,
         content: row.content.substring(0, 500),
         source_file: row.source_file,
         concepts: JSON.parse(row.concepts || '[]'),
+        project: row.project,
         source: 'fts' as const,
         score: normalizeRank(row.score)
       }));
@@ -74,24 +83,25 @@ export async function handleSearch(
         SELECT COUNT(*) as total
         FROM oracle_fts f
         JOIN oracle_documents d ON f.id = d.id
-        WHERE oracle_fts MATCH ? AND d.type = ?
+        WHERE oracle_fts MATCH ? AND d.type = ? AND ${projectFilter}
       `);
-      ftsTotal = (countStmt.get(safeQuery, type) as { total: number }).total;
+      ftsTotal = (countStmt.get(safeQuery, type, ...projectParams) as { total: number }).total;
 
       const stmt = db.prepare(`
-        SELECT f.id, f.content, d.type, d.source_file, d.concepts, rank as score
+        SELECT f.id, f.content, d.type, d.source_file, d.concepts, d.project, rank as score
         FROM oracle_fts f
         JOIN oracle_documents d ON f.id = d.id
-        WHERE oracle_fts MATCH ? AND d.type = ?
+        WHERE oracle_fts MATCH ? AND d.type = ? AND ${projectFilter}
         ORDER BY rank
         LIMIT ?
       `);
-      ftsResults = stmt.all(safeQuery, type, limit * 2).map((row: any) => ({
+      ftsResults = stmt.all(safeQuery, type, ...projectParams, limit * 2).map((row: any) => ({
         id: row.id,
         type: row.type,
         content: row.content.substring(0, 500),
         source_file: row.source_file,
         concepts: JSON.parse(row.concepts || '[]'),
+        project: row.project,
         source: 'fts' as const,
         score: normalizeRank(row.score)
       }));
@@ -629,8 +639,16 @@ export function handleGraph() {
 
 /**
  * Add new pattern/learning to knowledge base
+ * @param origin - 'mother' | 'arthur' | 'volt' | 'human' (null = universal)
+ * @param project - ghq-style project path (null = universal)
  */
-export function handleLearn(pattern: string, source?: string, concepts?: string[]) {
+export function handleLearn(
+  pattern: string,
+  source?: string,
+  concepts?: string[],
+  origin?: string,
+  project?: string
+) {
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
 
@@ -680,10 +698,10 @@ export function handleLearn(pattern: string, source?: string, concepts?: string[
   const id = `learning_${dateStr}_${slug}`;
   const conceptsList = concepts || [];
 
-  // Insert into database
+  // Insert into database with provenance
   db.prepare(`
-    INSERT INTO oracle_documents (id, type, source_file, concepts, created_at, updated_at, indexed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO oracle_documents (id, type, source_file, concepts, created_at, updated_at, indexed_at, origin, project, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     'learning',
@@ -691,7 +709,10 @@ export function handleLearn(pattern: string, source?: string, concepts?: string[
     JSON.stringify(conceptsList),
     now.getTime(),
     now.getTime(),
-    now.getTime()
+    now.getTime(),
+    origin || null,  // origin: null = universal/mother
+    project || null, // project: null = universal
+    'oracle_learn'   // created_by
   );
 
   // Insert into FTS

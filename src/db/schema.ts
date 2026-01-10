@@ -20,10 +20,16 @@ export const oracleDocuments = sqliteTable('oracle_documents', {
   supersededBy: text('superseded_by'),      // ID of newer document
   supersededAt: integer('superseded_at'),   // When it was superseded
   supersededReason: text('superseded_reason'), // Why (optional)
+  // Provenance tracking (Issue #22)
+  origin: text('origin'),                   // 'mother' | 'arthur' | 'volt' | 'human' | null (legacy)
+  project: text('project'),                 // ghq-style: 'github.com/laris-co/oracle-v2'
+  createdBy: text('created_by'),            // 'indexer' | 'oracle_learn' | 'manual'
 }, (table) => [
   index('idx_source').on(table.sourceFile),
   index('idx_type').on(table.type),
   index('idx_superseded').on(table.supersededBy),
+  index('idx_origin').on(table.origin),
+  index('idx_project').on(table.project),
 ]);
 
 // Indexing status tracking
