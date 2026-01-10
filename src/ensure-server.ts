@@ -44,12 +44,19 @@ function acquireLock(): boolean {
   try {
     // Check for stale lock
     if (fs.existsSync(lockFile)) {
+      const content = fs.readFileSync(lockFile, 'utf-8').trim();
+      const lockPid = parseInt(content, 10);
       const stat = fs.statSync(lockFile);
       const age = Date.now() - stat.mtimeMs;
-      if (age > LOCK_TIMEOUT) {
-        fs.unlinkSync(lockFile); // Stale lock, remove it
+
+      // Release if: lock is old OR lock holder process is dead
+      const isStale = age > LOCK_TIMEOUT;
+      const isOrphan = !isNaN(lockPid) && !isProcessAlive(lockPid);
+
+      if (isStale || isOrphan) {
+        fs.unlinkSync(lockFile); // Stale/orphan lock, remove it
       } else {
-        return false; // Lock held by another process
+        return false; // Lock held by live process
       }
     }
     // Create lock with exclusive flag
