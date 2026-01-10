@@ -8,6 +8,7 @@ import { db, REPO_ROOT } from './db.js';
 import { logSearch, logDocumentAccess, logLearning, logConsult } from './logging.js';
 import type { SearchResult, SearchResponse } from './types.js';
 import { ChromaMcpClient } from '../chroma-mcp.js';
+import { detectProject } from './project-detect.js';
 
 // Singleton ChromaMcpClient for vector search
 // HTTP server can use this because it's NOT an MCP server (no stdio conflict)
@@ -31,8 +32,11 @@ export async function handleSearch(
   limit: number = 10,
   offset: number = 0,
   mode: 'hybrid' | 'fts' | 'vector' = 'hybrid',
-  project?: string  // If set: project + universal. If null/undefined: universal only
+  project?: string,  // If set: project + universal. If null/undefined: universal only
+  cwd?: string       // Auto-detect project from cwd if project not specified
 ): Promise<SearchResponse & { mode?: string; warning?: string }> {
+  // Auto-detect project from cwd if not explicitly specified
+  const resolvedProject = project ?? detectProject(cwd);
   const startTime = Date.now();
   // Remove FTS5 special characters: ? * + - ( ) ^ ~ " ' : (colon is column prefix)
   const safeQuery = query.replace(/[?*+\-()^~"':]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -45,10 +49,10 @@ export async function handleSearch(
 
   // Project filter: if project specified, include project + universal (NULL)
   // If no project, only return universal (NULL)
-  const projectFilter = project
+  const projectFilter = resolvedProject
     ? '(d.project = ? OR d.project IS NULL)'
     : 'd.project IS NULL';
-  const projectParams = project ? [project] : [];
+  const projectParams = resolvedProject ? [resolvedProject] : [];
 
   if (mode !== 'vector') {
     if (type === 'all') {
@@ -122,22 +126,43 @@ export async function handleSearch(
       console.log(`[Hybrid] First 3 distances: ${chromaResults.distances?.slice(0, 3)}`);
 
       if (chromaResults.ids && chromaResults.ids.length > 0) {
-        vectorResults = chromaResults.ids.map((id: string, i: number) => {
-          // Cosine distance: 0=identical, 1=orthogonal, 2=opposite
-          // Convert to similarity: 0.5=orthogonal, 1=identical, 0=opposite
-          const distance = chromaResults.distances?.[i] || 1;
-          const similarity = Math.max(0, 1 - distance / 2);
-          return {
-            id,
-            type: chromaResults.metadatas?.[i]?.type || 'unknown',
-            content: (chromaResults.documents?.[i] || '').substring(0, 500),
-            source_file: chromaResults.metadatas?.[i]?.source_file || '',
-            concepts: [],
-            source: 'vector' as const,
-            score: similarity
-          };
-        });
-        console.log(`[Hybrid] Mapped ${vectorResults.length} vector results, scores: ${vectorResults.slice(0, 3).map(r => r.score?.toFixed(3))}`);
+        // Get project metadata for vector results from SQLite
+        const idsPlaceholder = chromaResults.ids.map(() => '?').join(',');
+        const projectStmt = db.prepare(`
+          SELECT id, project FROM oracle_documents WHERE id IN (${idsPlaceholder})
+        `);
+        const projectMap = new Map<string, string | null>();
+        const rows = projectStmt.all(...chromaResults.ids) as { id: string; project: string | null }[];
+        rows.forEach(r => projectMap.set(r.id, r.project));
+
+        vectorResults = chromaResults.ids
+          .map((id: string, i: number) => {
+            // Cosine distance: 0=identical, 1=orthogonal, 2=opposite
+            // Convert to similarity: 0.5=orthogonal, 1=identical, 0=opposite
+            const distance = chromaResults.distances?.[i] || 1;
+            const similarity = Math.max(0, 1 - distance / 2);
+            const docProject = projectMap.get(id);
+            return {
+              id,
+              type: chromaResults.metadatas?.[i]?.type || 'unknown',
+              content: (chromaResults.documents?.[i] || '').substring(0, 500),
+              source_file: chromaResults.metadatas?.[i]?.source_file || '',
+              concepts: [],
+              project: docProject,
+              source: 'vector' as const,
+              score: similarity
+            };
+          })
+          // Filter by project: include if project matches OR is universal (null)
+          .filter(r => {
+            if (!resolvedProject) {
+              // No project filter: only return universal
+              return r.project === null;
+            }
+            // With project: return project-specific + universal
+            return r.project === resolvedProject || r.project === null;
+          });
+        console.log(`[Hybrid] Mapped ${vectorResults.length} vector results (after project filter), scores: ${vectorResults.slice(0, 3).map(r => r.score?.toFixed(3))}`);
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -641,14 +666,18 @@ export function handleGraph() {
  * Add new pattern/learning to knowledge base
  * @param origin - 'mother' | 'arthur' | 'volt' | 'human' (null = universal)
  * @param project - ghq-style project path (null = universal)
+ * @param cwd - Auto-detect project from cwd if project not specified
  */
 export function handleLearn(
   pattern: string,
   source?: string,
   concepts?: string[],
   origin?: string,
-  project?: string
+  project?: string,
+  cwd?: string
 ) {
+  // Auto-detect project from cwd if not explicitly specified
+  const resolvedProject = project ?? detectProject(cwd);
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
 
@@ -710,9 +739,9 @@ export function handleLearn(
     now.getTime(),
     now.getTime(),
     now.getTime(),
-    origin || null,  // origin: null = universal/mother
-    project || null, // project: null = universal
-    'oracle_learn'   // created_by
+    origin || null,          // origin: null = universal/mother
+    resolvedProject || null, // project: null = universal (auto-detected from cwd)
+    'oracle_learn'           // created_by
   );
 
   // Insert into FTS

@@ -129,10 +129,11 @@ app.get('/api/search', async (c) => {
   const limit = parseInt(c.req.query('limit') || '10');
   const offset = parseInt(c.req.query('offset') || '0');
   const mode = (c.req.query('mode') || 'hybrid') as 'hybrid' | 'fts' | 'vector';
-  const project = c.req.query('project'); // If set: project + universal. If omitted: universal only
+  const project = c.req.query('project'); // Explicit project filter
+  const cwd = c.req.query('cwd');         // Auto-detect project from cwd
 
-  const result = await handleSearch(q, type, limit, offset, mode, project);
-  return c.json({ ...result, query: q, project });
+  const result = await handleSearch(q, type, limit, offset, mode, project, cwd);
+  return c.json({ ...result, query: q });
 });
 
 // Consult
@@ -506,7 +507,8 @@ app.post('/api/learn', async (c) => {
       data.source,
       data.concepts,
       data.origin,   // 'mother' | 'arthur' | 'volt' | 'human' (null = universal)
-      data.project   // ghq-style project path (null = universal)
+      data.project,  // ghq-style project path (null = universal)
+      data.cwd       // Auto-detect project from cwd
     );
     return c.json(result);
   } catch (error) {
