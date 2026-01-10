@@ -171,8 +171,8 @@ const server = http.createServer(async (req, res) => {
   try {
     let result: any;
 
-    // POST /thread - Send message to thread
-    if (pathname === '/thread' && req.method === 'POST') {
+    // POST /api/thread - Send message to thread
+    if (pathname === '/api/thread' && req.method === 'POST') {
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', async () => {
@@ -206,9 +206,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // GET /thread/:id - Get thread with messages
-    if (pathname?.startsWith('/thread/') && req.method === 'GET') {
-      const threadId = parseInt(pathname.replace('/thread/', ''), 10);
+    // GET /api/thread/:id - Get thread with messages
+    if (pathname?.startsWith('/api/thread/') && req.method === 'GET') {
+      const threadId = parseInt(pathname.replace('/api/thread/', ''), 10);
       if (isNaN(threadId)) {
         res.statusCode = 400;
         res.end(JSON.stringify({ error: 'Invalid thread ID' }));
@@ -241,9 +241,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // PATCH /thread/:id/status - Update thread status
-    if (pathname?.match(/^\/thread\/\d+\/status$/) && req.method === 'PATCH') {
-      const threadId = parseInt(pathname.split('/')[2], 10);
+    // PATCH /api/thread/:id/status - Update thread status
+    if (pathname?.match(/^\/api\/thread\/\d+\/status$/) && req.method === 'PATCH') {
+      const threadId = parseInt(pathname.split('/')[3], 10);
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', () => {
@@ -265,7 +265,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // POST /learn
-    if (pathname === '/learn' && req.method === 'POST') {
+    if (pathname === '/api/learn' && req.method === 'POST') {
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', () => {
@@ -289,7 +289,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // POST /ask - Arthur AI chat endpoint (wraps /consult)
-    if (pathname === '/ask' && req.method === 'POST') {
+    if (pathname === '/api/ask' && req.method === 'POST') {
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', async () => {
@@ -321,7 +321,7 @@ const server = http.createServer(async (req, res) => {
     // ========================================================================
 
     // GET /decisions - List decisions with filters
-    if (pathname === '/decisions' && req.method === 'GET') {
+    if (pathname === '/api/decisions' && req.method === 'GET') {
       const result = listDecisions({
         status: query.status as any,
         project: query.project as string,
@@ -349,9 +349,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // GET /decisions/:id - Get single decision
-    if (pathname?.match(/^\/decisions\/\d+$/) && req.method === 'GET') {
-      const decisionId = parseInt(pathname.split('/')[2], 10);
+    // GET /api/decisions/:id - Get single decision
+    if (pathname?.match(/^\/api\/decisions\/\d+$/) && req.method === 'GET') {
+      const decisionId = parseInt(pathname.split('/')[3], 10);
       const decision = getDecision(decisionId);
       if (!decision) {
         res.statusCode = 404;
@@ -377,7 +377,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // POST /decisions - Create new decision
-    if (pathname === '/decisions' && req.method === 'POST') {
+    if (pathname === '/api/decisions' && req.method === 'POST') {
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', () => {
@@ -412,9 +412,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // PATCH /decisions/:id - Update decision
-    if (pathname?.match(/^\/decisions\/\d+$/) && req.method === 'PATCH') {
-      const decisionId = parseInt(pathname.split('/')[2], 10);
+    // PATCH /api/decisions/:id - Update decision
+    if (pathname?.match(/^\/api\/decisions\/\d+$/) && req.method === 'PATCH') {
+      const decisionId = parseInt(pathname.split('/')[3], 10);
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', () => {
@@ -452,9 +452,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // POST /decisions/:id/transition - Transition status
-    if (pathname?.match(/^\/decisions\/\d+\/transition$/) && req.method === 'POST') {
-      const decisionId = parseInt(pathname.split('/')[2], 10);
+    // POST /api/decisions/:id/transition - Transition status
+    if (pathname?.match(/^\/api\/decisions\/\d+\/transition$/) && req.method === 'POST') {
+      const decisionId = parseInt(pathname.split('/')[3], 10);
       let body = '';
       req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', () => {
@@ -517,11 +517,11 @@ const server = http.createServer(async (req, res) => {
         res.end(fs.readFileSync(DASHBOARD_PATH, 'utf-8'));
         return;
 
-      case '/health':
+      case '/api/health':
         result = { status: 'ok', server: 'oracle-v2', port: PORT, oracleV2: 'connected' };
         break;
 
-      case '/search':
+      case '/api/search':
         if (!query.q) {
           res.statusCode = 400;
           result = { error: 'Missing query parameter: q' };
@@ -539,7 +539,7 @@ const server = http.createServer(async (req, res) => {
         }
         break;
 
-      case '/consult':
+      case '/api/consult':
         if (!query.q) {
           res.statusCode = 400;
           result = { error: 'Missing query parameter: q (decision)' };
@@ -551,15 +551,15 @@ const server = http.createServer(async (req, res) => {
         }
         break;
 
-      case '/reflect':
+      case '/api/reflect':
         result = handleReflect();
         break;
 
-      case '/stats':
+      case '/api/stats':
         result = handleStats(DB_PATH);
         break;
 
-      case '/logs':
+      case '/api/logs':
         // Return recent search logs for debugging
         try {
           const logs = db.prepare(`
@@ -574,7 +574,7 @@ const server = http.createServer(async (req, res) => {
         }
         break;
 
-      case '/list':
+      case '/api/list':
         result = handleList(
           (query.type as string) || 'all',
           parseInt(query.limit as string) || 10,
@@ -583,34 +583,34 @@ const server = http.createServer(async (req, res) => {
         );
         break;
 
-      case '/graph':
+      case '/api/graph':
         result = handleGraph();
         break;
 
       // Dashboard endpoints
-      case '/dashboard':
-      case '/dashboard/summary':
+      case '/api/dashboard':
+      case '/api/dashboard/summary':
         result = handleDashboardSummary();
         break;
 
-      case '/dashboard/activity':
+      case '/api/dashboard/activity':
         result = handleDashboardActivity(
           parseInt(query.days as string) || 7
         );
         break;
 
-      case '/dashboard/growth':
+      case '/api/dashboard/growth':
         result = handleDashboardGrowth(
           (query.period as string) || 'week'
         );
         break;
 
-      case '/context':
+      case '/api/context':
         // Return project context from ghq-format path
         result = handleContext(query.cwd as string | undefined);
         break;
 
-      case '/file':
+      case '/api/file':
         // Return full file content
         const filePath = query.path as string;
         if (!filePath) {
@@ -647,7 +647,7 @@ const server = http.createServer(async (req, res) => {
         break;
 
       // Forum endpoints
-      case '/threads':
+      case '/api/threads':
         const threadList = listThreads({
           status: query.status as any,
           limit: parseInt(query.limit as string) || 20,

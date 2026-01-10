@@ -473,7 +473,7 @@
         // Check if server is available
         async function checkServer() {
             try {
-                const res = await fetch(`${API_URL}/health`);
+                const res = await fetch(`${API_URL}/api/health`);
                 if (res.ok) {
                     const data = await res.json();
                     const wasConnected = useRealAI;
@@ -515,7 +515,7 @@
         // Ask real Claude via server
         async function askRealOracle(question) {
             try {
-                const res = await fetch(`${API_URL}/ask`, {
+                const res = await fetch(`${API_URL}/api/ask`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ question })
