@@ -1,25 +1,30 @@
-# WIP — Work in Progress
+# WIP — 2026-01-10 19:19
 
-> Last updated: 2025-12-24 10:36 GMT+7
+## Git Status
+```
+(clean)
+```
 
-## Current Focus
+## งานค้าง
+- [ ] Configure Arthur as read-only Oracle child (remove `oracle_learn` from MCP tool list)
+- [ ] Re-index existing docs with project metadata (optional)
 
-- [x] Oracle v2 initialization ✅
-- [x] Commands & agents installed ✅
-- [x] Documentation consistency ✅
+## Context
+- Migrated HTTP server to Hono.js (#21)
+- Added provenance tracking: `origin`, `project`, `created_by` columns (#22)
+- Auto-detect project from cwd via ghq/symlink resolution (#23)
+- Server: `bun run server:ensure` (port 47778)
 
-## Completed This Session
+## Key Files
+- `src/server.ts` — Hono.js HTTP server
+- `src/ensure-server.ts` — Auto-start daemon with locking
+- `src/server/project-detect.ts` — ghq/symlink project detection
 
-- 8 commits
-- 7 commands + 3 agents
-- Path pattern standardized: `YYYY-MM/DD/HH.MM_slug.md`
-
-## Next Session
-
-- [ ] Test `/forward` before /clear
-- [ ] Real project work with Oracle v2
-- [ ] Consider making repo public
+## Search Behavior
+- No project → universal only (`project IS NULL`)
+- With project → project + universal
+- Auto-detect from `cwd` param
 
 ---
 
-*Update this file as you work*
+*Ready for /clear*

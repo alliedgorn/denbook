@@ -162,14 +162,30 @@ interface OracleSupersededInput {
   reason?: string;
 }
 
+// Write tools that should be disabled in read-only mode
+const WRITE_TOOLS = [
+  'oracle_learn',
+  'oracle_thread',
+  'oracle_thread_update',
+  'oracle_decisions_create',
+  'oracle_decisions_update',
+  'oracle_trace',
+  'oracle_supersede',
+];
+
 class OracleMCPServer {
   private server: Server;
   private db: Database.Database;
   private repoRoot: string;
   private chromaMcp: ChromaMcpClient;
   private chromaStatus: 'unknown' | 'connected' | 'unavailable' = 'unknown';
+  private readOnly: boolean;
 
-  constructor() {
+  constructor(options: { readOnly?: boolean } = {}) {
+    this.readOnly = options.readOnly ?? false;
+    if (this.readOnly) {
+      console.error('[Oracle] Running in READ-ONLY mode');
+    }
     this.repoRoot = process.env.ORACLE_REPO_ROOT || '/Users/nat/Code/github.com/laris-co/Nat-s-Agents';
 
     // Initialize ChromaMcpClient (uses same uvx/chroma-mcp as indexer)
@@ -241,9 +257,9 @@ class OracleMCPServer {
    * Setup MCP handlers
    */
   private setupHandlers(): void {
-    // List available tools
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
+    // List available tools (filtered in read-only mode)
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      const allTools = [
         // Meta-documentation tool (not callable, just instructions)
         {
           name: '____IMPORTANT',
@@ -831,11 +847,29 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
             required: ['oldId', 'newId']
           }
         }
-      ]
-    }));
+      ];
+
+      // Filter out write tools in read-only mode
+      const tools = this.readOnly
+        ? allTools.filter(t => !WRITE_TOOLS.includes(t.name))
+        : allTools;
+
+      return { tools };
+    });
 
     // Handle tool calls
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      // Block write tools in read-only mode
+      if (this.readOnly && WRITE_TOOLS.includes(request.params.name)) {
+        return {
+          content: [{
+            type: 'text',
+            text: `Error: Tool "${request.params.name}" is disabled in read-only mode. This Oracle instance is configured for read-only access.`
+          }],
+          isError: true
+        };
+      }
+
       try {
         switch (request.params.name) {
           case 'oracle_search':
@@ -2221,7 +2255,9 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
  * Pre-connect to chroma-mcp BEFORE starting MCP server to avoid stdio conflicts
  */
 async function main() {
-  const server = new OracleMCPServer();
+  // Check for read-only mode via env var or CLI arg
+  const readOnly = process.env.ORACLE_READ_ONLY === 'true' || process.argv.includes('--read-only');
+  const server = new OracleMCPServer({ readOnly });
 
   // Pre-connect to chroma-mcp before MCP server takes over stdio
   try {
