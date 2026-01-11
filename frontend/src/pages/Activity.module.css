@@ -72,6 +72,22 @@
   text-align: center;
 }
 
+.clickableCard {
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.clickableCard:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.activeCard {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
 .statIcon {
   font-size: 24px;
   margin-bottom: 8px;
@@ -222,6 +238,20 @@
 
 .activityItem:last-child {
   border-bottom: none;
+}
+
+.activityItem.clickable {
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.activityItem.clickable:hover {
+  background: rgba(167, 139, 250, 0.1);
+  border-radius: 8px;
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 .activityIcon {

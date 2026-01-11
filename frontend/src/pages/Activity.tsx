@@ -31,9 +31,10 @@ export function Activity() {
   const [activity, setActivity] = useState<DashboardActivity | null>(null);
   const [growth, setGrowth] = useState<DashboardGrowth | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('gaps');
 
+  // URL-persisted state
   const period = (searchParams.get('period') as Period) || 'week';
+  const activeTab = (searchParams.get('tab') as Tab) || 'gaps';
 
   // Knowledge gaps: searches and consultations with 0 results
   const gaps = [
@@ -50,7 +51,19 @@ export function Activity() {
   ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   function setPeriod(newPeriod: Period) {
-    setSearchParams({ period: newPeriod });
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev);
+      params.set('period', newPeriod);
+      return params;
+    });
+  }
+
+  function setActiveTab(newTab: Tab) {
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev);
+      params.set('tab', newTab);
+      return params;
+    });
   }
 
   useEffect(() => {
@@ -108,32 +121,48 @@ export function Activity() {
         ))}
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary Cards - clickable to switch tabs */}
       <div className={styles.summaryGrid}>
-        <div className={`${styles.statCard} ${gaps.length > 0 ? styles.gapCard : ''}`}>
-          <div className={styles.statIcon}>&#9888;&#65039;</div>
+        <button
+          type="button"
+          onClick={() => setActiveTab('gaps')}
+          className={`${styles.statCard} ${styles.clickableCard} ${gaps.length > 0 ? styles.gapCard : ''} ${activeTab === 'gaps' ? styles.activeCard : ''}`}
+        >
+          <div className={styles.statIcon}>⚠️</div>
           <div className={styles.statValue}>{gaps.length}</div>
           <div className={styles.statLabel}>Knowledge Gaps</div>
           <div className={styles.statMeta}>0 result queries</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statIcon}>&#128269;</div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('searches')}
+          className={`${styles.statCard} ${styles.clickableCard} ${activeTab === 'searches' ? styles.activeCard : ''}`}
+        >
+          <div className={styles.statIcon}>🔍</div>
           <div className={styles.statValue}>{summary?.activity.searches_7d ?? 0}</div>
           <div className={styles.statLabel}>Searches</div>
           <div className={styles.statMeta}>avg {avgSearchTime}ms</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statIcon}>&#128172;</div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('consultations')}
+          className={`${styles.statCard} ${styles.clickableCard} ${activeTab === 'consultations' ? styles.activeCard : ''}`}
+        >
+          <div className={styles.statIcon}>💬</div>
           <div className={styles.statValue}>{summary?.activity.consultations_7d ?? 0}</div>
           <div className={styles.statLabel}>Consultations</div>
           <div className={styles.statMeta}>avg {avgMatches} matches</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statIcon}>&#128218;</div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('learnings')}
+          className={`${styles.statCard} ${styles.clickableCard} ${activeTab === 'learnings' ? styles.activeCard : ''}`}
+        >
+          <div className={styles.statIcon}>📚</div>
           <div className={styles.statValue}>{summary?.activity.learnings_7d ?? 0}</div>
           <div className={styles.statLabel}>Learnings</div>
           <div className={styles.statMeta}>this period</div>
-        </div>
+        </button>
       </div>
 
       {/* Growth Chart */}
@@ -246,7 +275,11 @@ export function Activity() {
 
           {/* Searches Tab */}
           {activeTab === 'searches' && activity?.searches.map((s, i) => (
-            <div key={i} className={`${styles.activityItem} ${s.results_count === 0 ? styles.gapItem : ''}`}>
+            <Link
+              key={i}
+              to={`/search?q=${encodeURIComponent(s.query)}`}
+              className={`${styles.activityItem} ${styles.clickable} ${s.results_count === 0 ? styles.gapItem : ''}`}
+            >
               <div className={styles.activityIcon}>🔍</div>
               <div className={styles.activityContent}>
                 <div className={styles.activityTitle}>"{s.query}"</div>
@@ -259,7 +292,7 @@ export function Activity() {
                 </div>
               </div>
               <div className={styles.activityTime}>{formatTimeAgo(s.created_at)}</div>
-            </div>
+            </Link>
           ))}
 
           {/* Consultations Tab */}

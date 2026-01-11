@@ -2,19 +2,22 @@ import { Link, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import styles from './Header.module.css';
 
-// Grouped with separators (no labels)
+// Main nav items
 const navItems = [
   { path: '/', label: 'Overview' },
-  { path: '/feed', label: 'Feed' },
-  { path: '/search', label: 'Search' },
   { path: '/graph', label: 'Graph' },
   { divider: true },
-  { path: '/forum', label: 'Forum' },
-  { path: '/consult', label: 'Consult' },
-  { divider: true },
-  { path: '/decisions', label: 'Decisions' },
+  { path: '/feed', label: 'Feed' },
+  { path: '/search', label: 'Search' },
   { path: '/activity', label: 'Activity' },
   { divider: true },
+  { path: '/forum', label: 'Forum' },
+] as const;
+
+// Dropdown items (Tools)
+const toolsItems = [
+  { path: '/consult', label: 'Consult' },
+  { path: '/decisions', label: 'Decisions' },
   { path: '/handoff', label: 'Handoff' },
 ] as const;
 
@@ -28,6 +31,7 @@ interface SessionStats {
 export function Header() {
   const location = useLocation();
   const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [sessionStartTime] = useState(() => {
     // Get or initialize session start time from localStorage
     const stored = localStorage.getItem('oracle_session_start');
@@ -101,6 +105,33 @@ export function Header() {
             </Link>
           )
         )}
+        <span className={styles.divider} />
+        <div
+          className={styles.dropdown}
+          onMouseEnter={() => setToolsOpen(true)}
+          onMouseLeave={() => setToolsOpen(false)}
+        >
+          <button
+            type="button"
+            className={`${styles.navLink} ${styles.dropdownTrigger} ${toolsItems.some(t => location.pathname === t.path) ? styles.active : ''}`}
+          >
+            Tools ▾
+          </button>
+          {toolsOpen && (
+            <div className={styles.dropdownMenu}>
+              {toolsItems.map(item => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`${styles.dropdownItem} ${location.pathname === item.path ? styles.active : ''}`}
+                  onClick={() => setToolsOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       </nav>
 
       <div className={styles.sessionStats}>
