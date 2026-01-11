@@ -39,7 +39,7 @@ export function Search() {
     e.preventDefault();
     if (query.trim()) {
       setSearchParams({ q: query });
-      doSearch(query);
+      // doSearch is called by useEffect when searchParams changes
     }
   }
 

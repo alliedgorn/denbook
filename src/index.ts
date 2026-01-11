@@ -57,6 +57,9 @@ import type {
   GetTraceInput,
 } from './trace/types.js';
 
+import { logSearch } from './server/logging.js';
+import { ensureServerRunning } from './ensure-server.js';
+
 interface OracleSearchInput {
   query: string;
   type?: 'principle' | 'pattern' | 'learning' | 'retro' | 'all';
@@ -1101,8 +1104,15 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
       metadata.warning = warning;
     }
 
-    // Log the search
+    // Log the search to console
     console.error(`[MCP:SEARCH] "${query}" (${type}, ${mode}) → ${results.length} results in ${searchTime}ms`);
+
+    // Log to database (so Activity page and session stats include MCP searches)
+    try {
+      logSearch(query, type, mode, results.length, searchTime, results);
+    } catch (e) {
+      console.error('[MCP:SEARCH] Failed to log search to database:', e);
+    }
 
     return {
       content: [{
@@ -2266,6 +2276,15 @@ async function main() {
     console.error('[Startup] Chroma pre-connected successfully');
   } catch (e) {
     console.error('[Startup] Chroma pre-connect failed:', e instanceof Error ? e.message : e);
+  }
+
+  // Auto-start HTTP server if not running (Issue #24)
+  try {
+    console.error('[Startup] Ensuring HTTP server is running...');
+    await ensureServerRunning({ background: true, timeout: 5000 });
+    console.error('[Startup] HTTP server ready');
+  } catch (e) {
+    console.error('[Startup] HTTP server auto-start failed:', e instanceof Error ? e.message : e);
   }
 
   await server.run();

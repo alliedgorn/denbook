@@ -15,6 +15,13 @@
       "when": 1768014841758,
       "tag": "0001_chunky_dark_phoenix",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1768119304148,
+      "tag": "0002_mixed_rhodey",
+      "breakpoints": true
     }
   ]
 }

@@ -18,10 +18,20 @@ export function logSearch(
   project?: string
 ) {
   try {
+    // Store top 5 results as JSON (id, type, score, snippet)
+    const resultsJson = results.length > 0
+      ? JSON.stringify(results.slice(0, 5).map(r => ({
+          id: r.id,
+          type: r.type,
+          score: r.score,
+          snippet: r.content?.substring(0, 100)
+        })))
+      : null;
+
     db.prepare(`
-      INSERT INTO search_log (query, type, mode, results_count, search_time_ms, created_at, project)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(query, type, mode, resultsCount, searchTimeMs, Date.now(), project || null);
+      INSERT INTO search_log (query, type, mode, results_count, search_time_ms, created_at, project, results)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(query, type, mode, resultsCount, searchTimeMs, Date.now(), project || null, resultsJson);
 
     // Comprehensive console logging
     console.log(`\n${'='.repeat(60)}`);

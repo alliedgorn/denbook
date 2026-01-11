@@ -246,6 +246,31 @@ app.get('/api/dashboard/growth', (c) => {
   return c.json(handleDashboardGrowth(period));
 });
 
+// Session stats endpoint - tracks activity from DB (includes MCP usage)
+app.get('/api/session/stats', (c) => {
+  const since = c.req.query('since');
+  const sinceTime = since ? parseInt(since) : Date.now() - 24 * 60 * 60 * 1000; // Default 24h
+
+  const searches = db.prepare(
+    'SELECT COUNT(*) as count FROM search_log WHERE created_at > ?'
+  ).get(sinceTime) as { count: number };
+
+  const consultations = db.prepare(
+    'SELECT COUNT(*) as count FROM consult_log WHERE created_at > ?'
+  ).get(sinceTime) as { count: number };
+
+  const learnings = db.prepare(
+    'SELECT COUNT(*) as count FROM learn_log WHERE created_at > ?'
+  ).get(sinceTime) as { count: number };
+
+  return c.json({
+    searches: searches?.count || 0,
+    consultations: consultations?.count || 0,
+    learnings: learnings?.count || 0,
+    since: sinceTime
+  });
+});
+
 // ============================================================================
 // Thread Routes
 // ============================================================================
@@ -561,8 +586,8 @@ app.get('/legacy/dashboard', (c) => {
 // Static Files + SPA Fallback
 // ============================================================================
 
-// Serve static files from frontend/dist
-app.use('/*', serveStatic({ root: './frontend/dist' }));
+// Serve static files from frontend/dist (use absolute path)
+app.use('/*', serveStatic({ root: FRONTEND_DIST }));
 
 // SPA fallback - serve index.html for unmatched routes
 app.get('*', (c) => {

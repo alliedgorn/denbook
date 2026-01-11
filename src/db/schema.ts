@@ -53,6 +53,7 @@ export const searchLog = sqliteTable('search_log', {
   searchTimeMs: integer('search_time_ms'),
   createdAt: integer('created_at').notNull(),
   project: text('project'),
+  results: text('results'), // JSON array of top 5 results (id, type, score, snippet)
 }, (table) => [
   index('idx_search_project').on(table.project),
   index('idx_search_created').on(table.createdAt),

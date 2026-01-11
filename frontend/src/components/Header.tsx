@@ -28,34 +28,44 @@ interface SessionStats {
 export function Header() {
   const location = useLocation();
   const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
+  const [sessionStartTime] = useState(() => {
+    // Get or initialize session start time from localStorage
+    const stored = localStorage.getItem('oracle_session_start');
+    if (stored) return parseInt(stored);
+    const now = Date.now();
+    localStorage.setItem('oracle_session_start', String(now));
+    return now;
+  });
 
   useEffect(() => {
     loadSessionStats();
-    // Refresh stats every 30 seconds
+    // Refresh stats every 30 seconds from backend
     const interval = setInterval(loadSessionStats, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [sessionStartTime]);
 
-  function loadSessionStats() {
-    const stored = localStorage.getItem('oracle_session');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Validate startTime exists and is a valid number
-      if (!parsed.startTime || isNaN(parsed.startTime)) {
-        parsed.startTime = Date.now();
-        localStorage.setItem('oracle_session', JSON.stringify(parsed));
+  async function loadSessionStats() {
+    try {
+      // Fetch real stats from backend (includes MCP usage)
+      const response = await fetch(`/api/session/stats?since=${sessionStartTime}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSessionStats({
+          searches: data.searches,
+          consultations: data.consultations,
+          learnings: data.learnings,
+          startTime: sessionStartTime
+        });
       }
-      setSessionStats(parsed);
-    } else {
-      // Initialize session
-      const initial: SessionStats = {
+    } catch (e) {
+      console.error('Failed to load session stats:', e);
+      // Fallback to zeros on error
+      setSessionStats({
         searches: 0,
         consultations: 0,
         learnings: 0,
-        startTime: Date.now()
-      };
-      localStorage.setItem('oracle_session', JSON.stringify(initial));
-      setSessionStats(initial);
+        startTime: sessionStartTime
+      });
     }
   }
 
