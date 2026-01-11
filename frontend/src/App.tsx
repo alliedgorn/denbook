@@ -7,6 +7,7 @@ import { DocDetail } from './pages/DocDetail';
 import { Search } from './pages/Search';
 import { Consult } from './pages/Consult';
 import { Graph } from './pages/Graph';
+import { Graph3D } from './pages/Graph3D';
 import { Handoff } from './pages/Handoff';
 import { Activity } from './pages/Activity';
 import { Forum } from './pages/Forum';
@@ -22,7 +23,8 @@ function App() {
         <Route path="/doc/:id" element={<DocDetail />} />
         <Route path="/search" element={<Search />} />
         <Route path="/consult" element={<Consult />} />
-        <Route path="/graph" element={<Graph />} />
+        <Route path="/graph" element={<Graph3D />} />
+        <Route path="/graph2d" element={<Graph />} />
         <Route path="/handoff" element={<Handoff />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/forum" element={<Forum />} />
