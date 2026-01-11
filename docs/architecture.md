@@ -209,3 +209,21 @@ FTS5 special characters are stripped to prevent SQL injection via FTS5 syntax er
 |---------|---------|
 | 0.1.0 | Initial MCP server with FTS5 |
 | 0.2.0 | ChromaDB hybrid search, oracle_stats, oracle_concepts, FTS5 bug fix |
+
+## Graph API Performance
+
+The `/api/graph` endpoint intentionally excludes retrospectives to prevent O(n²) explosion:
+
+| Scenario | Nodes | Link Comparisons |
+|----------|-------|-----------------|
+| Current (no retros) | 459 | ~210k |
+| With all retros | 4443 | ~20M |
+
+**Current design:**
+- All principles (~359)
+- Random 100 learnings
+- NO retros (3984 would kill performance)
+
+**If retros needed:** Sample top 50 by recency, never include all.
+
+See: `src/server/handlers.ts:handleGraph()`
