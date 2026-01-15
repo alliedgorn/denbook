@@ -22,8 +22,14 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Run tests
-        run: bun run test
+      - name: Setup database directory
+        run: mkdir -p ~/.oracle-v2
+
+      - name: Run unit tests
+        run: bun test src/oracle-core.test.ts
+
+      - name: Run database integration tests
+        run: bun test src/integration/database.test.ts
 
       # Note: tsc build fails due to bun:sqlite types
       # Tests run directly with bun which handles these correctly
