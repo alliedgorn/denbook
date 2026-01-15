@@ -281,9 +281,17 @@ Oracle-v2 is built for educational purposes and personal knowledge management. I
 
 ## References
 
+### Documentation
 - [**TIMELINE.md**](./TIMELINE.md) - Full evolution history (Sept 2025 → Jan 2026)
+- [**docs/INSTALL.md**](./docs/INSTALL.md) - Complete installation guide
 - [docs/API.md](./docs/API.md) - API documentation
 - [docs/architecture.md](./docs/architecture.md) - Architecture details
+
+### Learnings (from building this)
+- [Install, Seed, Index Workflow](./ψ/memory/learnings/2026-01-15_oracle-nightly-install-seed-index-workflow.md) - Deep dive into fresh install pipeline
+- [Fresh Install Testing Pattern](./ψ/memory/learnings/2026-01-15_fresh-install-testing-pattern.md) - Lessons from remote testing
+
+### External
 - [Drizzle ORM](https://orm.drizzle.team/) - Database ORM
 - [MCP SDK](https://github.com/anthropics/anthropic-sdk-typescript) - Protocol docs
 - [claude-mem](https://github.com/thedotmack/claude-mem) - Inspiration for memory & process management
