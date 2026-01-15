@@ -16,7 +16,13 @@ jobs:
         with:
           bun-version: latest
       - run: bun install
-      - run: bun test:unit
+      - run: bun test:unit --coverage
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
 
   integration:
     name: Integration Tests
