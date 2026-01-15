@@ -1,8 +1,10 @@
 import { defineConfig } from 'drizzle-kit';
 import path from 'path';
 
-// Default to oracle.db in same directory as this config
-const DB_PATH = process.env.ORACLE_DB_PATH || path.join(__dirname, 'oracle.db');
+// Default to ~/.oracle-v2/oracle.db (same as server)
+const ORACLE_DATA_DIR = process.env.ORACLE_DATA_DIR ||
+  path.join(process.env.HOME || '/tmp', '.oracle-v2');
+const DB_PATH = process.env.ORACLE_DB_PATH || path.join(ORACLE_DATA_DIR, 'oracle.db');
 
 export default defineConfig({
   dialect: 'sqlite',
