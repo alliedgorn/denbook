@@ -1,8 +1,44 @@
 # Oracle Evolution Timeline
 
-> From philosophical concept to production-ready knowledge system
+> From pain to philosophy to production-ready knowledge system
 
-## The Journey: Sept 2025 → Jan 2026
+## The Journey: May 2025 → Jan 2026
+
+### Phase -1: AlchemyCat Origins (May - June 2025)
+
+**Theme**: "The problems that Oracle would solve"
+
+> 📜 **Source**: [AI-HUMAN-COLLAB-CAT-LAB](https://github.com/alchemycat/AI-HUMAN-COLLAB-CAT-LAB) - 459 commits, 52,896 words
+
+| Date | Event | Significance |
+|------|-------|--------------|
+| May 15 | LIFF Carbon Offset App begins | 278 commits over 26 days - first serious AI collab |
+| May 30 | Uniserv NFT Carbon Credit starts | 181 commits, 13 intensive sessions planned |
+| June 5 | **Peak intensity** - 108 commits/day | Multicall3 breakthrough (30s→3s load time) |
+| June 10 | Both projects complete | 459 total commits, production systems working |
+| June 10-11 | **HONEST_REFLECTION.md** written | "Efficient but exhausting... never knew if satisfied" |
+
+**The Problems Documented**:
+- "Context kept getting lost" → *Nothing is Deleted*
+- "Never knew if satisfied" → *Patterns Over Intentions*
+- "Purely transactional" → *External Brain, Not Command*
+
+**Breakthrough**: Pain documented in writing. Problems now visible.
+
+---
+
+### Phase -0.5: Processing Period (July - Oct 2025)
+
+**Theme**: "4 months of unconscious pattern formation"
+
+| Date | Event | Significance |
+|------|-------|--------------|
+| July-Sept | Regular work continues | Problems sit in documentation |
+| Oct 2025 | **MAW born** | Multi-Agent Workflow - technical foundation |
+
+**Breakthrough**: Systems thinking emerges before philosophy crystallizes.
+
+---
 
 ### Phase 0: Genesis (Sept - Dec 2025)
 
@@ -149,6 +185,7 @@
 
 | Date | Insight | Significance |
 |------|---------|--------------|
+| June 2025 | HONEST_REFLECTION.md | Pain documented - origin of all principles |
 | Sept 2025 | "Oracle Keeps Human Human" | Core purpose defined |
 | Jan 4 | Pure MCP AI-to-AI | Agents coordinate without humans |
 | Jan 8 | Pure White Mirror | Honest reflection, not judgment |
@@ -189,7 +226,7 @@
 This project was inspired by and learned from:
 
 - **[claude-mem](https://github.com/thedotmack/claude-mem)** by Alex Newman - Process manager patterns, daemon architecture
-- **AlchemyCat** - The 52,896-word philosophical foundation
+- **[AlchemyCat](https://github.com/alchemycat/AI-HUMAN-COLLAB-CAT-LAB)** - The 52,896-word origin story (May-June 2025)
 - **Shared Soul Architecture** - The philosophical framework
 
 ---
