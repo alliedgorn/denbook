@@ -37,7 +37,7 @@ if launchctl list | grep -q "com.oracle.server"; then
     echo ""
     echo "🔮 Oracle Server is now running!"
     echo ""
-    echo "   URL: http://localhost:37778"
+    echo "   URL: http://localhost:47778"
     echo "   Logs: $LOG_DIR/oracle-server.log"
     echo "   Errors: $LOG_DIR/oracle-server.error.log"
     echo ""

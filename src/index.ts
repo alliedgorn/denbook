@@ -191,8 +191,10 @@ class OracleMCPServer {
     }
     this.repoRoot = process.env.ORACLE_REPO_ROOT || process.cwd();
 
-    // Initialize ChromaMcpClient (uses same uvx/chroma-mcp as indexer)
+    // Common paths
     const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp';
+
+    // Initialize ChromaMcpClient (uses same uvx/chroma-mcp as indexer)
     const chromaPath = path.join(homeDir, '.chromadb');
     this.chromaMcp = new ChromaMcpClient('oracle_knowledge', chromaPath, '3.12');
 
@@ -209,7 +211,6 @@ class OracleMCPServer {
     );
 
     // Initialize SQLite database (central location: ~/.oracle-v2/)
-    const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp';
     const oracleDataDir = process.env.ORACLE_DATA_DIR || path.join(homeDir, '.oracle-v2');
     const dbPath = process.env.ORACLE_DB_PATH || path.join(oracleDataDir, 'oracle.db');
     this.db = new Database(dbPath);

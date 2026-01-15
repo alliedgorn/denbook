@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import * as THREE from 'three';
 import { getGraph, getFile } from '../api/oracle';
+import { useHandTracking } from '../hooks/useHandTracking';
 import styles from './Graph3D.module.css';
 
 interface Node {
@@ -158,6 +159,49 @@ export function Graph3D() {
   const [particleSpeed, setParticleSpeed] = useState(0.3);
   const [showAllLinks, setShowAllLinks] = useState(false);  // Toggle all links
   const [sphereMode, setSphereMode] = useState(false);  // Sphere vs Cluster layout
+  const [handMode, setHandMode] = useState(false);  // Hand gesture control
+
+  // Hand tracking callback - maps hand position to camera rotation
+  const handleHandMove = useCallback((pos: { x: number; y: number }) => {
+    // Map normalized hand position (0-1) to rotation angles
+    // x: left-right hand movement -> horizontal rotation
+    // y: up-down hand movement -> vertical rotation
+    targetAngleRef.current = {
+      x: (pos.x - 0.5) * Math.PI * 2,  // -PI to PI
+      y: (pos.y - 0.5) * -1,           // -0.5 to 0.5 (inverted)
+    };
+  }, []);
+
+  // Hand tracking hook
+  const {
+    isReady: handReady,
+    isTracking: handTracking,
+    error: handError,
+    handPosition,
+    debug: handDebug,
+    startTracking,
+    stopTracking,
+  } = useHandTracking({
+    enabled: handMode,
+    onHandMove: handleHandMove,
+  });
+
+  // Toggle hand mode
+  const toggleHandMode = useCallback(() => {
+    if (handMode) {
+      stopTracking();
+      setHandMode(false);
+    } else {
+      setHandMode(true);
+    }
+  }, [handMode, stopTracking]);
+
+  // Auto-start tracking when hand mode enabled and ready
+  useEffect(() => {
+    if (handMode && handReady && !handTracking) {
+      startTracking();
+    }
+  }, [handMode, handReady, handTracking, startTracking]);
 
   // Refs for animation loop access
   const hudRef = useRef({
@@ -213,7 +257,6 @@ export function Graph3D() {
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const meshesRef = useRef<THREE.Mesh[]>([]);
-  const linesRef = useRef<THREE.LineSegments | null>(null);
   const animationRef = useRef<number>(0);
 
   // Refs for cleanup (memory leak fix)
@@ -270,7 +313,7 @@ export function Graph3D() {
       const data = await getGraph();
       const clusters = clusterNodes(data.nodes, data.links || []);
 
-      const processedNodes = data.nodes.map((n: Node, i: number) => ({
+      const processedNodes = data.nodes.map((n: Node) => ({
         ...n,
         cluster: clusters.get(n.id) || 0,
       }));
@@ -507,14 +550,13 @@ export function Graph3D() {
 
       // Update link visibility based on active node and type filter
       const activeId = activeNodeRef.current;
-      const connectedSet = activeId ? adjacencyRef.current.get(activeId) : null;
       const showAll = hudRef.current.showAllLinks;
       const currentTypeFilter = typeFilterRef.current;
 
       let particleIndex = 0;
       const positions = travelingParticles.geometry.attributes.position.array as Float32Array;
 
-      linkDataArray.forEach((linkData, i) => {
+      linkDataArray.forEach((linkData) => {
         const mat = linkData.line.material as THREE.LineBasicMaterial;
         const isConnected = activeId && (linkData.sourceId === activeId || linkData.targetId === activeId);
 
@@ -801,6 +843,16 @@ export function Graph3D() {
           {selectedNode && <strong> • {selectedNode.type}: {selectedNode.label?.slice(0, 30) || 'Unknown'}...</strong>}
         </span>
         <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={toggleHandMode}
+            className={styles.hudToggle}
+            style={{
+              background: handTracking ? '#4ade80' : undefined,
+              color: handTracking ? '#000' : undefined
+            }}
+          >
+            {handTracking ? '✋ Hand ON' : '✋ Hand'}
+          </button>
           <button onClick={resetCamera} className={styles.hudToggle}>Reset</button>
           <button
             onClick={() => setShowHud(!showHud)}
@@ -1060,6 +1112,57 @@ export function Graph3D() {
             }}>
               {fileContent}
             </pre>
+          )}
+        </div>
+      )}
+
+      {/* Hand Tracking Status */}
+      {handMode && (
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          left: '20px',
+          background: 'rgba(15, 15, 25, 0.9)',
+          borderRadius: '8px',
+          padding: '12px',
+          border: '1px solid rgba(74, 222, 128, 0.3)',
+          zIndex: 100,
+          minWidth: '150px'
+        }}>
+          <div style={{ color: '#4ade80', fontSize: '12px', marginBottom: '8px' }}>
+            ✋ Hand Tracking
+          </div>
+          <div style={{ color: '#888', fontSize: '10px', marginBottom: '4px' }}>{handDebug}</div>
+          {handError ? (
+            <div style={{ color: '#f87171', fontSize: '11px' }}>{handError}</div>
+          ) : !handTracking ? (
+            <div style={{ color: '#888', fontSize: '11px' }}>Starting...</div>
+          ) : handPosition ? (
+            <div style={{ color: '#e0e0e0', fontSize: '11px' }}>
+              X: {(handPosition.x * 100).toFixed(0)}% | Y: {(handPosition.y * 100).toFixed(0)}%
+              <div style={{
+                width: '100%',
+                height: '60px',
+                background: '#1a1a2e',
+                borderRadius: '4px',
+                marginTop: '8px',
+                position: 'relative'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  left: `${handPosition.x * 100}%`,
+                  top: `${handPosition.y * 100}%`,
+                  width: '12px',
+                  height: '12px',
+                  background: '#4ade80',
+                  borderRadius: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  boxShadow: '0 0 10px #4ade80'
+                }} />
+              </div>
+            </div>
+          ) : (
+            <div style={{ color: '#888', fontSize: '11px' }}>Show your hand to camera</div>
           )}
         </div>
       )}

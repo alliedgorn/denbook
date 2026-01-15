@@ -16,7 +16,7 @@ cd frontend && pnpm dev
 
 | Service | Port | Command |
 |---------|------|---------|
-| Backend (HTTP) | `37778` | `pnpm run server` |
+| Backend (HTTP) | `47778` | `pnpm run server` |
 | Frontend (Vite) | `3000` | `cd frontend && pnpm dev` |
 
 ---
@@ -25,9 +25,9 @@ cd frontend && pnpm dev
 
 | Page | URL | Description |
 |------|-----|-------------|
-| Arthur Chat | http://localhost:37778/ | Chat interface |
-| Oracle Knowledge | http://localhost:37778/oracle | Legacy knowledge browser |
-| Dashboard (legacy) | http://localhost:37778/dashboard/ui | Old HTML dashboard |
+| Arthur Chat | http://localhost:47778/ | Chat interface |
+| Oracle Knowledge | http://localhost:47778/oracle | Legacy knowledge browser |
+| Dashboard (legacy) | http://localhost:47778/dashboard/ui | Old HTML dashboard |
 | **React Dashboard** | http://localhost:3000 | Modern React UI |
 
 ---
@@ -59,7 +59,7 @@ Returns server status.
 {
   "status": "ok",
   "server": "oracle-v2",
-  "port": 37778
+  "port": 47778
 }
 ```
 
@@ -78,8 +78,8 @@ Get project context from ghq-format directory path.
 
 **Example:**
 ```bash
-curl "http://localhost:37778/context"
-curl "http://localhost:37778/context?cwd=$HOME/Code/github.com/owner/repo/src"
+curl "http://localhost:47778/context"
+curl "http://localhost:47778/context?cwd=$HOME/Code/github.com/owner/repo/src"
 ```
 
 **Response:**
@@ -116,7 +116,7 @@ Full-text search across the knowledge base.
 
 **Example:**
 ```bash
-curl "http://localhost:37778/search?q=nothing+deleted&type=principle&limit=5"
+curl "http://localhost:47778/search?q=nothing+deleted&type=principle&limit=5"
 ```
 
 **Response:**
@@ -158,7 +158,7 @@ Browse documents without searching.
 
 **Example:**
 ```bash
-curl "http://localhost:37778/list?type=learning&limit=5"
+curl "http://localhost:47778/list?type=learning&limit=5"
 ```
 
 ---
@@ -177,7 +177,7 @@ Get Oracle guidance on a decision.
 
 **Example:**
 ```bash
-curl "http://localhost:37778/consult?q=force+push+safety"
+curl "http://localhost:47778/consult?q=force+push+safety"
 ```
 
 **Response:**
@@ -207,7 +207,7 @@ Get a random principle or learning for reflection.
 
 **Example:**
 ```bash
-curl "http://localhost:37778/reflect"
+curl "http://localhost:47778/reflect"
 ```
 
 **Response:**
@@ -231,7 +231,7 @@ Get database statistics.
 
 **Example:**
 ```bash
-curl "http://localhost:37778/stats"
+curl "http://localhost:47778/stats"
 ```
 
 **Response:**
@@ -300,7 +300,7 @@ Add a new learning to the knowledge base.
 
 **Example:**
 ```bash
-curl -X POST http://localhost:37778/learn \
+curl -X POST http://localhost:47778/learn \
   -H "Content-Type: application/json" \
   -d '{"pattern":"New learning","concepts":["test"]}'
 ```
@@ -326,7 +326,7 @@ Read full file content.
 
 **Example:**
 ```bash
-curl "http://localhost:37778/file?path=%CF%88/memory/principles/safety.md"
+curl "http://localhost:47778/file?path=%CF%88/memory/principles/safety.md"
 ```
 
 **Response:**
@@ -473,7 +473,7 @@ E2E tests use the `dev-browser` skill for browser automation.
 cd ~/.claude/skills/dev-browser && ./server.sh &
 
 # 2. Ensure backend and frontend are running
-pnpm run server &                  # Backend on :37778
+pnpm run server &                  # Backend on :47778
 cd frontend && pnpm dev &          # Frontend on :3000
 
 # 3. Run E2E tests
@@ -499,13 +499,13 @@ cd ~/.claude/skills/dev-browser && npx tsx /path/to/oracle-v2/e2e/run-e2e.ts
 ### API Integration Tests
 ```bash
 # Health check
-curl -s http://localhost:37778/health
+curl -s http://localhost:47778/health
 
 # Search test
-curl -s "http://localhost:37778/search?q=nothing+deleted"
+curl -s "http://localhost:47778/search?q=nothing+deleted"
 
 # Dashboard summary
-curl -s http://localhost:37778/dashboard/summary
+curl -s http://localhost:47778/dashboard/summary
 ```
 
 ---

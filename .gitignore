@@ -27,6 +27,7 @@ chroma/
 
 # Temporary files
 tmp/
+.tmp/
 
 # Test coverage
 coverage/

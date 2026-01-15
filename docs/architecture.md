@@ -55,7 +55,7 @@ Exposes tools to Claude via Model Context Protocol:
 
 ### HTTP Server (`src/server.ts`)
 
-REST API on port 37778:
+REST API on port 47778:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -175,7 +175,7 @@ CREATE TABLE indexing_status (
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `ORACLE_REPO_ROOT` | `process.cwd()` | Knowledge base location (your ψ/ repo) |
-| `PORT` | `37778` | HTTP server port |
+| `PORT` | `47778` | HTTP server port |
 
 ### MCP Configuration
 

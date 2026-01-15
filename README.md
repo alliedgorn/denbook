@@ -24,25 +24,26 @@ Claude Code → MCP Server → SQLite + Chroma + Drizzle ORM
 ## Quick Start
 
 ```bash
-# Install dependencies
-pnpm install
+# One-time setup (installs deps, creates DB, builds frontend)
+./scripts/setup.sh
 
-# Index Oracle knowledge
-pnpm run index
+# Or manually:
+bun install
+bun run db:push           # Initialize database
 
 # Start services
-pnpm run server      # HTTP API on :37778
-cd frontend && pnpm dev  # React dashboard on :3000
+bun run server            # HTTP API on :47778
+cd frontend && bun dev    # React dashboard on :3000
 ```
 
 ## Services
 
 | Service | Port | Command |
 |---------|------|---------|
-| HTTP API | 37778 | `pnpm run server` |
-| React Dashboard | 3000 | `cd frontend && pnpm dev` |
-| MCP Server | stdio | `pnpm run dev` |
-| Drizzle Studio | local.drizzle.studio | `pnpm db:studio` |
+| HTTP API | 47778 | `bun run server` |
+| React Dashboard | 3000 | `cd frontend && bun dev` |
+| MCP Server | stdio | `bun run dev` |
+| Drizzle Studio | local.drizzle.studio | `bun db:studio` |
 
 ## API Endpoints
 
@@ -139,7 +140,7 @@ pnpm test:coverage     # With coverage
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ORACLE_PORT` | 37778 | HTTP server port |
+| `ORACLE_PORT` | 47778 | HTTP server port |
 | `ORACLE_REPO_ROOT` | `process.cwd()` | Knowledge base root (your ψ/ repo) |
 
 ## Data Model
