@@ -30,7 +30,9 @@ jobs:
       - run: bun install
       - run: mkdir -p ~/.oracle-v2
       - run: bun run db:push
-      - run: bun test:integration
+      - run: bun test:integration:db
+      - run: bun test:integration:mcp
+      # HTTP tests skipped in CI - require running server with frontend
 
   e2e:
     name: E2E Tests
