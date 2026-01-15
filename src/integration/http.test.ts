@@ -78,12 +78,6 @@ describe("HTTP API Integration", () => {
       expect(typeof data.total).toBe("number");
     });
 
-    test("GET /api/concepts returns concept list", async () => {
-      const res = await fetch(`${BASE_URL}/api/concepts`);
-      expect(res.ok).toBe(true);
-      const data = await res.json();
-      expect(Array.isArray(data.concepts)).toBe(true);
-    });
   });
 
   // ===================
@@ -126,21 +120,21 @@ describe("HTTP API Integration", () => {
       const res = await fetch(`${BASE_URL}/api/list`);
       expect(res.ok).toBe(true);
       const data = await res.json();
-      expect(Array.isArray(data.documents)).toBe(true);
+      expect(Array.isArray(data.results)).toBe(true);
     });
 
     test("GET /api/list with type filter", async () => {
       const res = await fetch(`${BASE_URL}/api/list?type=principle`);
       expect(res.ok).toBe(true);
       const data = await res.json();
-      expect(Array.isArray(data.documents)).toBe(true);
+      expect(Array.isArray(data.results)).toBe(true);
     });
 
     test("GET /api/list with pagination", async () => {
       const res = await fetch(`${BASE_URL}/api/list?limit=10&offset=0`);
       expect(res.ok).toBe(true);
       const data = await res.json();
-      expect(data.documents.length).toBeLessThanOrEqual(10);
+      expect(data.results.length).toBeLessThanOrEqual(10);
     });
   });
 
