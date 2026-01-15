@@ -63,6 +63,10 @@ bun run db:push
 echo "🌱 Creating seed philosophy files..."
 ./scripts/seed.sh
 
+# Build frontend
+echo "🎨 Building frontend..."
+cd frontend && bun install && bun run build && cd ..
+
 # Index seed data
 echo "📚 Indexing seed data..."
 ORACLE_REPO_ROOT="$DATA_DIR/seed" bun run index
