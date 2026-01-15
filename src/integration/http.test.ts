@@ -75,7 +75,7 @@ describe("HTTP API Integration", () => {
       const res = await fetch(`${BASE_URL}/api/stats`);
       expect(res.ok).toBe(true);
       const data = await res.json();
-      expect(typeof data.totalDocuments).toBe("number");
+      expect(typeof data.total).toBe("number");
     });
 
     test("GET /api/concepts returns concept list", async () => {

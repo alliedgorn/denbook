@@ -32,7 +32,8 @@ jobs:
       - run: bun run db:push
       - run: bun test:integration:db
       - run: bun test:integration:mcp
-      # HTTP tests skipped in CI - require running server with frontend
+      - run: bun test:seed
+      - run: bun test:integration:http
 
   e2e:
     name: E2E Tests
