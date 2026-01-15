@@ -540,7 +540,8 @@ describe('Database Integration', () => {
 // ============================================================================
 
 describe('Path Security', () => {
-  const REPO_ROOT = '/Users/nat/Code/github.com/laris-co/oracle-v2';
+  // Use current file's directory to derive repo root (works on any machine)
+  const REPO_ROOT = path.resolve(__dirname, '..');
 
   function isPathSafe(requestedPath: string, repoRoot: string): boolean {
     // Resolve the path to handle .. and symlinks

@@ -79,20 +79,20 @@ Get project context from ghq-format directory path.
 **Example:**
 ```bash
 curl "http://localhost:37778/context"
-curl "http://localhost:37778/context?cwd=/Users/nat/Code/github.com/owner/repo/src"
+curl "http://localhost:37778/context?cwd=$HOME/Code/github.com/owner/repo/src"
 ```
 
 **Response:**
 ```json
 {
-  "github": "https://github.com/laris-co/oracle-v2",
-  "owner": "laris-co",
-  "repo": "oracle-v2",
-  "ghqPath": "github.com/laris-co/oracle-v2",
-  "root": "/Users/nat/Code/github.com/laris-co/oracle-v2",
-  "cwd": "/Users/nat/Code/github.com/laris-co/oracle-v2",
+  "github": "https://github.com/owner/repo",
+  "owner": "owner",
+  "repo": "repo",
+  "ghqPath": "github.com/owner/repo",
+  "root": "/home/user/Code/github.com/owner/repo",
+  "cwd": "/home/user/Code/github.com/owner/repo/src",
   "branch": "main",
-  "worktree": "/Users/nat/Code/github.com/laris-co/oracle-v2"
+  "worktree": "/home/user/Code/github.com/owner/repo"
 }
 ```
 

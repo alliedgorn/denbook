@@ -189,10 +189,11 @@ class OracleMCPServer {
     if (this.readOnly) {
       console.error('[Oracle] Running in READ-ONLY mode');
     }
-    this.repoRoot = process.env.ORACLE_REPO_ROOT || '/Users/nat/Code/github.com/laris-co/Nat-s-Agents';
+    this.repoRoot = process.env.ORACLE_REPO_ROOT || process.cwd();
 
     // Initialize ChromaMcpClient (uses same uvx/chroma-mcp as indexer)
-    const chromaPath = path.join(process.env.HOME || '/Users/nat', '.chromadb');
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp';
+    const chromaPath = path.join(homeDir, '.chromadb');
     this.chromaMcp = new ChromaMcpClient('oracle_knowledge', chromaPath, '3.12');
 
     this.server = new Server(

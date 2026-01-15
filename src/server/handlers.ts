@@ -12,7 +12,8 @@ import { detectProject } from './project-detect.js';
 
 // Singleton ChromaMcpClient for vector search
 // HTTP server can use this because it's NOT an MCP server (no stdio conflict)
-const CHROMA_PATH = path.join(process.env.HOME || '/Users/nat', '.chromadb');
+const HOME_DIR = process.env.HOME || process.env.USERPROFILE || '/tmp';
+const CHROMA_PATH = path.join(HOME_DIR, '.chromadb');
 let chromaClient: ChromaMcpClient | null = null;
 
 function getChromaClient(): ChromaMcpClient {

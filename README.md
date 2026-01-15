@@ -140,7 +140,7 @@ pnpm test:coverage     # With coverage
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ORACLE_PORT` | 37778 | HTTP server port |
-| `ORACLE_REPO_ROOT` | `/Users/nat/.../Nat-s-Agents` | Knowledge base root |
+| `ORACLE_REPO_ROOT` | `process.cwd()` | Knowledge base root (your ψ/ repo) |
 
 ## Data Model
 

@@ -23,8 +23,8 @@ export interface ProjectContext {
 
 /**
  * Parse ghq-format path to extract GitHub project info
- * e.g., /Users/nat/Code/github.com/laris-co/oracle-v2/src
- *    -> github.com/laris-co/oracle-v2
+ * e.g., ~/Code/github.com/owner/repo/src
+ *    -> github.com/owner/repo
  */
 export function parseGhqPath(path: string): { owner: string; repo: string; ghqPath: string } | null {
   // Match github.com/owner/repo pattern anywhere in the path

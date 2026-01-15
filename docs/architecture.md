@@ -174,7 +174,7 @@ CREATE TABLE indexing_status (
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `ORACLE_REPO_ROOT` | `/Users/nat/.../Nat-s-Agents` | Knowledge base location |
+| `ORACLE_REPO_ROOT` | `process.cwd()` | Knowledge base location (your ψ/ repo) |
 | `PORT` | `37778` | HTTP server port |
 
 ### MCP Configuration
