@@ -40,8 +40,11 @@
 
 **Theme**: "Make it work with SQLite FTS5"
 
+> 📜 [Original SPEC.md](./docs/SPEC-original.md) written Dec 29 - planned 3 tools, delivered 19.
+
 | Date | Commit/Issue | Event |
 |------|--------------|-------|
+| Dec 29 | [SPEC.md](./docs/SPEC-original.md) | Original specification (3 tools planned) |
 | Dec 29 | Issue #63 | Fear-Management Framework |
 | Dec 29 | Issue #64 | Session Awareness `/now` concept |
 | Dec 29 | `2f02bf4` | Move DB from lab to data directory |

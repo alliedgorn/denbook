@@ -1,8 +1,19 @@
 ---
-title: Oracle v2 - MCP Memory Layer
+title: Oracle v2 - MCP Memory Layer (Original Specification)
 created: 2025-12-29
-status: exploration
+archived: 2026-01-15
+status: historical
 learned-from: claude-mem
+note: This is the original planning document. See README.md for current implementation.
+---
+
+# Oracle v2 - Original Specification (Dec 2025)
+
+> **📜 Historical Document**: This was the original planning spec from Dec 29, 2025.
+> The project has evolved significantly. For current state, see [README.md](../README.md) and [TIMELINE.md](../TIMELINE.md).
+>
+> **Planned**: 3 tools → **Delivered**: 19 tools
+
 ---
 
 # Oracle v2 - MCP Memory Layer
