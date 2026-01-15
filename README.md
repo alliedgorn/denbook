@@ -13,11 +13,15 @@
 ## Install
 
 ```bash
-# Add to Claude Code
-claude mcp add oracle-v2 -- bunx github:Soul-Brews-Studio/oracle-v2
+# Clone and setup (creates ~/.oracle-v2/ with database)
+git clone https://github.com/Soul-Brews-Studio/oracle-v2
+cd oracle-v2 && bun install && bun run db:push
 
-# Or run directly
-bunx github:Soul-Brews-Studio/oracle-v2
+# Add to Claude Code
+claude mcp add oracle-v2 -- bun /path/to/oracle-v2/src/index.ts
+
+# Or with bunx (after setup)
+claude mcp add oracle-v2 -- bunx github:Soul-Brews-Studio/oracle-v2
 ```
 
 TypeScript implementation of semantic search over Oracle philosophy using Model Context Protocol (MCP), with HTTP API and React dashboard.

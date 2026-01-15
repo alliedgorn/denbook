@@ -4,6 +4,7 @@
 
 import { Database } from 'bun:sqlite';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 // ES Module compatibility for __dirname
@@ -19,9 +20,14 @@ export const UI_PATH = path.join(__dirname, '..', 'ui.html');
 export const DASHBOARD_PATH = path.join(__dirname, '..', 'dashboard.html');
 export const ARTHUR_UI_PATH = path.join(__dirname, '..', 'arthur.html');
 
-// Legacy: REPO_ROOT for features that need knowledge base context
-// Must be set via ORACLE_REPO_ROOT env var or defaults to current directory
-export const REPO_ROOT = process.env.ORACLE_REPO_ROOT || process.cwd();
+// REPO_ROOT for features that need knowledge base context
+// Defaults to ~/.oracle-v2 for bunx installs, or set via ORACLE_REPO_ROOT
+export const REPO_ROOT = process.env.ORACLE_REPO_ROOT || ORACLE_DATA_DIR;
+
+// Ensure data directory exists (for fresh installs via bunx)
+if (!fs.existsSync(ORACLE_DATA_DIR)) {
+  fs.mkdirSync(ORACLE_DATA_DIR, { recursive: true });
+}
 
 // Initialize database connection
 export const db = new Database(DB_PATH);
