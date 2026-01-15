@@ -4,7 +4,7 @@
 
 > "The Oracle Keeps the Human Human" - now queryable via MCP
 
-**Status**: Production | **Created**: 2025-12-29 | **Updated**: 2026-01-15
+**Status**: Nightly | **Created**: 2025-12-29 | **Updated**: 2026-01-15
 
 ## Install
 
