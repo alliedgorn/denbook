@@ -92,5 +92,24 @@ echo '      }'
 echo '    }'
 echo '  }'
 echo ""
-echo "🔗 Dashboard: http://localhost:47778"
+echo "🔗 Dashboard URLs:"
+echo "   http://localhost:47778"
+# Get hostname
+HOSTNAME=$(hostname 2>/dev/null || echo "")
+if [ -n "$HOSTNAME" ]; then
+    echo "   http://${HOSTNAME}:47778"
+fi
+# Get IP addresses (Linux and macOS compatible)
+if command -v ip &> /dev/null; then
+    # Linux
+    for IP in $(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1'); do
+        echo "   http://${IP}:47778"
+    done
+elif command -v ifconfig &> /dev/null; then
+    # macOS
+    for IP in $(ifconfig | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}'); do
+        echo "   http://${IP}:47778"
+    done
+fi
+echo ""
 echo "📖 Docs: https://github.com/Soul-Brews-Studio/oracle-v2"
