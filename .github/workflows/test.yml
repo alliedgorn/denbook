@@ -7,31 +7,40 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  unit:
+    name: Unit Tests
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - run: bun install
+      - run: bun test:unit
 
-      - name: Install dependencies
-        run: bun install
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - run: mkdir -p ~/.oracle-v2
+      - run: bun test:integration
 
-      - name: Setup database directory
-        run: mkdir -p ~/.oracle-v2
-
-      - name: Run unit tests
-        run: bun test src/oracle-core.test.ts
-
-      - name: Run database integration tests
-        run: bun test src/integration/database.test.ts
-
-      # Note: tsc build fails due to bun:sqlite types
-      # Tests run directly with bun which handles these correctly
-      - name: Type check (non-blocking)
-        run: bun run build || echo "TypeScript build has known bun:sqlite type issues - tests passed"
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: integration
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - run: bunx playwright install --with-deps chromium
+      - run: mkdir -p ~/.oracle-v2
+      - run: bun test:e2e
