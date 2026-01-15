@@ -35,15 +35,18 @@ jobs:
       - run: bun test:seed
       - run: bun test:integration:http
 
-  # E2E tests disabled - Playwright (Node.js) can't import bun:sqlite
-  # Run locally: bun test:e2e
-  # e2e:
-  #   name: E2E Tests
-  #   runs-on: ubuntu-latest
-  #   needs: integration
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: oven-sh/setup-bun@v2
-  #     - run: bun install
-  #     - run: bunx playwright install --with-deps chromium
-  #     - run: bun test:e2e
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: integration
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - run: bunx playwright install --with-deps chromium
+      - run: mkdir -p ~/.oracle-v2
+      - run: bun run db:push
+      - run: bun test:seed
+      - run: bun test:e2e
