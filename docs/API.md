@@ -1,23 +1,25 @@
-# Oracle v2 API Documentation
+# Oracle Nightly API Documentation
 
-Oracle v2 is a knowledge base system with HTTP API and React dashboard.
+Oracle Nightly is a knowledge base system with HTTP API and React dashboard.
+
+> **Note**: All API endpoints use `/api/` prefix (e.g., `/api/health`, `/api/search`).
 
 ## Quick Start
 
 ```bash
 # Start backend server
-pnpm run server
+bun run server
 
 # Start frontend dev server
-cd frontend && pnpm dev
+cd frontend && bun dev
 ```
 
 ## Ports
 
 | Service | Port | Command |
 |---------|------|---------|
-| Backend (HTTP) | `47778` | `pnpm run server` |
-| Frontend (Vite) | `3000` | `cd frontend && pnpm dev` |
+| Backend (HTTP) | `47778` | `bun run server` |
+| Frontend (Vite) | `3000` | `cd frontend && bun dev` |
 
 ---
 
@@ -459,9 +461,9 @@ Common errors:
 
 ### Unit Tests
 ```bash
-pnpm test              # Run all unit tests (45 tests)
-pnpm test:watch        # Watch mode
-pnpm test:coverage     # With coverage
+bun test              # Run all unit tests (45 tests)
+bun test:watch        # Watch mode
+bun test:coverage     # With coverage
 ```
 
 ### E2E Tests (Browser Automation)
@@ -473,8 +475,8 @@ E2E tests use the `dev-browser` skill for browser automation.
 cd ~/.claude/skills/dev-browser && ./server.sh &
 
 # 2. Ensure backend and frontend are running
-pnpm run server &                  # Backend on :47778
-cd frontend && pnpm dev &          # Frontend on :3000
+bun run server &                  # Backend on :47778
+cd frontend && bun dev &          # Frontend on :3000
 
 # 3. Run E2E tests
 cd ~/.claude/skills/dev-browser && npx tsx /path/to/oracle-v2/e2e/run-e2e.ts
