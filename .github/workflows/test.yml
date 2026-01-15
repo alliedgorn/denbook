@@ -29,6 +29,7 @@ jobs:
           bun-version: latest
       - run: bun install
       - run: mkdir -p ~/.oracle-v2
+      - run: bun run db:push
       - run: bun test:integration
 
   e2e:
@@ -43,4 +44,5 @@ jobs:
       - run: bun install
       - run: bunx playwright install --with-deps chromium
       - run: mkdir -p ~/.oracle-v2
+      - run: bun run db:push
       - run: bun test:e2e
