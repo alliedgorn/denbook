@@ -33,6 +33,125 @@ if (!fs.existsSync(ORACLE_DATA_DIR)) {
 export const db = new Database(DB_PATH);
 
 /**
+ * Bootstrap core tables for fresh bunx installs
+ * (Drizzle migrations are source of truth, this is fallback)
+ */
+export function bootstrapCoreTables() {
+  // Check if main table exists
+  const tableExists = db.query(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='oracle_documents'"
+  ).get();
+
+  if (!tableExists) {
+    console.error('[Bootstrap] Creating core tables for fresh install...');
+
+    // Main documents table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS oracle_documents (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        source_file TEXT NOT NULL,
+        concepts TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        indexed_at INTEGER NOT NULL,
+        superseded_by TEXT,
+        superseded_at INTEGER,
+        superseded_reason TEXT,
+        origin TEXT,
+        project TEXT,
+        created_by TEXT
+      )
+    `);
+
+    // FTS5 for content search
+    db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS oracle_fts USING fts5(
+        id, type, title, content, concepts,
+        tokenize = 'porter unicode61'
+      )
+    `);
+
+    // Indexing status
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS indexing_status (
+        id INTEGER PRIMARY KEY,
+        is_indexing INTEGER NOT NULL DEFAULT 0,
+        progress_current INTEGER DEFAULT 0,
+        progress_total INTEGER DEFAULT 0,
+        started_at INTEGER,
+        completed_at INTEGER,
+        error TEXT
+      )
+    `);
+
+    // Forum tables
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS forum_threads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        created_by TEXT DEFAULT 'human',
+        status TEXT DEFAULT 'active',
+        project TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS forum_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        thread_id INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    `);
+
+    // Decisions table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS decisions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        context TEXT,
+        options TEXT,
+        decision TEXT,
+        rationale TEXT,
+        project TEXT,
+        tags TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        decided_at INTEGER,
+        decided_by TEXT
+      )
+    `);
+
+    // Trace log table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS trace_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trace_id TEXT UNIQUE NOT NULL,
+        query TEXT NOT NULL,
+        query_type TEXT DEFAULT 'general',
+        found_files TEXT,
+        found_commits TEXT,
+        found_issues TEXT,
+        status TEXT DEFAULT 'raw',
+        project TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+
+    console.error('[Bootstrap] Core tables created');
+  }
+}
+
+// Auto-bootstrap on import
+bootstrapCoreTables();
+
+/**
  * Initialize logging tables
  */
 export function initLoggingTables() {
