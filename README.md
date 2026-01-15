@@ -199,8 +199,3 @@ bun build            # TypeScript compilation
 - [Drizzle ORM](https://orm.drizzle.team/) - Database ORM
 - [MCP SDK](https://github.com/anthropics/anthropic-sdk-typescript) - Protocol docs
 
----
-
-**Status**: Production
-**Created**: 2025-12-29
-**Updated**: 2026-01-03
