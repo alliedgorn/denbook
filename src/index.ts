@@ -1,5 +1,5 @@
 /**
- * Oracle v2 MCP Server (MVP - FTS5 only)
+ * Oracle Nightly MCP Server (MVP - FTS5 only)
  *
  * Provides keyword search and consultation over Oracle knowledge base.
  * MVP version using SQLite FTS5 only (no ChromaDB).
@@ -200,7 +200,7 @@ class OracleMCPServer {
 
     this.server = new Server(
       {
-        name: 'oracle-v2',
+        name: 'oracle-nightly',
         version: '0.2.0',
       },
       {
@@ -2258,7 +2258,7 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('Oracle v2 MCP Server running on stdio (FTS5 mode)');
+    console.error('Oracle Nightly MCP Server running on stdio (FTS5 mode)');
   }
 }
 
