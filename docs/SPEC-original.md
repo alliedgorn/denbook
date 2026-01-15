@@ -4,311 +4,211 @@ created: 2025-12-29
 archived: 2026-01-15
 status: historical
 learned-from: claude-mem
-note: This is the original planning document. See README.md for current implementation.
+note: This is the original planning document with implementation annotations.
 ---
 
 # Oracle v2 - Original Specification (Dec 2025)
 
-> **📜 Historical Document**: This was the original planning spec from Dec 29, 2025.
-> The project has evolved significantly. For current state, see [README.md](../README.md) and [TIMELINE.md](../TIMELINE.md).
+> **📜 Historical Document**: Original planning spec from Dec 29, 2025.
+> Annotated with what was actually implemented by Jan 15, 2026.
 >
-> **Planned**: 3 tools → **Delivered**: 19 tools
+> | Planned | Delivered |
+> |---------|-----------|
+> | 3 tools | **19 tools** |
+> | Skills approach | **MCP-first** |
+> | 3 phases | **6 phases** |
+
+**Legend**: ✅ Implemented | ⚡ Exceeded | 🔄 Changed | ❌ Not done
 
 ---
 
-# Oracle v2 - MCP Memory Layer
-
-> "The Oracle Keeps the Human Human" - now queryable via MCP
-
-## Vision
+## Vision ✅
 
 Oracle v2 transforms the existing Oracle philosophy files into a **searchable knowledge system** via MCP, allowing Claude to:
 
-1. **Consult** Oracle philosophy when making decisions
-2. **Learn** from patterns in resonance files
-3. **Search** retrospectives and learnings semantically
-4. **Grow** by adding new patterns over time
+1. ✅ **Consult** Oracle philosophy when making decisions
+2. ✅ **Learn** from patterns in resonance files
+3. ✅ **Search** retrospectives and learnings semantically
+4. ✅ **Grow** by adding new patterns over time
 
-## What We Learned from claude-mem
+---
 
-### Architecture That Works
+## Architecture 🔄
 
+### Original Plan
 ```
-┌─────────────────────────────────────────────────────┐
-│                    Claude Code                       │
-└─────────────────────────────────────────────────────┘
-                        │
-                        ▼
-              ┌──────────────────┐
-              │   Skills Layer   │ ← Progressive disclosure
-              │  (oracle-query)  │    (~250 tokens upfront)
-              └────────┬─────────┘
-                       │
-                       ▼
-              ┌──────────────────┐
-              │   MCP Server     │ ← HTTP or stdio
-              │   (oracle-mcp)   │
-              └────────┬─────────┘
-         ┌─────────────┼─────────────┐
-         ▼             ▼             ▼
-   ┌──────────┐ ┌──────────┐ ┌──────────┐
-   │  SQLite  │ │ ChromaDB │ │  ψ/ Dir  │
-   │ (index)  │ │ (vector) │ │ (source) │
-   └──────────┘ └──────────┘ └──────────┘
+Claude Code → Skills Layer → MCP Server → SQLite + Chroma
 ```
 
-### Key Patterns to Adopt
+### What Was Built ⚡
+```
+Claude Code → MCP Server (stdio) → SQLite + ChromaDB + Drizzle ORM
+                    ↓
+              HTTP Server (Hono.js :47778)
+                    ↓
+              React Dashboard (:3000)
+```
 
-| claude-mem Pattern | Oracle v2 Adaptation |
-|-------------------|---------------------|
-| Granular vectors | philosophy → principles, patterns → behaviors |
-| Hybrid search | Vector (semantic) + FTS5 (keyword) |
-| Local embeddings | sentence-transformers via Chroma |
-| 90-day recency | N/A (Oracle is timeless) |
-| ROI tracking | Track which principles influence decisions |
+**Changes:**
+- ❌ Skills layer removed - MCP tools work better in practice
+- ⚡ Added HTTP API (Hono.js) - REST endpoints for external access
+- ⚡ Added React Dashboard - Visual knowledge graph
+- ⚡ Added Drizzle ORM - Type-safe database queries
 
-## Oracle v2 Data Model
+---
 
-### Source Files (ψ/memory/)
+## Data Model ✅
 
+### Source Files
 ```
 ψ/memory/
-├── resonance/           → IDENTITY (who am I)
-│   ├── oracle.md
-│   ├── patterns.md
-│   ├── style.md
-│   └── identity.md
-│
-├── learnings/           → PATTERNS (what I've learned)
-│   └── *.md
-│
-├── retrospectives/      → HISTORY (what happened)
-│   └── **/*.md
-│
-└── logs/                → EPHEMERAL (not indexed)
-    └── activity.log
+├── resonance/       ✅ IDENTITY (principles)
+├── learnings/       ✅ PATTERNS (what I've learned)
+├── retrospectives/  ✅ HISTORY (session records)
+└── logs/            ✅ EPHEMERAL (not indexed)
 ```
 
-### Vector Document Structure
-
-Following claude-mem's granular approach:
-
+### Document Structure ✅
 ```typescript
 interface OracleDocument {
-  id: string;           // e.g., "resonance_oracle_principle_1"
-  type: 'principle' | 'pattern' | 'learning' | 'retro';
-  source_file: string;  // "ψ/memory/resonance/oracle.md"
-  content: string;      // The actual text
-  concepts: string[];   // Tags: ['trust', 'patterns', 'mirror']
-  created_at: number;   // epoch
-  updated_at: number;   // epoch
+  id: string;           // ✅ Implemented
+  type: 'principle' | 'pattern' | 'learning' | 'retro';  // ✅
+  source_file: string;  // ✅
+  content: string;      // ✅
+  concepts: string[];   // ✅
+  created_at: number;   // ✅
+  updated_at: number;   // ✅
 }
 ```
 
-### Example Vector Split
-
-**Original: oracle.md Principle 1**
-```markdown
-### 1. Nothing is Deleted
-- Append only, timestamps = truth
-- History is preserved, not overwritten
-- Every decision has context
-```
-
-**Becomes Multiple Vectors:**
-```json
-[
-  {
-    "id": "oracle_principle_1",
-    "type": "principle",
-    "content": "Nothing is Deleted: Append only, timestamps = truth. History is preserved, not overwritten. Every decision has context.",
-    "concepts": ["append-only", "history", "context", "timestamps"]
-  },
-  {
-    "id": "oracle_principle_1_sub_1",
-    "type": "principle",
-    "content": "Append only, timestamps = truth",
-    "concepts": ["append-only", "timestamps"]
-  },
-  {
-    "id": "oracle_principle_1_sub_2",
-    "type": "principle",
-    "content": "History is preserved, not overwritten",
-    "concepts": ["history", "immutable"]
-  }
-]
-```
+---
 
 ## MCP Tools
 
-### Tool: oracle_search
+### Planned: 3 Tools
 
-```typescript
-{
-  name: "oracle_search",
-  description: "Search Oracle knowledge base semantically",
-  inputSchema: {
-    type: "object",
-    properties: {
-      query: { type: "string", description: "Natural language query" },
-      type: {
-        type: "string",
-        enum: ["principle", "pattern", "learning", "retro", "all"],
-        default: "all"
-      },
-      limit: { type: "number", default: 5 }
-    },
-    required: ["query"]
-  }
-}
-```
+| Tool | Status | Notes |
+|------|--------|-------|
+| `oracle_search` | ✅ | Hybrid FTS5 + vector search |
+| `oracle_consult` | ✅ | Decision guidance with synthesis |
+| `oracle_learn` | ✅ | Creates markdown files in ψ/memory/learnings/ |
 
-### Tool: oracle_consult
+### Actually Delivered: 19 Tools ⚡
 
-```typescript
-{
-  name: "oracle_consult",
-  description: "Get guidance on a decision based on Oracle philosophy",
-  inputSchema: {
-    type: "object",
-    properties: {
-      decision: { type: "string", description: "Decision to make" },
-      context: { type: "string", description: "Current situation" }
-    },
-    required: ["decision"]
-  }
-}
-```
+| Category | Tools | Notes |
+|----------|-------|-------|
+| **Core (4)** | `search`, `consult`, `reflect`, `learn` | Original + reflect |
+| **Discovery (3)** | `list`, `stats`, `concepts` | Browse & explore |
+| **Threads (4)** | `thread`, `threads`, `thread_read`, `thread_update` | Forum discussions |
+| **Decisions (4)** | `decisions_list`, `decisions_create`, `decisions_get`, `decisions_update` | Decision tracking |
+| **Traces (3)** | `trace`, `trace_list`, `trace_get` | Discovery logging |
+| **Evolution (1)** | `supersede` | "Nothing is Deleted" |
 
-### Tool: oracle_learn
-
-```typescript
-{
-  name: "oracle_learn",
-  description: "Add new pattern to Oracle knowledge base",
-  inputSchema: {
-    type: "object",
-    properties: {
-      pattern: { type: "string", description: "Pattern discovered" },
-      source: { type: "string", description: "Where it was observed" },
-      concepts: { type: "array", items: { type: "string" } }
-    },
-    required: ["pattern"]
-  }
-}
-```
-
-## Skill Alternative (Preferred)
-
-Instead of MCP tools, use a **skill** for progressive disclosure:
-
-```yaml
-# ψ/skills/oracle/skill.md
 ---
-name: oracle
-description: Consult Oracle philosophy for decisions, patterns, and guidance. Use when facing decisions, reviewing past patterns, or seeking alignment with principles.
----
-
-# Oracle Skill
-
-Query your personal Oracle knowledge base.
-
-## Operations
-
-| Operation | When to Use |
-|-----------|-------------|
-| search | Find relevant patterns/principles |
-| consult | Get guidance on decisions |
-| learn | Record new patterns |
-| reflect | Get random wisdom for reflection |
-```
 
 ## Implementation Plan
 
-### Phase 1: Read-Only Oracle (MVP)
+### Original: 3 Phases
 
-1. **Index existing files**
-   - Parse ψ/memory/resonance/*.md
-   - Parse ψ/memory/learnings/*.md
-   - Create SQLite index
-   - Generate Chroma vectors
+| Phase | Plan | Status |
+|-------|------|--------|
+| Phase 1: Read-Only | Index + search + reflect | ✅ Done Dec 29 |
+| Phase 2: Bidirectional | Learn + pattern detection | ✅ Done Jan 2 |
+| Phase 3: Context Injection | SessionStart hooks | 🔄 Changed approach |
 
-2. **Create skill**
-   - oracle_search (vector + FTS5)
-   - oracle_reflect (random principle)
+### Actual: 6 Phases ⚡
 
-### Phase 2: Bidirectional Oracle
+| Phase | Dates | What Happened |
+|-------|-------|---------------|
+| 0. Genesis | Sept-Dec 2025 | Philosophy foundations |
+| 1. Conception | Dec 24-27 | MCP server idea |
+| 2. MVP | Dec 29 - Jan 2 | FTS5 + ChromaDB hybrid |
+| 3. Maturation | Jan 3-6 | Drizzle ORM, AI-to-AI |
+| 4. Features | Jan 7-11 | Threads, decisions, traces, dashboard |
+| 5. Release | Jan 15 | Open source |
 
-1. **Add learning capability**
-   - oracle_learn tool
-   - Auto-commit to ψ/memory/learnings/
+See [TIMELINE.md](../TIMELINE.md) for full history.
 
-2. **Pattern detection**
-   - Hook on retrospective creation
-   - Extract patterns → add to Oracle
-
-### Phase 3: Context Injection
-
-1. **SessionStart hook**
-   - Inject relevant principles based on project/topic
-   - Progressive disclosure pattern
+---
 
 ## Key Design Decisions
 
-### 1. Skill > MCP Tools
+### 1. Skill > MCP Tools 🔄 CHANGED
 
-**Why**: Progressive disclosure saves tokens. MCP loads all tools upfront (~2500 tokens). Skill loads only frontmatter (~250 tokens).
+**Original**: Skills for progressive disclosure (~250 tokens vs ~2500)
 
-### 2. Local Embeddings
+**Reality**: MCP tools won. Claude Code handles tool loading efficiently. Skills added complexity without benefit.
 
-**Why**: Zero API cost, fast, works offline. Chroma + sentence-transformers.
+### 2. Local Embeddings ✅
 
-### 3. Source-of-Truth = Files
+**Original**: ChromaDB + sentence-transformers
 
-**Why**: Oracle philosophy should remain human-editable markdown. SQLite/Chroma are indexes, not sources.
+**Reality**: Implemented as planned. Zero API cost, works offline.
 
-### 4. No Recency Window
+### 3. Source-of-Truth = Files ✅
 
-**Why**: Unlike claude-mem's 90-day window, Oracle principles are timeless. All patterns remain relevant.
+**Original**: Markdown files in git, SQLite/Chroma are indexes
 
-### 5. Concept Tags
+**Reality**: Exactly as planned. Human-editable, auditable.
 
-**Why**: Enable filtered search. "Show me patterns about trust" → filter by concept.
+### 4. No Recency Window ✅
 
-## Questions to Resolve
+**Original**: Oracle principles are timeless, unlike claude-mem's 90-day window
 
-1. **Where to run MCP server?**
-   - Subprocess (like claude-mem)?
-   - HTTP service (background)?
+**Reality**: Confirmed. All patterns remain relevant.
 
-2. **Auto-update vectors?**
-   - On file change (fswatch)?
-   - On session start (index check)?
+### 5. Concept Tags ✅
 
-3. **How to handle conflicts?**
-   - User edits oracle.md
-   - AI suggests pattern change
-   - Which wins?
+**Original**: Enable filtered search by concept
+
+**Reality**: Implemented via `oracle_concepts()` tool.
+
+---
+
+## Questions to Resolve ✅ ALL RESOLVED
+
+| Question | Resolution |
+|----------|------------|
+| Where to run MCP server? | **stdio** - Claude Code native, no ports needed |
+| Auto-update vectors? | **On session start** - Check indexing status |
+| Handle conflicts? | **Files win** - Oracle reindexes from source |
+
+---
 
 ## Success Metrics
 
-| Metric | How to Measure |
-|--------|----------------|
-| Oracle usage | Count oracle_search calls |
-| Pattern application | "Based on Oracle principle X..." in output |
-| Knowledge growth | New learnings added per week |
-| Decision alignment | Retrospective feedback on Oracle guidance |
+| Metric | Planned | Actual |
+|--------|---------|--------|
+| Oracle usage | Count calls | ✅ `search_log` table |
+| Pattern application | Track in output | 🔄 Via `consult_log` |
+| Knowledge growth | New learnings/week | ✅ `learn_log` table |
+| Decision alignment | Retrospective feedback | ⚡ `oracle_decisions_*` system |
 
 ---
 
-## Next Steps
+## Original Next Steps ✅ ALL DONE
 
-1. [ ] Create ψ/lab/oracle-v2/prototype.ts
-2. [ ] Test Chroma indexing of ψ/memory/resonance/
-3. [ ] Create oracle skill with search operation
-4. [ ] Test in real session
+- [x] Create ψ/lab/oracle-v2/prototype.ts → Became `src/index.ts`
+- [x] Test Chroma indexing → Works with 5,500+ documents
+- [x] Create oracle skill → Evolved to 19 MCP tools
+- [x] Test in real session → Production since Jan 15
 
 ---
 
-*Learned from: claude-mem architecture exploration*
-*Created: 2025-12-29 10:35*
+## What Exceeded Expectations ⚡
+
+Features not in original spec that emerged organically:
+
+1. **Forum Threads** - Multi-turn Oracle discussions
+2. **Decision Tracking** - Full lifecycle (pending → decided → implemented)
+3. **Trace Logging** - Discovery sessions with dig points
+4. **Supersede Pattern** - "Nothing is Deleted" implementation
+5. **React Dashboard** - Visual knowledge graph
+6. **HTTP API** - REST endpoints for external tools
+7. **Auto-bootstrap** - Works on fresh install without setup
+
+---
+
+*Original: 2025-12-29 10:35*
+*Archived: 2026-01-15 12:14*
+*Annotations added to show planned vs delivered*
