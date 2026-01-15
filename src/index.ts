@@ -201,7 +201,7 @@ class OracleMCPServer {
     this.server = new Server(
       {
         name: 'oracle-nightly',
-        version: '0.2.0',
+        version: '0.2.1',
       },
       {
         capabilities: {
@@ -1468,7 +1468,7 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
             : null,
           chroma_status: this.chromaStatus,
           fts_status: ftsCount.count > 0 ? 'healthy' : 'empty',
-          version: '0.2.0',
+          version: '0.2.1',
         }, null, 2)
       }]
     };
