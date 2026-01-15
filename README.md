@@ -12,16 +12,36 @@
 
 ## Install
 
+### Recommended: Local Install
+
 ```bash
-# Clone and setup (creates ~/.oracle-v2/ with database)
-git clone https://github.com/Soul-Brews-Studio/oracle-v2
-cd oracle-v2 && bun install && bun run db:push
+# Clone to ~/.local/share (persists across sessions)
+git clone https://github.com/Soul-Brews-Studio/oracle-v2.git ~/.local/share/oracle-v2
+cd ~/.local/share/oracle-v2 && bun install
 
-# Add to Claude Code
-claude mcp add oracle-v2 -- bun /path/to/oracle-v2/src/index.ts
+# Add to Claude Code config (~/.claude.json)
+{
+  "mcpServers": {
+    "oracle-v2": {
+      "command": "bun",
+      "args": ["run", "~/.local/share/oracle-v2/src/index.ts"]
+    }
+  }
+}
+```
 
-# Or with bunx (after setup)
-claude mcp add oracle-v2 -- bunx github:Soul-Brews-Studio/oracle-v2
+### Why not bunx?
+
+> **Warning**: `bunx github:owner/repo` does NOT install `node_modules`.
+> It downloads the repo but skips dependency installation, causing silent failures.
+
+If you want to use bunx anyway, you must install dependencies first:
+```bash
+# This won't work out of the box:
+bunx github:Soul-Brews-Studio/oracle-v2  # Silent failure!
+
+# Do this instead:
+git clone ... && bun install  # Then use local path
 ```
 
 TypeScript implementation of semantic search over Oracle philosophy using Model Context Protocol (MCP), with HTTP API and React dashboard.
@@ -196,10 +216,22 @@ cd frontend && bun dev  # Start React dashboard
 bun build            # TypeScript compilation
 ```
 
+## Acknowledgments & Inspiration
+
+This project was inspired by and learned from [claude-mem](https://github.com/thedotmack/claude-mem) by Alex Newman (@thedotmack).
+
+**Educational influences:**
+- **Process Manager pattern** - PID files, daemon spawning, graceful shutdown (`src/process-manager/`)
+- **Worker service architecture** - start/stop/restart/status CLI patterns
+- **Hook system concepts** - How to integrate with Claude Code lifecycle
+
+Oracle-v2 is built for educational purposes and personal knowledge management. If you're building MCP servers or AI memory systems, we highly recommend studying claude-mem's comprehensive implementation.
+
 ## References
 
 - [docs/API.md](./docs/API.md) - API documentation
 - [docs/architecture.md](./docs/architecture.md) - Architecture details
 - [Drizzle ORM](https://orm.drizzle.team/) - Database ORM
 - [MCP SDK](https://github.com/anthropics/anthropic-sdk-typescript) - Protocol docs
+- [claude-mem](https://github.com/thedotmack/claude-mem) - Inspiration for memory & process management
 
