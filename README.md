@@ -42,22 +42,26 @@ claude mcp add oracle-v2 -- bun run ~/.local/share/oracle-v2/src/index.ts
 # 3. Restart Claude Code
 ```
 
-### Manual Install
+### For AI Assistants
 
-```bash
-# Clone to ~/.local/share (persists across sessions)
-git clone https://github.com/Soul-Brews-Studio/oracle-v2.git ~/.local/share/oracle-v2
-cd ~/.local/share/oracle-v2 && bun install
+Copy this prompt to your AI:
 
-# Optional: Create seed data for testing
-./scripts/seed.sh
-ORACLE_REPO_ROOT=~/.oracle-v2/seed bun run index
+```
+Install oracle-v2 MCP server:
+1. curl -sSL https://raw.githubusercontent.com/Soul-Brews-Studio/oracle-v2/main/scripts/install.sh | bash
+2. claude mcp add oracle-v2 -- bun run ~/.local/share/oracle-v2/src/index.ts
+3. Tell me to restart Claude Code
 ```
 
 <details>
-<summary>Manual Claude Code config (alternative to <code>claude mcp add</code>)</summary>
+<summary>Manual Install</summary>
 
-Edit `~/.claude.json`:
+```bash
+git clone https://github.com/Soul-Brews-Studio/oracle-v2.git ~/.local/share/oracle-v2
+cd ~/.local/share/oracle-v2 && bun install
+```
+
+Config (`~/.claude.json`):
 ```json
 {
   "mcpServers": {
