@@ -34,24 +34,37 @@ else
     bun install
 fi
 
+# Create data directory
+mkdir -p ~/.oracle-v2
+
+# Add to Claude Code MCP
+echo ""
+echo "📝 Adding to Claude Code..."
+claude mcp add oracle-v2 -- bun run "$INSTALL_DIR/src/index.ts" 2>/dev/null || {
+    echo "⚠️  claude mcp add failed - you may need to add manually"
+}
+
 echo ""
 echo "✅ Installation complete!"
 echo ""
-echo "📝 Add to Claude Code (~/.claude.json):"
-echo ""
-cat << EOF
-{
-  "mcpServers": {
-    "oracle-v2": {
-      "type": "stdio",
-      "command": "bun",
-      "args": ["run", "$INSTALL_DIR/src/index.ts"],
-      "env": {}
-    }
-  }
-}
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📋 Copy this to your AI (problems @tacha-hash faced):"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+cat << 'EOF'
+
+oracle-v2 installed! Please restart Claude Code.
+
+If you see errors, here are fixes from @tacha-hash's 20-min debug session:
+
+| Problem | Fix |
+|---------|-----|
+| "bun not found" | export PATH="$HOME/.bun/bin:$PATH" |
+| "bunx not found" | Use ~/.bun/bin/bunx |
+| "directory does not exist" | mkdir -p ~/.oracle-v2 |
+| ChromaDB hangs | Ignore - SQLite works without vectors |
+| MCP not loading | Check .mcp.json or ~/.claude.json |
+
 EOF
-echo ""
-echo "Or run: claude mcp add oracle-v2 -- bun run $INSTALL_DIR/src/index.ts"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "🎉 Restart Claude Code to activate Oracle-v2"
