@@ -82,6 +82,24 @@ Config (`~/.claude.json`):
 Always clone first: `git clone ... && bun install`
 </details>
 
+<details>
+<summary>Troubleshooting (7 Issues Found by @tacha-hash)</summary>
+
+| # | Problem | Cause | Fix |
+|---|---------|-------|-----|
+| 1 | `bun: command not found` | PATH not updated after install | `export PATH="$HOME/.bun/bin:$PATH"` |
+| 2 | `bunx: command not found` | Same PATH issue | Use full path: `~/.bun/bin/bunx` |
+| 3 | `directory does not exist` | Missing data dir | `mkdir -p ~/.oracle-v2` |
+| 4 | ChromaDB hangs/timeout | uv not installed | Skip it — SQLite FTS5 works fine without vectors |
+| 5 | `uv: command not found` | Not in prerequisites | Optional: `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| 6 | MCP config not loading | Wrong file location | Use `.mcp.json` (project) or `~/.claude.json` (global) |
+| 7 | Server crashes on empty DB | No documents indexed | Run indexer first, or PR #2 fixes this |
+
+**Prevention**: Use the install script which handles all of this automatically.
+
+*Thanks @tacha-hash for the detailed 20-minute debugging session that saved everyone else 15 minutes each!*
+</details>
+
 TypeScript implementation of semantic search over Oracle philosophy using Model Context Protocol (MCP), with HTTP API and React dashboard.
 
 ## Architecture
