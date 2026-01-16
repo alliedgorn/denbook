@@ -7,7 +7,7 @@
 | | |
 |---|---|
 | **Status** | Always Nightly |
-| **Version** | 0.2.2-nightly |
+| **Version** | 0.2.3-nightly |
 | **Created** | 2025-12-29 |
 | **Updated** | 2026-01-15 |
 
