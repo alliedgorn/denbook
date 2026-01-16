@@ -48,9 +48,16 @@ Copy this prompt to your AI:
 
 ```
 Install oracle-v2 MCP server:
+
 1. curl -sSL https://raw.githubusercontent.com/Soul-Brews-Studio/oracle-v2/main/scripts/install.sh | bash
 2. claude mcp add oracle-v2 -- bun run ~/.local/share/oracle-v2/src/index.ts
 3. Tell me to restart Claude Code
+
+Common issues (if install script fails):
+- "bun not found" → export PATH="$HOME/.bun/bin:$PATH"
+- "directory does not exist" → mkdir -p ~/.oracle-v2
+- ChromaDB hangs → ignore it, SQLite works fine without vectors
+- MCP not loading → config goes in .mcp.json (project) or ~/.claude.json (global)
 ```
 
 <details>
