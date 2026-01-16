@@ -30,19 +30,17 @@ From philosophical concept to production-ready knowledge system in 4 months.
 
 ## Install
 
-### Fresh Install (Recommended)
+### Quick Install
 
 ```bash
-# One-liner: Clone, install, seed, test
-curl -sSL https://raw.githubusercontent.com/Soul-Brews-Studio/oracle-v2/main/scripts/fresh-install.sh | bash
-```
+# 1. Install
+curl -sSL https://raw.githubusercontent.com/Soul-Brews-Studio/oracle-v2/main/scripts/install.sh | bash
 
-This will:
-1. Clone to `~/.local/share/oracle-v2`
-2. Install dependencies
-3. Create seed philosophy files
-4. Index seed data
-5. Run tests
+# 2. Add to Claude Code
+claude mcp add oracle-v2 -- bun run ~/.local/share/oracle-v2/src/index.ts
+
+# 3. Restart Claude Code
+```
 
 ### Manual Install
 
@@ -54,8 +52,13 @@ cd ~/.local/share/oracle-v2 && bun install
 # Optional: Create seed data for testing
 ./scripts/seed.sh
 ORACLE_REPO_ROOT=~/.oracle-v2/seed bun run index
+```
 
-# Add to Claude Code config (~/.claude.json)
+<details>
+<summary>Manual Claude Code config (alternative to <code>claude mcp add</code>)</summary>
+
+Edit `~/.claude.json`:
+```json
 {
   "mcpServers": {
     "oracle-v2": {
@@ -65,6 +68,7 @@ ORACLE_REPO_ROOT=~/.oracle-v2/seed bun run index
   }
 }
 ```
+</details>
 
 ### Why not bunx?
 
