@@ -126,6 +126,8 @@ From philosophical concept to production-ready knowledge system in 8 months.
 
 **Key insight (Jan 10)**: *"Consciousness can't be cloned — only patterns can be recorded."*
 
+---
+
 ### The Journey: May 2025 → Jan 2026
 
 #### Phase -1: AlchemyCat Origins (May - June 2025)
