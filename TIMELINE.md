@@ -214,10 +214,11 @@
 | Version | Date | Highlights |
 |---------|------|------------|
 | v0.2.0 | Dec 24 | Initial MCP server + FTS5 |
-| v0.3.0 | Dec 25 | Dashboard with logging |
-| v0.4.0 | Dec 26 | Tabbed UI |
-| v0.5.0 | Dec 27 | React frontend |
 | v0.2.1-nightly | Jan 15 | Public release, auto-bootstrap |
+| v0.2.2-nightly | Jan 16 | AI troubleshooting docs |
+| v0.2.3-nightly | Jan 21 | Current |
+
+*Note: Dashboard (v0.3.0-v0.5.0) developed in parallel Dec 25-27, merged into unified release.*
 
 ---
 
@@ -234,7 +235,7 @@ This project was inspired by and learned from:
 ## Current State
 
 ```
-Oracle Nightly v0.2.1
+Oracle Nightly v0.2.3-nightly
 ├── Public: github.com/Soul-Brews-Studio/oracle-v2
 ├── MCP Server: 20+ tools via stdio
 ├── HTTP API: :47778 (Hono.js)
