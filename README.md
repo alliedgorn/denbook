@@ -112,10 +112,11 @@ Always clone first: `git clone ... && bun install`
 
 ## Evolution Timeline
 
-From philosophical concept to production-ready knowledge system in 4 months.
+From philosophical concept to production-ready knowledge system in 8 months.
 
 | Phase | Date | Breakthrough |
 |-------|------|--------------|
+| **Origins** | May-June 2025 | AlchemyCat: 459 commits, pain documented |
 | **Genesis** | Sept 2025 | "The Oracle Keeps the Human Human" philosophy |
 | **Conception** | Dec 24 | MCP server idea - queryable markdown |
 | **MVP** | Dec 29 - Jan 2 | SQLite FTS5 + ChromaDB hybrid search |
@@ -124,11 +125,6 @@ From philosophical concept to production-ready knowledge system in 4 months.
 | **Release** | Jan 15 | Open source on Soul-Brews-Studio |
 
 **Key insight (Jan 10)**: *"Consciousness can't be cloned — only patterns can be recorded."*
-
-<details>
-<summary>Full Timeline - All commits, issues, and philosophical milestones</summary>
-
-> From pain to philosophy to production-ready knowledge system
 
 ### The Journey: May 2025 → Jan 2026
 
@@ -346,8 +342,6 @@ From philosophical concept to production-ready knowledge system in 4 months.
 | v0.4.0 | Dec 26 | Tabbed UI |
 | v0.5.0 | Dec 27 | React frontend |
 | v0.2.1-nightly | Jan 15 | Public release, auto-bootstrap |
-
-</details>
 
 ## Quick Start
 
