@@ -24,19 +24,32 @@ interface Link {
 }
 
 const TYPE_COLORS_HEX: Record<string, string> = {
-  principle: '#a78bfa',
-  learning: '#4ade80',
-  retro: '#60a5fa',
+  principle: '#60a5fa',  // blue
+  learning: '#fbbf24',   // yellow
+  retro: '#4ade80',      // green
 };
 
 const TYPE_COLORS_NUM: Record<string, number> = {
-  principle: 0xa78bfa,
-  learning: 0x4ade80,
-  retro: 0x38bdf8,
+  principle: 0x60a5fa,   // blue
+  learning: 0xfbbf24,    // yellow
+  retro: 0x4ade80,       // green
 };
+
+// Colorful palette like Gesture Globe (blue, pink, yellow, green, purple, cyan)
+const COLORFUL_PALETTE = [
+  0x60a5fa, // blue
+  0xf472b6, // pink
+  0xfbbf24, // yellow
+  0x4ade80, // green
+  0xa78bfa, // purple
+  0x22d3d8, // cyan
+  0xfb7185, // rose
+  0x34d399, // emerald
+];
 
 const STORAGE_KEY_VIEW = 'oracle-graph-view-mode';
 const STORAGE_KEY_FULL = 'oracle-graph-show-full';
+const STORAGE_KEY_HUD = 'oracle-graph-show-hud';
 const DEFAULT_NODE_LIMIT = 200;
 
 // KlakMath helpers for 3D
@@ -407,12 +420,56 @@ function Canvas2D({ nodes: allNodes, links: allLinks }: { nodes: Node[]; links: 
   );
 }
 
+// Lightning data structure
+interface LightningData {
+  line: THREE.Line;
+  nodeA: number;
+  nodeB: number;
+  phase: number;
+  speed: number;
+}
+
+// Create jagged lightning path between two points
+function createLightningPath(start: THREE.Vector3, end: THREE.Vector3, segments = 8): THREE.Vector3[] {
+  const points: THREE.Vector3[] = [];
+  const direction = end.clone().sub(start);
+  const length = direction.length();
+  direction.normalize();
+
+  const up = new THREE.Vector3(0, 1, 0);
+  const perp1 = direction.clone().cross(up).normalize();
+  // Handle edge case where direction is parallel to up
+  if (perp1.length() < 0.001) {
+    perp1.set(1, 0, 0);
+  }
+  const perp2 = direction.clone().cross(perp1).normalize();
+
+  points.push(start.clone());
+  for (let i = 1; i < segments; i++) {
+    const t = i / segments;
+    const basePoint = start.clone().lerp(end, t);
+    const displacement = (Math.random() - 0.5) * length * 0.15;
+    const displacement2 = (Math.random() - 0.5) * length * 0.15;
+    basePoint.add(perp1.clone().multiplyScalar(displacement));
+    basePoint.add(perp2.clone().multiplyScalar(displacement2));
+    points.push(basePoint);
+  }
+  points.push(end.clone());
+  return points;
+}
+
 // 3D Canvas Component
 function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredNode, setHoveredNode] = useState<Node | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [clickedPos, setClickedPos] = useState({ x: 0, y: 0 });
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [showHud, setShowHud] = useState(true);
+  const [showHud, setShowHud] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_HUD);
+    return saved === null ? true : saved === 'true'; // Show initially if no saved preference
+  });
+  const [hudAutoHidden, setHudAutoHidden] = useState(false);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
   const [showFilePanel, setShowFilePanel] = useState(false);
@@ -424,8 +481,10 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
   const [linkOpacity, setLinkOpacity] = useState(0.15);
   const [breathingIntensity, setBreathingIntensity] = useState(0.05);
   const [showAllLinks, setShowAllLinks] = useState(false);
-  const [sphereMode, setSphereMode] = useState(false);
+  const [sphereMode, setSphereMode] = useState(true);
   const [handMode, setHandMode] = useState(false);
+  const [lightningEnabled, setLightningEnabled] = useState(true);
+  const [thunderEnabled, setThunderEnabled] = useState(false);
 
   const handleHandMove = useCallback((pos: { x: number; y: number }) => {
     targetAngleRef.current = { x: (pos.x - 0.5) * Math.PI * 2, y: (pos.y - 0.5) * -1 };
@@ -452,6 +511,15 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
   const meshesRef = useRef<THREE.Mesh[]>([]);
   const hudHoveredRef = useRef(false);
 
+  // Lightning/thunder state refs
+  const thunderTimerRef = useRef(0);
+  const thunderActiveRef = useRef(false);
+  const thunderFlashRef = useRef(0);
+  const lightningsRef = useRef<LightningData[]>([]);
+  const stormLightningsRef = useRef<LightningData[]>([]);
+  const lightningEnabledRef = useRef(true);
+  const thunderEnabledRef = useRef(false);
+
   const resetCamera = () => { setCamDistance(15); camXRef.current = { x: 0, v: 0 }; camYRef.current = { x: 0, v: 0 }; targetAngleRef.current = { x: 0, y: 0 }; };
 
   const loadFileContent = async (node: Node) => {
@@ -465,6 +533,29 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
   };
 
   useEffect(() => { hudRef.current = { camDistance, nodeSize, rotationSpeed, linkOpacity, breathingIntensity, showAllLinks, sphereMode }; }, [camDistance, nodeSize, rotationSpeed, linkOpacity, breathingIntensity, showAllLinks, sphereMode]);
+  useEffect(() => { lightningEnabledRef.current = lightningEnabled; }, [lightningEnabled]);
+  useEffect(() => { thunderEnabledRef.current = thunderEnabled; }, [thunderEnabled]);
+
+  // Auto-hide HUD after 1 second on first load (if no saved preference)
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_HUD);
+    if (saved === null && !hudAutoHidden) {
+      const timer = setTimeout(() => {
+        setShowHud(false);
+        setHudAutoHidden(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [hudAutoHidden]);
+
+  // Save HUD state when user manually toggles
+  const toggleHud = useCallback(() => {
+    setShowHud(prev => {
+      const newVal = !prev;
+      localStorage.setItem(STORAGE_KEY_HUD, String(newVal));
+      return newVal;
+    });
+  }, []);
   useEffect(() => { typeFilterRef.current = typeFilter; meshesRef.current.forEach(mesh => { mesh.visible = typeFilter[(mesh.userData.node as Node).type] ?? true; }); }, [typeFilter]);
   useEffect(() => { activeNodeRef.current = selectedNode?.id || hoveredNode?.id || null; }, [hoveredNode, selectedNode]);
 
@@ -474,7 +565,7 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
     const width = container.clientWidth, height = container.clientHeight;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a0f);
+    scene.background = new THREE.Color(0x05050a); // Dark blue-black canvas
     const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
     camera.position.z = 15;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -490,6 +581,18 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
     const rimLight = new THREE.PointLight(0xa78bfa, 0.5, 30);
     scene.add(rimLight);
 
+    // Wireframe globe background (like Gesture Globe)
+    const globeRadius = 6.5;
+    const globeGeometry = new THREE.SphereGeometry(globeRadius, 32, 24);
+    const globeWireframe = new THREE.WireframeGeometry(globeGeometry);
+    const globeMaterial = new THREE.LineBasicMaterial({
+      color: 0x6a5acd, // Slate blue/purple for globe wireframe
+      opacity: 0.2,
+      transparent: true,
+    });
+    const globeMesh = new THREE.LineSegments(globeWireframe, globeMaterial);
+    scene.add(globeMesh);
+
     const clusterCenters = new Map<number, THREE.Vector3>();
     const maxCluster = Math.max(...nodes.map(n => n.cluster || 0));
     for (let i = 0; i <= maxCluster; i++) clusterCenters.set(i, hashOnSphere(42, i * 1000).multiplyScalar(6));
@@ -500,8 +603,9 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
 
     nodes.forEach((node, i) => {
       nodeMap.set(node.id, i);
+      // Color by type to match legend - bright and vibrant
       const color = TYPE_COLORS_NUM[node.type] || 0x888888;
-      const material = new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.4, emissive: color, emissiveIntensity: 0.1 });
+      const material = new THREE.MeshStandardMaterial({ color, metalness: 0.2, roughness: 0.3, emissive: color, emissiveIntensity: 0.5 });
       const mesh = new THREE.Mesh(geometry, material);
       const cluster = node.cluster || 0;
       const clusterCenter = clusterCenters.get(cluster) || new THREE.Vector3();
@@ -537,6 +641,73 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
       linkDataArray.push({ sourceIdx: srcIdx, targetIdx: tgtIdx, sourceId: link.source, targetId: link.target, offset: xxhash(42, i + 5000), speed: 0.2 + xxhash(42, i + 6000) * 0.3, line });
     }
 
+    // Create lightning lines for ALL links (will show only when hovering connected node)
+    const ambientLightnings: LightningData[] = [];
+    for (let i = 0; i < linkDataArray.length; i++) {
+      const linkData = linkDataArray[i];
+      if (!linkData) continue;
+      const start = meshes[linkData.sourceIdx].position;
+      const end = meshes[linkData.targetIdx].position;
+      const points = createLightningPath(start, end, 6);
+      const lightningGeom = new THREE.BufferGeometry().setFromPoints(points);
+      // Color based on connected node type
+      const sourceNode = meshes[linkData.sourceIdx]?.userData?.node as Node | undefined;
+      const lightningColor = sourceNode ? TYPE_COLORS_NUM[sourceNode.type] || 0x88ccff : 0x88ccff;
+      const lightningMat = new THREE.LineBasicMaterial({
+        color: lightningColor,
+        opacity: 0.5,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+      });
+      const lightningLine = new THREE.Line(lightningGeom, lightningMat);
+      lightningLine.visible = false; // Hidden by default
+      scene.add(lightningLine);
+      ambientLightnings.push({
+        line: lightningLine,
+        nodeA: linkData.sourceIdx,
+        nodeB: linkData.targetIdx,
+        phase: xxhash(42, i + 10000) * Math.PI * 2,
+        speed: 0.5 + xxhash(42, i + 11000) * 1.5,
+      });
+    }
+    lightningsRef.current = ambientLightnings;
+
+    // Storm lightning no longer needed - ambient covers all links
+    const stormLightnings: LightningData[] = [];
+    stormLightningsRef.current = stormLightnings;
+
+    // Thunder trigger function
+    function triggerThunder() {
+      thunderActiveRef.current = true;
+      thunderFlashRef.current = 1.0;
+
+      // Flash all nodes bright
+      meshes.forEach(mesh => {
+        (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.8;
+      });
+
+      // Show storm lightnings
+      stormLightnings.forEach(lightning => {
+        lightning.line.visible = true;
+      });
+
+      // Multi-flash effect
+      setTimeout(() => { thunderFlashRef.current = 0.8; }, 50);
+      setTimeout(() => { thunderFlashRef.current = 1.0; }, 100);
+      setTimeout(() => { thunderFlashRef.current = 0.6; }, 150);
+
+      // End thunder after 400ms
+      setTimeout(() => {
+        thunderActiveRef.current = false;
+        meshes.forEach(mesh => {
+          (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.5;
+        });
+        stormLightnings.forEach(lightning => {
+          lightning.line.visible = false;
+        });
+      }, 400);
+    }
+
     const particleCount = Math.min(maxLinks, 1500);
     const particleGeometry = new THREE.BufferGeometry();
     const particlePositions = new Float32Array(particleCount * 3);
@@ -548,9 +719,14 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
 
     let time = 0;
     const dt = 1 / 60;
+    const mouse = new THREE.Vector2(10, 10); // Start outside globe area (dim)
+    let isHoveringNode = false;
 
     function animate() {
-      time += 0.016;
+      // Only advance time if not hovering a node (pause animations)
+      if (!isHoveringNode) {
+        time += 0.016;
+      }
       camXRef.current = cdsTween(camXRef.current, targetAngleRef.current.x, 3, dt);
       camYRef.current = cdsTween(camYRef.current, targetAngleRef.current.y, 3, dt);
       const camDist = hudRef.current.camDistance;
@@ -560,6 +736,17 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
       camera.lookAt(0, 0, 0);
 
       const isSphere = hudRef.current.sphereMode;
+
+      // Check if mouse is inside the globe area (for brightness effect)
+      const globeCenter = new THREE.Vector3(0, 0, 0);
+      globeCenter.project(camera);
+      const mouseDistFromCenter = Math.sqrt(mouse.x * mouse.x + mouse.y * mouse.y);
+      const isInsideGlobe = mouseDistFromCenter < 0.7; // approximate globe screen radius
+      const globalBrightness = isInsideGlobe ? 0.6 : 0.25;
+
+      // Dock-style magnification: project nodes to screen and scale by mouse proximity
+      const tempVec = new THREE.Vector3();
+
       meshes.forEach((mesh, i) => {
         const clusterPos = mesh.userData.clusterPos as THREE.Vector3;
         const spherePos = mesh.userData.spherePos as THREE.Vector3;
@@ -567,8 +754,26 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
         currentPos.lerp(isSphere ? spherePos : clusterPos, 0.05);
         const n = fractalNoise(time * 0.5 + i * 0.1, 2, 42);
         mesh.position.copy(currentPos).multiplyScalar(1 + n * hudRef.current.breathingIntensity);
-        mesh.scale.setScalar(hudRef.current.nodeSize / 0.08);
+
+        // Calculate dock magnification
+        tempVec.copy(mesh.position);
+        tempVec.project(camera);
+        const screenDist = Math.sqrt(
+          Math.pow((tempVec.x - mouse.x) * 2, 2) +
+          Math.pow((tempVec.y - mouse.y) * 2, 2)
+        );
+        // Magnify nodes close to mouse (dock effect)
+        const maxMagnify = 2.5;
+        const magnifyRadius = 0.3;
+        const magnifyFactor = screenDist < magnifyRadius
+          ? 1 + (maxMagnify - 1) * (1 - screenDist / magnifyRadius)
+          : 1;
+
+        mesh.scale.setScalar((hudRef.current.nodeSize / 0.08) * magnifyFactor);
         mesh.rotation.y = time * 0.2 + i * 0.01;
+
+        // Apply global brightness based on mouse inside/outside globe
+        (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = globalBrightness + (magnifyFactor - 1) * 0.3;
       });
 
       scene.rotation.y = time * hudRef.current.rotationSpeed;
@@ -591,9 +796,11 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
         linePositions[3] = tgtPos.x; linePositions[4] = tgtPos.y; linePositions[5] = tgtPos.z;
         linkData.line.geometry.attributes.position.needsUpdate = true;
 
+        // Show straight lines normally, hide when lightning is active for this link
         if (!linkVisible) mat.opacity = 0;
         else if (showAll) mat.opacity = 0.04;
-        else if (isConnected) mat.opacity = hudRef.current.linkOpacity;
+        else if (isConnected && !lightningEnabledRef.current) mat.opacity = hudRef.current.linkOpacity;
+        else if (isConnected && lightningEnabledRef.current) mat.opacity = 0; // Lightning handles it
         else mat.opacity = 0;
 
         if (isConnected && linkVisible && particleIndex < 1500) {
@@ -608,6 +815,89 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
       for (let i = particleIndex; i < 1500; i++) { positions[i * 3] = 0; positions[i * 3 + 1] = -1000; positions[i * 3 + 2] = 0; }
       travelingParticles.visible = !!activeId;
       travelingParticles.geometry.attributes.position.needsUpdate = true;
+
+      // Lightning system - only active in sphere mode (lightning stays inside globe)
+      const sphereActive = hudRef.current.sphereMode;
+      if (lightningEnabledRef.current && sphereActive) {
+        // Thunder/flash system (only if enabled)
+        if (thunderEnabledRef.current) {
+          thunderTimerRef.current += 0.016;
+          if (thunderTimerRef.current > 5 + Math.random() * 3) {
+            triggerThunder();
+            thunderTimerRef.current = 0;
+          }
+
+          // Flash decay and background color shift
+          if (thunderFlashRef.current > 0) {
+            thunderFlashRef.current *= 0.92;
+            if (thunderFlashRef.current < 0.01) thunderFlashRef.current = 0;
+            scene.background = new THREE.Color(
+              0.04 + thunderFlashRef.current * 0.25,
+              0.04 + thunderFlashRef.current * 0.25,
+              0.06 + thunderFlashRef.current * 0.35
+            );
+          } else {
+            scene.background = new THREE.Color(0x05050a);
+          }
+        }
+
+        // Update ambient lightnings - ONLY show when hovering/selected a specific node
+        const activeId = activeNodeRef.current;
+
+        // Hide ALL lightning if no node is active
+        if (!activeId) {
+          ambientLightnings.forEach((lightning) => {
+            lightning.line.visible = false;
+          });
+        } else {
+          // Show lightning only for connections to the active node
+          ambientLightnings.forEach((lightning) => {
+            const { line, nodeA, nodeB } = lightning;
+            const sourceNode = meshes[nodeA]?.userData?.node as Node | undefined;
+            const targetNode = meshes[nodeB]?.userData?.node as Node | undefined;
+            const isConnected = (sourceNode?.id === activeId || targetNode?.id === activeId);
+
+            if (isConnected) {
+              line.visible = true;
+              // Regenerate lightning path for flicker effect
+              if (Math.random() < 0.15) {
+                const start = meshes[nodeA].position;
+                const end = meshes[nodeB].position;
+                const newPoints = createLightningPath(start, end, 6);
+                line.geometry.setFromPoints(newPoints);
+              }
+              const mat = line.material as THREE.LineBasicMaterial;
+              mat.opacity = 0.6;
+            } else {
+              line.visible = false;
+            }
+          });
+        }
+
+        // Storm lightnings (only during thunder if enabled)
+        stormLightnings.forEach((lightning) => {
+          lightning.line.visible = thunderEnabledRef.current && thunderActiveRef.current;
+          if (thunderActiveRef.current && thunderEnabledRef.current) {
+            if (Math.random() < 0.3) {
+              const start = meshes[lightning.nodeA].position;
+              const end = meshes[lightning.nodeB].position;
+              const newPoints = createLightningPath(start, end, 8);
+              lightning.line.geometry.setFromPoints(newPoints);
+            }
+            const mat = lightning.line.material as THREE.LineBasicMaterial;
+            mat.opacity = 0.5 + Math.random() * 0.5;
+          }
+        });
+      } else {
+        // Lightning disabled or not in sphere mode - hide all lightning lines
+        ambientLightnings.forEach(l => { l.line.visible = false; });
+        stormLightnings.forEach(l => { l.line.visible = false; });
+        scene.background = new THREE.Color(0x05050a);
+      }
+
+      // Show/hide globe wireframe only in sphere mode
+      globeMesh.visible = sphereActive;
+
       renderer.render(scene, camera);
       animationRef.current = requestAnimationFrame(animate);
     }
@@ -615,7 +905,6 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
     animate();
 
     const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
     let isDragging = false, dragStart = { x: 0, y: 0 };
 
     function onMouseDown(e: MouseEvent) { if (hudHoveredRef.current) return; isDragging = true; dragStart = { x: e.clientX, y: e.clientY }; container.style.cursor = 'grabbing'; }
@@ -624,6 +913,7 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
       const rect = container.getBoundingClientRect();
       mouse.x = ((e.clientX - rect.left) / width) * 2 - 1;
       mouse.y = -((e.clientY - rect.top) / height) * 2 + 1;
+      setMousePos({ x: e.clientX, y: e.clientY });
       if (isDragging) {
         targetAngleRef.current.x += (e.clientX - dragStart.x) * 0.005;
         targetAngleRef.current.y = Math.max(-0.5, Math.min(0.5, targetAngleRef.current.y - (e.clientY - dragStart.y) * 0.003));
@@ -634,11 +924,13 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
       if (intersects.length > 0) {
         setHoveredNode(intersects[0].object.userData.node as Node);
         if (!isDragging) container.style.cursor = 'pointer';
-        meshes.forEach(m => { (m.material as THREE.MeshStandardMaterial).emissiveIntensity = m === intersects[0].object ? 0.5 : 0.1; });
+        meshes.forEach(m => { (m.material as THREE.MeshStandardMaterial).emissiveIntensity = m === intersects[0].object ? 0.8 : 0.5; });
+        isHoveringNode = true;
       } else {
         setHoveredNode(null);
         if (!isDragging) container.style.cursor = 'default';
-        meshes.forEach(m => { (m.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.1; });
+        meshes.forEach(m => { (m.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.5; });
+        isHoveringNode = false;
       }
     }
     function onClick(e: MouseEvent) {
@@ -650,6 +942,7 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
       if (intersects.length > 0) {
         const clicked = intersects[0].object.userData.node as Node;
         setSelectedNode(prev => prev?.id === clicked.id ? null : clicked);
+        setClickedPos({ x: e.clientX, y: e.clientY }); // Save click position for tooltip
       }
     }
     function onDblClick() { setSelectedNode(null); }
@@ -677,7 +970,16 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       meshes.forEach(mesh => { (mesh.material as THREE.Material).dispose(); scene.remove(mesh); });
       geometry.dispose();
+      // Cleanup globe
+      globeWireframe.dispose();
+      globeMaterial.dispose();
+      scene.remove(globeMesh);
       linkLines.forEach(line => { line.geometry.dispose(); (line.material as THREE.Material).dispose(); scene.remove(line); });
+      // Cleanup lightning lines
+      ambientLightnings.forEach(lightning => { lightning.line.geometry.dispose(); (lightning.line.material as THREE.Material).dispose(); scene.remove(lightning.line); });
+      stormLightnings.forEach(lightning => { lightning.line.geometry.dispose(); (lightning.line.material as THREE.Material).dispose(); scene.remove(lightning.line); });
+      lightningsRef.current = [];
+      stormLightningsRef.current = [];
       particleGeometry.dispose();
       particleMaterial.dispose();
       scene.remove(travelingParticles);
@@ -693,11 +995,10 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
   return (
     <>
       <div className={styles.legend}>
-        {[{ key: 'principle', label: 'Principle', color: '#a78bfa' }, { key: 'learning', label: 'Learning', color: '#4ade80' }, { key: 'retro', label: 'Retro', color: '#60a5fa' }].map(({ key, label, color }) => {
+        {[{ key: 'principle', label: 'Principle', color: '#60a5fa' }, { key: 'learning', label: 'Learning', color: '#fbbf24' }, { key: 'retro', label: 'Retro', color: '#4ade80' }].map(({ key, label, color }) => {
           const count = counts[key] || 0;
-          if (count === 0) return null;
           return (
-            <button key={key} onClick={() => setTypeFilter(prev => ({ ...prev, [key]: !prev[key] }))} style={{ opacity: typeFilter[key] ? 1 : 0.4, cursor: 'pointer', background: 'transparent', border: 'none', padding: '4px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '6px', color: '#e0e0e0', fontSize: '13px' }}>
+            <button key={key} onClick={() => setTypeFilter(prev => ({ ...prev, [key]: !prev[key] }))} style={{ opacity: count === 0 ? 0.3 : (typeFilter[key] ? 1 : 0.4), cursor: count > 0 ? 'pointer' : 'default', background: 'transparent', border: 'none', padding: '4px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '6px', color: '#e0e0e0', fontSize: '13px' }}>
               <span className={styles.dot} style={{ background: color }}></span>
               {label} ({count})
             </button>
@@ -710,7 +1011,7 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={toggleHandMode} className={styles.hudToggle} style={{ background: handTracking ? '#4ade80' : undefined, color: handTracking ? '#000' : undefined }}>{handTracking ? '✋ ON' : '✋'}</button>
           <button onClick={resetCamera} className={styles.hudToggle}>Reset</button>
-          <button onClick={() => setShowHud(!showHud)} className={styles.hudToggle}>{showHud ? 'Hide' : 'Show'}</button>
+          <button onClick={toggleHud} className={styles.hudToggle}>{showHud ? 'Hide' : 'Show'}</button>
         </div>
       </div>
 
@@ -729,18 +1030,48 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
             <div className={styles.hudDivider}>Links</div>
             <label className={styles.hudLabel} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><input type="checkbox" checked={showAllLinks} onChange={(e) => setShowAllLinks(e.target.checked)} style={{ width: '16px', height: '16px' }} />Show All Links</label>
             <label className={styles.hudLabel}>Opacity: {linkOpacity.toFixed(2)}<input type="range" min="0.05" max="0.5" step="0.05" value={linkOpacity} onChange={(e) => setLinkOpacity(Number(e.target.value))} className={styles.hudSlider} /></label>
+            <div className={styles.hudDivider}>Effects</div>
+            <label className={styles.hudLabel} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input type="checkbox" checked={lightningEnabled} onChange={(e) => setLightningEnabled(e.target.checked)} style={{ width: '16px', height: '16px' }} />
+              <span style={{ color: '#88ccff' }}>⚡ Lightning</span>
+            </label>
+            <label className={styles.hudLabel} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input type="checkbox" checked={thunderEnabled} onChange={(e) => setThunderEnabled(e.target.checked)} style={{ width: '16px', height: '16px' }} />
+              <span style={{ color: thunderEnabled ? '#fbbf24' : '#888' }}>⛈️ Thunder Flash</span>
+            </label>
           </div>
         )}
       </div>
 
       {(hoveredNode || selectedNode) && !showFilePanel && (
-        <div className={styles.tooltip}>
-          <span className={styles.nodeType}>{selectedNode ? `🔒 ${selectedNode.type}` : hoveredNode?.type}</span>
-          <p className={styles.nodeLabel}>{(selectedNode || hoveredNode)?.label || (selectedNode || hoveredNode)?.source_file?.split('/').pop()?.replace(/\.md$/, '').replace(/-/g, ' ') || 'Untitled'}</p>
-          {(selectedNode || hoveredNode)?.source_file && selectedNode && (
-            <p style={{ fontSize: '11px', margin: '4px 0' }}>
-              <a href="#" onClick={(e) => { e.preventDefault(); loadFileContent(selectedNode); }} style={{ color: '#a78bfa', textDecoration: 'underline' }}>View file</a>
-            </p>
+        <div
+          style={{
+            position: 'fixed',
+            left: (selectedNode ? clickedPos.x : mousePos.x) + 20,
+            top: (selectedNode ? clickedPos.y : mousePos.y) - 10,
+            background: 'rgba(20, 20, 30, 0.95)',
+            borderRadius: '8px',
+            padding: '8px 12px',
+            border: '1px solid rgba(255,255,255,0.1)',
+            pointerEvents: selectedNode ? 'auto' : 'none',
+            zIndex: 1000,
+            maxWidth: '200px',
+          }}
+        >
+          <span style={{
+            background: TYPE_COLORS_HEX[(selectedNode || hoveredNode)?.type || ''] || '#888',
+            color: '#fff',
+            padding: '2px 8px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            fontWeight: 'bold',
+            textTransform: 'uppercase',
+          }}>{(selectedNode || hoveredNode)?.type}</span>
+          <p style={{ color: '#e0e0e0', fontSize: '12px', margin: '6px 0 0 0', lineHeight: '1.3' }}>
+            {(selectedNode || hoveredNode)?.label || (selectedNode || hoveredNode)?.source_file?.split('/').pop()?.replace(/\.md$/, '').replace(/-/g, ' ') || 'Untitled'}
+          </p>
+          {selectedNode?.source_file && (
+            <a href="#" onClick={(e) => { e.preventDefault(); loadFileContent(selectedNode); }} style={{ color: '#60a5fa', fontSize: '10px', textDecoration: 'underline' }}>View file</a>
           )}
         </div>
       )}
@@ -756,11 +1087,48 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
       )}
 
       {handMode && (
-        <div style={{ position: 'absolute', bottom: '20px', left: '20px', background: 'rgba(15, 15, 25, 0.9)', borderRadius: '8px', padding: '12px', border: '1px solid rgba(74, 222, 128, 0.3)', zIndex: 100 }}>
-          <div style={{ color: '#4ade80', fontSize: '12px', marginBottom: '8px' }}>✋ Hand Tracking</div>
-          <div style={{ color: '#888', fontSize: '10px' }}>{handDebug}</div>
-          {handError ? <div style={{ color: '#f87171', fontSize: '11px' }}>{handError}</div> : handPosition ? <div style={{ color: '#e0e0e0', fontSize: '11px' }}>X: {(handPosition.x * 100).toFixed(0)}% | Y: {(handPosition.y * 100).toFixed(0)}%</div> : <div style={{ color: '#888', fontSize: '11px' }}>Show hand to camera</div>}
-        </div>
+        <>
+          {/* Hand position dot indicator - bright orange like Gesture Globe */}
+          {handPosition && (
+            <div
+              style={{
+                position: 'absolute',
+                left: `${handPosition.x * 100}%`,
+                top: `${handPosition.y * 100}%`,
+                width: '36px',
+                height: '36px',
+                marginLeft: '-18px',
+                marginTop: '-18px',
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(255, 180, 50, 1) 0%, rgba(255, 150, 30, 0.8) 30%, rgba(255, 120, 0, 0.3) 60%, transparent 80%)',
+                boxShadow: '0 0 20px rgba(255, 150, 30, 1), 0 0 40px rgba(255, 120, 0, 0.6), 0 0 60px rgba(255, 100, 0, 0.3)',
+                pointerEvents: 'none',
+                zIndex: 200,
+                transition: 'left 0.05s ease-out, top 0.05s ease-out',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  width: '14px',
+                  height: '14px',
+                  marginLeft: '-7px',
+                  marginTop: '-7px',
+                  borderRadius: '50%',
+                  background: '#ffb830',
+                  boxShadow: '0 0 8px #ff9500',
+                }}
+              />
+            </div>
+          )}
+          <div style={{ position: 'absolute', bottom: '20px', left: '20px', background: 'rgba(15, 15, 25, 0.9)', borderRadius: '8px', padding: '12px', border: '1px solid rgba(74, 222, 128, 0.3)', zIndex: 100 }}>
+            <div style={{ color: '#4ade80', fontSize: '12px', marginBottom: '8px' }}>✋ Hand Tracking</div>
+            <div style={{ color: '#888', fontSize: '10px' }}>{handDebug}</div>
+            {handError ? <div style={{ color: '#f87171', fontSize: '11px' }}>{handError}</div> : handPosition ? <div style={{ color: '#e0e0e0', fontSize: '11px' }}>X: {(handPosition.x * 100).toFixed(0)}% | Y: {(handPosition.y * 100).toFixed(0)}%</div> : <div style={{ color: '#888', fontSize: '11px' }}>Show hand to camera</div>}
+          </div>
+        </>
       )}
     </>
   );
