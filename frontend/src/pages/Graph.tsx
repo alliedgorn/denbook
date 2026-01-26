@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getGraph } from '../api/oracle';
 import styles from './Graph.module.css';
 
@@ -31,6 +31,9 @@ export function Graph() {
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const animationRef = useRef<number>(0);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const force2d = searchParams.get('force') === '2d';
 
   useEffect(() => {
     loadGraph();
@@ -44,6 +47,13 @@ export function Graph() {
   async function loadGraph() {
     try {
       const data = await getGraph();
+
+      // Auto-switch to 3D view for large graphs (>= 1000 nodes)
+      // unless ?force=2d is set
+      if (!force2d && data.nodes && data.nodes.length >= 1000) {
+        navigate('/graph3d', { replace: true });
+        return;
+      }
 
       // Initialize node positions around center
       const width = 800;

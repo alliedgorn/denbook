@@ -311,6 +311,10 @@ export function Graph3D() {
   async function loadGraph() {
     try {
       const data = await getGraph();
+
+      // No auto-redirect from 3D - user explicitly chose this view
+      // (Auto-redirect only happens from 2D → 3D for large graphs)
+
       const clusters = clusterNodes(data.nodes, data.links || []);
 
       const processedNodes = data.nodes.map((n: Node) => ({
@@ -788,7 +792,7 @@ export function Graph3D() {
         <h1 className={styles.title}>Knowledge Graph 3D</h1>
         <div className={styles.stats}>
           {nodes.length} nodes · {links.length} links
-          <Link to="/graph2d" style={{ marginLeft: '15px', color: '#a78bfa', textDecoration: 'none', fontSize: '12px' }}>
+          <Link to="/graph?force=2d" style={{ marginLeft: '15px', color: '#a78bfa', textDecoration: 'none', fontSize: '12px' }}>
             ← 2D View
           </Link>
         </div>
