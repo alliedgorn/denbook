@@ -248,12 +248,12 @@ app.get('/api/file', (c) => {
 
     if (fs.existsSync(fullPath)) {
       const content = fs.readFileSync(fullPath, 'utf-8');
-      return c.json({ path: filePath, content });
+      return c.text(content);
     } else {
-      return c.json({ error: 'File not found' }, 404);
+      return c.text('File not found', 404);
     }
   } catch (e: any) {
-    return c.json({ error: e.message }, 500);
+    return c.text(e.message, 500);
   }
 });
 

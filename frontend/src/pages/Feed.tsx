@@ -3,9 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { list } from '../api/oracle';
 import type { Document } from '../api/oracle';
 import { LogCard } from '../components/LogCard';
+import { SidebarLayout } from '../components/SidebarLayout';
 import styles from './Feed.module.css';
-
-const TYPES = ['all', 'principle', 'learning', 'retro'] as const;
 
 export function Feed() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -48,43 +47,25 @@ export function Feed() {
   }
 
   return (
-    <div className={styles.container}>
-      <div className={styles.sidebar}>
-        <h3 className={styles.sidebarTitle}>Filter by Type</h3>
-        <div className={styles.filters}>
-          {TYPES.map(t => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setType(t)}
-              className={`${styles.filterBtn} ${type === t ? styles.active : ''}`}
-            >
-              {t === 'all' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1) + 's'}
-            </button>
-          ))}
-        </div>
+    <SidebarLayout activeType={type} onTypeChange={setType}>
+      <h1 className={styles.title}>Knowledge Feed</h1>
+      <p className={styles.subtitle}>
+        Browse Oracle's indexed knowledge — principles, learnings, and retrospectives
+      </p>
+
+      <div className={styles.feed}>
+        {docs.map(doc => (
+          <LogCard key={doc.id} doc={doc} />
+        ))}
       </div>
 
-      <main className={styles.main}>
-        <h1 className={styles.title}>Knowledge Feed</h1>
-        <p className={styles.subtitle}>
-          Browse Oracle's indexed knowledge — principles, learnings, and retrospectives
-        </p>
+      {loading && <div className={styles.loading}>Loading...</div>}
 
-        <div className={styles.feed}>
-          {docs.map(doc => (
-            <LogCard key={doc.id} doc={doc} />
-          ))}
-        </div>
-
-        {loading && <div className={styles.loading}>Loading...</div>}
-
-        {!loading && hasMore && (
-          <button type="button" onClick={() => loadDocs(false)} className={styles.loadMore}>
-            Load More
-          </button>
-        )}
-      </main>
-    </div>
+      {!loading && hasMore && (
+        <button type="button" onClick={() => loadDocs(false)} className={styles.loadMore}>
+          Load More
+        </button>
+      )}
+    </SidebarLayout>
   );
 }

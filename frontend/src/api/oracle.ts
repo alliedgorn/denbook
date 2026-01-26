@@ -88,10 +88,14 @@ export async function getGraph(): Promise<{ nodes: any[]; links: any[] }> {
 }
 
 // Get full file content by source_file path
-export async function getFile(path: string): Promise<{ path: string; content: string; error?: string }> {
-  const params = new URLSearchParams({ path });
+export async function getFile(filePath: string): Promise<{ content: string; error?: string }> {
+  const params = new URLSearchParams({ path: filePath });
   const res = await fetch(`${API_BASE}/file?${params}`);
-  return res.json();
+  const content = await res.text();
+  if (!res.ok) {
+    return { content: '', error: content };
+  }
+  return { content };
 }
 
 // Get document by ID

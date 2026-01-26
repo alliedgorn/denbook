@@ -4,6 +4,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { search, list, getFile, getDoc } from '../api/oracle';
 import type { Document } from '../api/oracle';
+import { SidebarLayout } from '../components/SidebarLayout';
 import styles from './DocDetail.module.css';
 
 interface LocationState {
@@ -245,6 +246,7 @@ export function DocDetail() {
   const { when, what, how } = parseMetadata(doc);
 
   return (
+    <SidebarLayout activeType={doc.type}>
     <article className={styles.container}>
       <button onClick={() => navigate(-1)} className={styles.backLink}>
         ← Back to Feed
@@ -301,8 +303,17 @@ export function DocDetail() {
       )}
 
       <footer className={styles.footer}>
-        <p className={styles.sourcePath}>{doc.source_file}</p>
+        <a
+          href={`/api/file?path=${encodeURIComponent(doc.source_file)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.sourcePath}
+        >
+          {doc.source_file}
+        </a>
+        {fileNotFound && <span className={styles.fileNotFound}> ⚠️ file not found</span>}
       </footer>
     </article>
+    </SidebarLayout>
   );
 }
