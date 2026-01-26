@@ -128,14 +128,16 @@ export class OracleIndexer {
    * Backup database before destructive operations
    * Philosophy: "Nothing is Deleted" - always preserve data
    *
-   * Creates both:
+   * Creates:
    * 1. SQLite file backup (.backup-TIMESTAMP)
    * 2. JSON export (.export-TIMESTAMP.json) for portability
+   * 3. CSV export (.export-TIMESTAMP.csv) for DuckDB/analytics
    */
   private backupDatabase(): void {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupPath = `${this.config.dbPath}.backup-${timestamp}`;
-    const exportPath = `${this.config.dbPath}.export-${timestamp}.json`;
+    const jsonPath = `${this.config.dbPath}.export-${timestamp}.json`;
+    const csvPath = `${this.config.dbPath}.export-${timestamp}.csv`;
 
     // 1. Copy SQLite file
     try {
@@ -145,14 +147,21 @@ export class OracleIndexer {
       console.warn(`⚠️ DB backup failed: ${e instanceof Error ? e.message : e}`);
     }
 
-    // 2. Export to JSON (portable, human-readable)
+    // Query all documents for export
+    let docs: any[] = [];
     try {
-      const docs = this.db.prepare(`
+      docs = this.db.prepare(`
         SELECT d.id, d.type, d.source_file, d.concepts, d.project, f.content
         FROM oracle_documents d
         JOIN oracle_fts f ON d.id = f.id
       `).all() as any[];
+    } catch (e) {
+      console.warn(`⚠️ Query failed: ${e instanceof Error ? e.message : e}`);
+      return;
+    }
 
+    // 2. Export to JSON (portable, human-readable)
+    try {
       const exportData = {
         exported_at: new Date().toISOString(),
         count: docs.length,
@@ -161,11 +170,32 @@ export class OracleIndexer {
           concepts: JSON.parse(d.concepts || '[]')
         }))
       };
-
-      fs.writeFileSync(exportPath, JSON.stringify(exportData, null, 2));
-      console.log(`📄 JSON export: ${exportPath} (${docs.length} docs)`);
+      fs.writeFileSync(jsonPath, JSON.stringify(exportData, null, 2));
+      console.log(`📄 JSON export: ${jsonPath} (${docs.length} docs)`);
     } catch (e) {
       console.warn(`⚠️ JSON export failed: ${e instanceof Error ? e.message : e}`);
+    }
+
+    // 3. Export to CSV (DuckDB-friendly)
+    try {
+      const escapeCSV = (val: string) => {
+        if (val.includes('"') || val.includes(',') || val.includes('\n')) {
+          return `"${val.replace(/"/g, '""')}"`;
+        }
+        return val;
+      };
+
+      const header = 'id,type,source_file,concepts,project,content';
+      const rows = docs.map(d =>
+        [d.id, d.type, d.source_file, d.concepts, d.project || '', d.content]
+          .map(v => escapeCSV(String(v || '')))
+          .join(',')
+      );
+
+      fs.writeFileSync(csvPath, [header, ...rows].join('\n'));
+      console.log(`📊 CSV export: ${csvPath} (${docs.length} rows)`);
+    } catch (e) {
+      console.warn(`⚠️ CSV export failed: ${e instanceof Error ? e.message : e}`);
     }
   }
 
