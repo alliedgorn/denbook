@@ -10,6 +10,7 @@ export function Overview() {
   const [wisdom, setWisdom] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -17,10 +18,15 @@ export function Overview() {
 
   async function loadData() {
     try {
+      setConnectionError(null);
       const [statsData, wisdomData] = await Promise.all([
         getStats(),
         reflect()
       ]);
+      // Verify we got valid data (not empty/error response)
+      if (!statsData || (statsData.total === 0 && !statsData.by_type)) {
+        setConnectionError('Backend returned empty data. Server may need restarting.');
+      }
       setStats(statsData);
       // Only set wisdom if it has content (not an error response)
       if (wisdomData && 'content' in wisdomData) {
@@ -28,6 +34,7 @@ export function Overview() {
       }
     } catch (e) {
       console.error('Failed to load stats:', e);
+      setConnectionError('Cannot connect to Oracle backend. Run: bun run server');
     } finally {
       setLoading(false);
     }
@@ -49,6 +56,23 @@ export function Overview() {
     <div className={styles.container}>
       <h1 className={styles.title}>Oracle Overview</h1>
       <p className={styles.subtitle}>Your knowledge base at a glance</p>
+
+      {connectionError && (
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '24px',
+          color: '#ef4444'
+        }}>
+          <strong>Connection Error:</strong> {connectionError}
+          <br />
+          <code style={{ fontSize: '12px', opacity: 0.8 }}>
+            bun run server
+          </code>
+        </div>
+      )}
 
       <div className={styles.statsGrid}>
         <div className={styles.statCard}>

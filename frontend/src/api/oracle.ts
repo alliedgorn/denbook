@@ -63,6 +63,9 @@ export async function consult(decision: string, context?: string): Promise<Consu
 // Get stats
 export async function getStats(): Promise<Stats> {
   const res = await fetch(`${API_BASE}/stats`);
+  if (!res.ok) {
+    throw new Error(`Server error: ${res.status}`);
+  }
   return res.json();
 }
 
@@ -95,12 +98,18 @@ export async function getFile(filePath: string, project?: string): Promise<{ con
   if (project) {
     params.append('project', project);
   }
-  const res = await fetch(`${API_BASE}/file?${params}`);
-  const content = await res.text();
-  if (!res.ok) {
-    return { content: '', error: content };
+  try {
+    const res = await fetch(`${API_BASE}/file?${params}`);
+    const content = await res.text();
+    if (!res.ok) {
+      // Include project info in error for debugging
+      const location = project ? `${project}/${filePath}` : filePath;
+      return { content: '', error: `File not found: ${location}` };
+    }
+    return { content };
+  } catch (e) {
+    return { content: '', error: 'Cannot connect to server' };
   }
-  return { content };
 }
 
 // Get document by ID
