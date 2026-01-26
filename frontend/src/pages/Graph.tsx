@@ -755,16 +755,18 @@ function Canvas3D({ nodes, links }: { nodes: Node[]; links: Link[] }) {
         const n = fractalNoise(time * 0.5 + i * 0.1, 2, 42);
         mesh.position.copy(currentPos).multiplyScalar(1 + n * hudRef.current.breathingIntensity);
 
-        // Calculate dock magnification
+        // Calculate dock magnification (in normalized screen space)
         tempVec.copy(mesh.position);
         tempVec.project(camera);
+        // Account for aspect ratio in distance calculation
+        const aspectRatio = width / height;
         const screenDist = Math.sqrt(
-          Math.pow((tempVec.x - mouse.x) * 2, 2) +
-          Math.pow((tempVec.y - mouse.y) * 2, 2)
+          Math.pow((tempVec.x - mouse.x) * aspectRatio, 2) +
+          Math.pow(tempVec.y - mouse.y, 2)
         );
-        // Magnify nodes close to mouse (dock effect)
-        const maxMagnify = 2.5;
-        const magnifyRadius = 0.3;
+        // Magnify nodes close to mouse (dock effect) - subtle
+        const maxMagnify = 1.8;
+        const magnifyRadius = 0.4;
         const magnifyFactor = screenDist < magnifyRadius
           ? 1 + (maxMagnify - 1) * (1 - screenDist / magnifyRadius)
           : 1;

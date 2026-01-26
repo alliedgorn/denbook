@@ -16,6 +16,16 @@
   color: var(--accent);
 }
 
+.logoFull {
+  display: inline;
+}
+
+@media (max-width: 1100px) {
+  .logoFull {
+    display: none;
+  }
+}
+
 .nav {
   display: flex;
   gap: 4px;
