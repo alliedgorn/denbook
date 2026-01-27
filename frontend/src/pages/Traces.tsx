@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { SidebarLayout } from '../components/SidebarLayout';
 import styles from './Traces.module.css';
 
@@ -19,6 +19,7 @@ interface TraceDetail {
   traceId: string;
   query: string;
   queryType: string;
+  project: string | null;
   foundFiles: Array<{ path: string; type?: string; confidence?: string; matchReason?: string }>;
   foundCommits: Array<{ hash: string; shortHash?: string; message: string; date?: string }>;
   foundIssues: Array<{ number: number; title: string; state?: string; url?: string }>;
@@ -136,6 +137,7 @@ export function Traces() {
           <div className={styles.detailMeta}>
             {getStatusBadge(t.status, !!t.awakening)}
             <span className={styles.queryType}>{t.queryType}</span>
+            {t.project && <span className={styles.project}>{t.project}</span>}
             <span className={styles.timestamp}>
               {new Date(t.createdAt).toLocaleString()}
             </span>
@@ -159,13 +161,21 @@ export function Traces() {
             <section className={styles.section}>
               <h3>Files ({t.foundFiles.length})</h3>
               <ul className={styles.fileList}>
-                {t.foundFiles.map((f, i) => (
-                  <li key={i} className={styles.fileItem}>
-                    <span className={styles.filePath}>{f.path}</span>
-                    {f.confidence && <span className={styles.confidence}>{f.confidence}</span>}
-                    {f.matchReason && <span className={styles.matchReason}>{f.matchReason}</span>}
-                  </li>
-                ))}
+                {t.foundFiles.map((f, i) => {
+                  const filename = f.path.split('/').pop() || f.path;
+                  return (
+                    <li key={i} className={styles.fileItem}>
+                      <Link
+                        to={`/search?q=${encodeURIComponent(filename)}`}
+                        className={styles.filePath}
+                      >
+                        {f.path}
+                      </Link>
+                      {f.confidence && <span className={styles.confidence}>{f.confidence}</span>}
+                      {f.matchReason && <span className={styles.matchReason}>{f.matchReason}</span>}
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           )}

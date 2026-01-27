@@ -216,6 +216,15 @@
   color: var(--text-muted);
 }
 
+.project {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
 .awakening {
   background: rgba(251, 191, 36, 0.1);
   border: 1px solid rgba(251, 191, 36, 0.3);
@@ -289,8 +298,15 @@
 .filePath {
   font-family: monospace;
   font-size: 13px;
-  color: var(--text-primary);
+  color: var(--accent);
   word-break: break-all;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.filePath:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
 }
 
 .confidence {
