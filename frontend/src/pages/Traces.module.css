@@ -306,7 +306,78 @@
 
 .filePath:hover {
   color: var(--text-primary);
-  text-decoration: underline;
+}
+
+.fileEntry {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.fileItem {
+  cursor: pointer;
+  padding: 8px 12px;
+  margin: -8px -12px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.fileItem:hover {
+  background: rgba(167, 139, 250, 0.1);
+}
+
+.fileItem.expanded {
+  background: rgba(167, 139, 250, 0.15);
+}
+
+.filePreview {
+  margin-top: 12px;
+  margin-left: 0;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.previewLoading {
+  padding: 16px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.previewContent {
+  padding: 16px;
+  margin: 0;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.githubLink {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--text-muted);
+}
+
+.viewOnGithub {
+  background: rgba(167, 139, 250, 0.2);
+  color: var(--accent);
+  padding: 8px 16px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.viewOnGithub:hover {
+  background: rgba(167, 139, 250, 0.3);
+  color: #fff;
 }
 
 .confidence {

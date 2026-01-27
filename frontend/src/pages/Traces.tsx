@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { SidebarLayout } from '../components/SidebarLayout';
 import styles from './Traces.module.css';
 
@@ -49,6 +49,9 @@ export function Traces() {
   const [selectedTrace, setSelectedTrace] = useState<TraceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
+  const [expandedFile, setExpandedFile] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  const [loadingFile, setLoadingFile] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -88,6 +91,55 @@ export function Traces() {
       navigate('/traces');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function toggleFilePreview(path: string, project: string | null) {
+    if (expandedFile === path) {
+      setExpandedFile(null);
+      setFileContent(null);
+      return;
+    }
+
+    setExpandedFile(path);
+    setFileContent(null);
+    setLoadingFile(true);
+
+    try {
+      // First try direct file read
+      const params = new URLSearchParams({ path });
+      if (project) params.set('project', project);
+      const res = await fetch(`/api/file?${params}`);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && !text.startsWith('File not found')) {
+          setFileContent(text);
+          return;
+        }
+      }
+
+      // Fallback: search Oracle docs by filename
+      const filename = path.split('/').pop()?.replace('.md', '') || '';
+      const searchRes = await fetch(`/api/search?q=${encodeURIComponent(filename)}&limit=1`);
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        if (searchData.docs?.[0]?.content) {
+          setFileContent(searchData.docs[0].content);
+          return;
+        }
+      }
+
+      // Not found - show GitHub link if project available
+      if (project) {
+        const ghUrl = `https://${project}/blob/main/${path}`;
+        setFileContent(`__GITHUB_LINK__${ghUrl}`);
+      } else {
+        setFileContent('File not found');
+      }
+    } catch {
+      setFileContent('Failed to load file');
+    } finally {
+      setLoadingFile(false);
     }
   }
 
@@ -161,21 +213,39 @@ export function Traces() {
             <section className={styles.section}>
               <h3>Files ({t.foundFiles.length})</h3>
               <ul className={styles.fileList}>
-                {t.foundFiles.map((f, i) => {
-                  const filename = f.path.split('/').pop() || f.path;
-                  return (
-                    <li key={i} className={styles.fileItem}>
-                      <Link
-                        to={`/search?q=${encodeURIComponent(filename)}`}
-                        className={styles.filePath}
-                      >
-                        {f.path}
-                      </Link>
+                {t.foundFiles.map((f, i) => (
+                  <li key={i} className={styles.fileEntry}>
+                    <div
+                      className={`${styles.fileItem} ${expandedFile === f.path ? styles.expanded : ''}`}
+                      onClick={() => toggleFilePreview(f.path, t.project)}
+                    >
+                      <span className={styles.filePath}>{f.path}</span>
                       {f.confidence && <span className={styles.confidence}>{f.confidence}</span>}
                       {f.matchReason && <span className={styles.matchReason}>{f.matchReason}</span>}
-                    </li>
-                  );
-                })}
+                    </div>
+                    {expandedFile === f.path && (
+                      <div className={styles.filePreview}>
+                        {loadingFile ? (
+                          <div className={styles.previewLoading}>Loading...</div>
+                        ) : fileContent?.startsWith('__GITHUB_LINK__') ? (
+                          <div className={styles.githubLink}>
+                            <span>File not found locally</span>
+                            <a
+                              href={fileContent.replace('__GITHUB_LINK__', '')}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={styles.viewOnGithub}
+                            >
+                              View on GitHub →
+                            </a>
+                          </div>
+                        ) : (
+                          <pre className={styles.previewContent}>{fileContent}</pre>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                ))}
               </ul>
             </section>
           )}
