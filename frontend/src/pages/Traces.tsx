@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { SidebarLayout } from '../components/SidebarLayout';
 import styles from './Traces.module.css';
 
 interface TraceSummary {
@@ -125,7 +126,7 @@ export function Traces() {
       t.foundRetrospectives.length + t.foundLearnings.length;
 
     return (
-      <div className={styles.page}>
+      <SidebarLayout>
         <button onClick={() => navigate('/traces')} className={styles.backLink}>
           ← Back to Traces
         </button>
@@ -257,13 +258,13 @@ export function Traces() {
             ))}
           </div>
         )}
-      </div>
+      </SidebarLayout>
     );
   }
 
   // List view
   return (
-    <div className={styles.page}>
+    <SidebarLayout>
       <h1 className={styles.title}>Discovery Traces</h1>
       <p className={styles.subtitle}>
         Your discovery journeys — what you searched and found
@@ -322,6 +323,6 @@ export function Traces() {
           </div>
         </>
       )}
-    </div>
+    </SidebarLayout>
   );
 }
