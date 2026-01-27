@@ -71,9 +71,8 @@
 
 .dropdownMenu {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 4px);
   right: 0;
-  margin-top: 4px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -81,6 +80,16 @@
   min-width: 140px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 200;
+}
+
+/* Bridge the gap to prevent hover loss */
+.dropdown::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 8px;
 }
 
 .dropdownItem {
