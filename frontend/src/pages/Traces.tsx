@@ -245,8 +245,8 @@ export function Traces() {
       const searchRes = await fetch(`/api/search?q=${encodeURIComponent(filename)}&limit=1`);
       if (searchRes.ok) {
         const searchData = await searchRes.json();
-        if (searchData.docs?.[0]?.content) {
-          setFileContent(searchData.docs[0].content);
+        if (searchData.results?.[0]?.content) {
+          setFileContent(searchData.results[0].content);
           return;
         }
       }
