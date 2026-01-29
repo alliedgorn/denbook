@@ -579,38 +579,46 @@ export function Traces() {
             <section className={styles.section}>
               <h3>Learnings ({t.foundLearnings.length})</h3>
               <ul className={styles.fileList}>
-                {t.foundLearnings.map((path, i) => (
-                  <li key={i} className={styles.fileEntry}>
-                    <div
-                      className={`${styles.fileItem} ${expandedFile === path ? styles.expanded : ''}`}
-                      onClick={() => toggleFilePreview(path, null)}
-                    >
-                      <span className={styles.filePath}>{path}</span>
-                    </div>
-                    {expandedFile === path && (
-                      <div className={styles.filePreview}>
-                        {loadingFile ? (
-                          <div className={styles.previewLoading}>Loading...</div>
-                        ) : (
-                          <>
-                            {fileConcepts.length > 0 && (
-                              <div className={styles.conceptsBar}>
-                                {fileConcepts.map((c, j) => (
-                                  <span key={j} className={styles.conceptBadge}>{c}</span>
-                                ))}
-                              </div>
-                            )}
-                            {fileContent ? (
-                              <pre className={styles.previewContent}>{fileContent}</pre>
-                            ) : (
-                              <div className={styles.notFoundLocal}>Learning not found</div>
-                            )}
-                          </>
-                        )}
+                {t.foundLearnings.map((item, i) => {
+                  const isFilePath = item.startsWith('ψ/') || item.includes('/memory/');
+                  if (!isFilePath) {
+                    return (
+                      <li key={i} className={styles.learningSnippet}>{item}</li>
+                    );
+                  }
+                  return (
+                    <li key={i} className={styles.fileEntry}>
+                      <div
+                        className={`${styles.fileItem} ${expandedFile === item ? styles.expanded : ''}`}
+                        onClick={() => toggleFilePreview(item, null)}
+                      >
+                        <span className={styles.filePath}>{item}</span>
                       </div>
-                    )}
-                  </li>
-                ))}
+                      {expandedFile === item && (
+                        <div className={styles.filePreview}>
+                          {loadingFile ? (
+                            <div className={styles.previewLoading}>Loading...</div>
+                          ) : (
+                            <>
+                              {fileConcepts.length > 0 && (
+                                <div className={styles.conceptsBar}>
+                                  {fileConcepts.map((c, j) => (
+                                    <span key={j} className={styles.conceptBadge}>{c}</span>
+                                  ))}
+                                </div>
+                              )}
+                              {fileContent ? (
+                                <pre className={styles.previewContent}>{fileContent}</pre>
+                              ) : (
+                                <div className={styles.notFoundLocal}>Learning not found</div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           )}

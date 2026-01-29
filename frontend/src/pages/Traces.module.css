@@ -677,6 +677,16 @@
   margin-right: 4px;
 }
 
+.learningSnippet {
+  padding: 10px 14px;
+  background: rgba(167, 139, 250, 0.1);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
 .conceptBadge {
   font-size: 11px;
   padding: 3px 10px;
