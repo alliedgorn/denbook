@@ -450,7 +450,7 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
       const { total } = countStmt.get() as { total: number };
 
       stmt = db.prepare(`
-        SELECT d.id, d.type, d.source_file, d.concepts, MAX(d.indexed_at) as indexed_at, f.content
+        SELECT d.id, d.type, d.source_file, d.concepts, d.project, MAX(d.indexed_at) as indexed_at, f.content
         FROM oracle_documents d
         JOIN oracle_fts f ON d.id = f.id
         GROUP BY d.source_file
@@ -463,6 +463,7 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
         content: row.content || '',
         source_file: row.source_file,
         concepts: row.concepts ? JSON.parse(row.concepts) : [],
+        project: row.project,
         indexed_at: row.indexed_at
       }));
 
@@ -472,7 +473,7 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
       const { total } = countStmt.get(type) as { total: number };
 
       stmt = db.prepare(`
-        SELECT d.id, d.type, d.source_file, d.concepts, MAX(d.indexed_at) as indexed_at, f.content
+        SELECT d.id, d.type, d.source_file, d.concepts, d.project, MAX(d.indexed_at) as indexed_at, f.content
         FROM oracle_documents d
         JOIN oracle_fts f ON d.id = f.id
         WHERE d.type = ?
@@ -486,6 +487,7 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
         content: row.content || '',
         source_file: row.source_file,
         concepts: JSON.parse(row.concepts || '[]'),
+        project: row.project,
         indexed_at: row.indexed_at
       }));
 
@@ -499,7 +501,7 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
     const { total } = countStmt.get() as { total: number };
 
     stmt = db.prepare(`
-      SELECT d.id, d.type, d.source_file, d.concepts, d.indexed_at, f.content
+      SELECT d.id, d.type, d.source_file, d.concepts, d.project, d.indexed_at, f.content
       FROM oracle_documents d
       JOIN oracle_fts f ON d.id = f.id
       ORDER BY d.indexed_at DESC
@@ -511,6 +513,7 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
       content: row.content || '',
       source_file: row.source_file,
       concepts: row.concepts ? JSON.parse(row.concepts) : [],
+      project: row.project,
       indexed_at: row.indexed_at
     }));
 
@@ -520,7 +523,7 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
     const { total } = countStmt.get(type) as { total: number };
 
     stmt = db.prepare(`
-      SELECT d.id, d.type, d.source_file, d.concepts, d.indexed_at, f.content
+      SELECT d.id, d.type, d.source_file, d.concepts, d.project, d.indexed_at, f.content
       FROM oracle_documents d
       JOIN oracle_fts f ON d.id = f.id
       WHERE d.type = ?
@@ -533,6 +536,7 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
       content: row.content,
       source_file: row.source_file,
       concepts: JSON.parse(row.concepts || '[]'),
+      project: row.project,
       indexed_at: row.indexed_at
     }));
 

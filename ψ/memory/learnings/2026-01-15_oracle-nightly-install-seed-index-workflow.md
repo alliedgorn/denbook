@@ -1,4 +1,5 @@
 ---
+project: github.com/Soul-Brews-Studio/oracle-v2
 title: Oracle Nightly Install, Seed, and Index Workflow
 created: 2026-01-15
 tags: [oracle-nightly, installation, seed-data, indexing, fresh-install, deployment]

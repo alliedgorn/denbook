@@ -1,4 +1,5 @@
 ---
+project: github.com/Soul-Brews-Studio/oracle-v2
 title: ## Incubate --offload Pattern
 tags: [incubate, offload, ghq, symlink, project, workflow, anti-pattern]
 created: 2026-01-26

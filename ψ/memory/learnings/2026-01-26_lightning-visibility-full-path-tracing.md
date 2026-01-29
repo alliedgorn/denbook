@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Always Trace Full Execution Path for Visibility Changes
 
 **Date**: 2026-01-26

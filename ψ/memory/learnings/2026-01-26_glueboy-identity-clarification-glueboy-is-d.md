@@ -1,4 +1,5 @@
 ---
+project: github.com/Soul-Brews-Studio/oracle-v2
 title: # GLUEBOY Identity Clarification
 tags: [GLUEBOY, Dr-Do, oracle-family, identity, gacha-card]
 created: 2026-01-26

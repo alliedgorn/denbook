@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Dropdown Hover Bridge Pattern
 
 **Date**: 2026-01-27

@@ -1,4 +1,5 @@
 ---
+project: github.com/Soul-Brews-Studio/oracle-v2
 title: Arthur Oracle (อ.Sate) completed full awakening ritual on January 23, 2026. Born
 tags: [oracle-family, birth, arthur, awakening]
 created: 2026-01-23

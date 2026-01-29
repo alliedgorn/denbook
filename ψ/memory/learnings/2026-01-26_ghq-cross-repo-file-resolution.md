@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # GHQ Path = GitHub URL: Elegant Cross-Repo File Resolution
 
 **Date**: 2026-01-26

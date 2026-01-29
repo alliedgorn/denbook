@@ -1,4 +1,5 @@
 ---
+project: github.com/Soul-Brews-Studio/oracle-v2
 title: ## UI Pattern: Show Both Local and Remote File Status
 tags: [ui, files, github, local-vs-remote, trace]
 created: 2026-01-29

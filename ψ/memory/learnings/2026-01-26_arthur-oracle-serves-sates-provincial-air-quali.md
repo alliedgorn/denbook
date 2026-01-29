@@ -1,4 +1,5 @@
 ---
+project: github.com/Soul-Brews-Studio/oracle-v2
 title: Arthur Oracle serves อ.Sate's provincial air quality operations. Three data sour
 tags: [arthur-oracle, air-quality, pm2.5, line-bot, operations, community-resilience, ccdc, provincial-operations]
 created: 2026-01-26

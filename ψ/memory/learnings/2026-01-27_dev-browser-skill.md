@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Dev-Browser: Persistent Browser Automation Skill
 
 **Date**: 2026-01-27

@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Dagster Hourly Partitions with Timezone
 
 **Date**: 2026-01-27

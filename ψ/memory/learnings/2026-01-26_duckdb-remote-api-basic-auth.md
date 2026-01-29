@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # DuckDB Can Query Remote APIs with Basic Auth
 
 **Date**: 2026-01-26

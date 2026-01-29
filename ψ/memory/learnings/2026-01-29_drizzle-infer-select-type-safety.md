@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Drizzle $inferSelect for Type-Safe Database Row Parsing
 
 **Date**: 2026-01-29

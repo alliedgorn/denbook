@@ -1,4 +1,5 @@
 ---
+project: github.com/Soul-Brews-Studio/oracle-v2
 title: **Oracle v2 Canonical Repo**: Only use `github.com/Soul-Brews-Studio/oracle-v2`.
 tags: [oracle-v2, repository, deprecated, canonical]
 created: 2026-01-26

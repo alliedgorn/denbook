@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Trace UI Fallback Patterns
 
 **Date**: 2026-01-29

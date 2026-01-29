@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # DuckDB Preserves Python Types Through JSON Parsing
 
 **Date**: 2026-01-27

@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Trace Linking: Linked List Pattern for Non-Destructive Relationships
 
 **Date**: 2026-01-29

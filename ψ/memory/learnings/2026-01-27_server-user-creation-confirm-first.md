@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Server User Creation: Confirm First
 
 **Date**: 2026-01-27

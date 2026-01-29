@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Data Engineering: Ground Truth Pipeline
 
 **Date**: 2026-01-26

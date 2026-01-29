@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Ask About Aesthetic Preferences Before Optimizing
 
 **Date**: 2026-01-26

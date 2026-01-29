@@ -1,4 +1,5 @@
 ---
+project: github.com/Soul-Brews-Studio/oracle-v2
 title: # Trace Chain System Design
 tags: [trace-chain, trace-id, nanoseconds, timestamps, linked-list, soul-tuning, philosophy]
 created: 2026-01-26

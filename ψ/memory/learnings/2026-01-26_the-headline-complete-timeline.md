@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # The HEADLINE — Complete Timeline
 
 **Source**: LINE Chat "The HEADLINE (มาต้อมกั๋น)"

@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Screen-Space Hover Detection for 3D Interactions
 
 **Date**: 2026-01-26

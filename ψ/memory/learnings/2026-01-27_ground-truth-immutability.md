@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Ground Truth Immutability: Input is Sacred
 
 **Date**: 2026-01-27

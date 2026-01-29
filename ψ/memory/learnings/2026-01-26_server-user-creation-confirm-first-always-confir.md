@@ -1,4 +1,5 @@
 ---
+project: github.com/Soul-Brews-Studio/oracle-v2
 title: Server User Creation: Confirm First
 tags: [server, white.local, user-creation, confirmation, safety, lesson-learned]
 created: 2026-01-26

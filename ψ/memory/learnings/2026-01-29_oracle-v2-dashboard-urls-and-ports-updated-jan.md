@@ -1,4 +1,5 @@
 ---
+project: github.com/Soul-Brews-Studio/oracle-v2
 title: ## Oracle v2 Dashboard URLs and Ports (Updated Jan 2026)
 tags: [oracle-v2, ports, dashboard, frontend, backend, api, 47778, 3000, graph]
 created: 2026-01-29

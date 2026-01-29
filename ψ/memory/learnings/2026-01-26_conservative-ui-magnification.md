@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Start Conservative with UI Magnification Effects
 
 **Date**: 2026-01-26

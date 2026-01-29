@@ -1,4 +1,5 @@
 ---
+project: github.com/Soul-Brews-Studio/oracle-v2
 title: Fresh Install Testing Pattern
 created: 2026-01-15
 tags: [testing, deployment, installation, remote, documentation]

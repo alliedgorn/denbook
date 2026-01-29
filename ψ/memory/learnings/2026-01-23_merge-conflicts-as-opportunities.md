@@ -1,3 +1,7 @@
+---
+project: github.com/Soul-Brews-Studio/oracle-v2
+---
+
 # Merge Conflicts Are Opportunities, Not Problems
 
 **Date**: 2026-01-23
