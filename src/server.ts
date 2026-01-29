@@ -704,7 +704,7 @@ app.get('/api/traces', (c) => {
   const limit = parseInt(c.req.query('limit') || '50');
   const offset = parseInt(c.req.query('offset') || '0');
 
-  const result = listTraces(db, {
+  const result = listTraces({
     query: query || undefined,
     status: status as 'raw' | 'reviewed' | 'distilled' | undefined,
     project: project || undefined,
@@ -717,7 +717,7 @@ app.get('/api/traces', (c) => {
 
 app.get('/api/traces/:id', (c) => {
   const traceId = c.req.param('id');
-  const trace = getTrace(db, traceId);
+  const trace = getTrace(traceId);
 
   if (!trace) {
     return c.json({ error: 'Trace not found' }, 404);
@@ -730,7 +730,7 @@ app.get('/api/traces/:id/chain', (c) => {
   const traceId = c.req.param('id');
   const direction = c.req.query('direction') as 'up' | 'down' | 'both' || 'both';
 
-  const chain = getTraceChain(db, traceId, direction);
+  const chain = getTraceChain(traceId, direction);
   return c.json(chain);
 });
 
@@ -745,7 +745,7 @@ app.post('/api/traces/:prevId/link', async (c) => {
     }
 
     const { linkTraces } = await import('./trace/handler.js');
-    const result = linkTraces(db, prevId, nextId);
+    const result = linkTraces(prevId, nextId);
 
     if (!result.success) {
       return c.json({ error: result.message }, 400);
@@ -769,7 +769,7 @@ app.delete('/api/traces/:id/link', async (c) => {
     }
 
     const { unlinkTraces } = await import('./trace/handler.js');
-    const result = unlinkTraces(db, traceId, direction);
+    const result = unlinkTraces(traceId, direction);
 
     if (!result.success) {
       return c.json({ error: result.message }, 400);
@@ -787,7 +787,7 @@ app.get('/api/traces/:id/linked-chain', async (c) => {
   try {
     const traceId = c.req.param('id');
     const { getTraceLinkedChain } = await import('./trace/handler.js');
-    const result = getTraceLinkedChain(db, traceId);
+    const result = getTraceLinkedChain(traceId);
     return c.json(result);
   } catch (err) {
     console.error('Get linked chain error:', err);

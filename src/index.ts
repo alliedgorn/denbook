@@ -2131,7 +2131,7 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
    * Log a trace session with dig points
    */
   private async handleTrace(input: CreateTraceInput) {
-    const result = createTrace(this.db, input);
+    const result = createTrace(input);
 
     console.error(`[MCP:TRACE] query="${input.query}" depth=${result.depth} digPoints=${result.summary.totalDigPoints}`);
 
@@ -2159,7 +2159,7 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
    * List recent traces with optional filters
    */
   private async handleTraceList(input: ListTracesInput) {
-    const result = listTraces(this.db, input);
+    const result = listTraces(input);
 
     console.error(`[MCP:TRACE_LIST] found=${result.total} returned=${result.traces.length}`);
 
@@ -2190,7 +2190,7 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
    * Get full details of a specific trace
    */
   private async handleTraceGet(input: GetTraceInput) {
-    const trace = getTrace(this.db, input.traceId);
+    const trace = getTrace(input.traceId);
 
     if (!trace) {
       throw new Error(`Trace ${input.traceId} not found`);
@@ -2200,7 +2200,7 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
 
     let chain = undefined;
     if (input.includeChain) {
-      chain = getTraceChain(this.db, input.traceId);
+      chain = getTraceChain(input.traceId);
     }
 
     return {
@@ -2256,7 +2256,7 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
    * Link two traces as a chain (prev → next)
    */
   private async handleTraceLink(input: { prevTraceId: string; nextTraceId: string }) {
-    const result = linkTraces(this.db, input.prevTraceId, input.nextTraceId);
+    const result = linkTraces(input.prevTraceId, input.nextTraceId);
 
     if (!result.success) {
       throw new Error(result.message);
@@ -2290,7 +2290,7 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
    * Remove a link between traces
    */
   private async handleTraceUnlink(input: { traceId: string; direction: 'prev' | 'next' }) {
-    const result = unlinkTraces(this.db, input.traceId, input.direction);
+    const result = unlinkTraces(input.traceId, input.direction);
 
     if (!result.success) {
       throw new Error(result.message);
@@ -2314,7 +2314,7 @@ Philosophy: "Nothing is Deleted" — All interactions logged.`,
    * Get the full linked chain for a trace
    */
   private async handleTraceChain(input: { traceId: string }) {
-    const result = getTraceLinkedChain(this.db, input.traceId);
+    const result = getTraceLinkedChain(input.traceId);
 
     console.error(`[MCP:TRACE_CHAIN] id=${input.traceId} chain_length=${result.chain.length} position=${result.position}`);
 
