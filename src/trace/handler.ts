@@ -6,8 +6,13 @@
  */
 
 import { randomUUID } from 'crypto';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { join, dirname } from 'path';
 import { eq, desc, and, like, sql, isNull } from 'drizzle-orm';
 import { db, traceLog } from '../db/index.js';
+
+// Get repo root for ψ directory
+const REPO_ROOT = process.env.REPO_ROOT || process.cwd();
 import type {
   CreateTraceInput,
   CreateTraceResult,
@@ -20,17 +25,103 @@ import type {
 } from './types.js';
 
 /**
+ * Check if a learning is a file path or text snippet
+ */
+function isLearningFilePath(learning: string): boolean {
+  return learning.startsWith('ψ/') || learning.includes('/memory/learnings/');
+}
+
+/**
+ * Create a learning file from a text snippet
+ * Returns the file path
+ */
+function createLearningFile(
+  text: string,
+  project: string | null,
+  traceQuery: string
+): string {
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+
+  // Generate slug from text (first 50 chars, slugified)
+  const slug = text
+    .slice(0, 50)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  const filename = `${dateStr}_trace-${slug}.md`;
+  const relativePath = `ψ/memory/learnings/${filename}`;
+  const fullPath = join(REPO_ROOT, relativePath);
+
+  // Ensure directory exists
+  const dir = dirname(fullPath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  // Create learning file content
+  const content = `---
+title: ${text.slice(0, 80)}
+tags: [trace-learning${project ? `, ${project.split('/').pop()}` : ''}]
+created: ${dateStr}
+source: Trace discovery
+project: ${project || 'unknown'}
+trace_query: "${traceQuery.replace(/"/g, '\\"')}"
+---
+
+# ${text.slice(0, 80)}
+
+${text}
+
+---
+*Auto-generated from trace: "${traceQuery}"*
+${project ? `*Source project: ${project}*` : ''}
+`;
+
+  writeFileSync(fullPath, content, 'utf-8');
+  return relativePath;
+}
+
+/**
+ * Process foundLearnings - convert text snippets to file paths
+ */
+function processLearnings(
+  learnings: string[] | undefined,
+  project: string | null,
+  traceQuery: string
+): string[] {
+  if (!learnings || learnings.length === 0) return [];
+
+  return learnings.map(learning => {
+    if (isLearningFilePath(learning)) {
+      // Already a file path, keep as-is
+      return learning;
+    }
+    // Text snippet - create a learning file
+    return createLearningFile(learning, project, traceQuery);
+  });
+}
+
+/**
  * Create a new trace log entry
  */
 export function createTrace(input: CreateTraceInput): CreateTraceResult {
   const traceId = randomUUID();
   const now = Date.now();
 
+  // Process learnings - convert text snippets to file paths
+  const processedLearnings = processLearnings(
+    input.foundLearnings,
+    input.project || null,
+    input.query
+  );
+
   // Calculate counts
   const fileCount =
     (input.foundFiles?.length || 0) +
     (input.foundRetrospectives?.length || 0) +
-    (input.foundLearnings?.length || 0) +
+    (processedLearnings?.length || 0) +
     (input.foundResonance?.length || 0);
   const commitCount = input.foundCommits?.length || 0;
   const issueCount = input.foundIssues?.length || 0;
@@ -55,7 +146,7 @@ export function createTrace(input: CreateTraceInput): CreateTraceResult {
     foundCommits: JSON.stringify(input.foundCommits || []),
     foundIssues: JSON.stringify(input.foundIssues || []),
     foundRetrospectives: JSON.stringify(input.foundRetrospectives || []),
-    foundLearnings: JSON.stringify(input.foundLearnings || []),
+    foundLearnings: JSON.stringify(processedLearnings),
     foundResonance: JSON.stringify(input.foundResonance || []),
     fileCount,
     commitCount,
