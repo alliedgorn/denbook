@@ -630,12 +630,20 @@
   overflow-y: auto;
 }
 
+.notFoundLocal {
+  padding: 12px 16px;
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 13px;
+}
+
 .githubLink {
-  padding: 16px;
+  padding: 8px 16px;
   display: flex;
   align-items: center;
   gap: 16px;
   color: var(--text-muted);
+  border-top: 1px solid rgba(255,255,255,0.1);
 }
 
 .viewOnGithub {

@@ -56,6 +56,7 @@ export function Traces() {
   const [total, setTotal] = useState(0);
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
+  const [fileGithubUrl, setFileGithubUrl] = useState<string | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [linkedChain, setLinkedChain] = useState<TraceDetail[]>([]);
   const [chainPosition, setChainPosition] = useState(0);
@@ -204,12 +205,27 @@ export function Traces() {
     if (expandedFile === path) {
       setExpandedFile(null);
       setFileContent(null);
+      setFileGithubUrl(null);
       return;
     }
 
     setExpandedFile(path);
     setFileContent(null);
+    setFileGithubUrl(null);
     setLoadingFile(true);
+
+    // Always compute GitHub URL if project available
+    let ghUrl: string | null = null;
+    if (project) {
+      const isRepoRef = /^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(path);
+      if (isRepoRef) {
+        ghUrl = `https://github.com/${path}`;
+      } else {
+        const ghProject = project.includes('github.com') ? project : `github.com/${project}`;
+        ghUrl = `https://${ghProject}/blob/main/${path}`;
+      }
+      setFileGithubUrl(ghUrl);
+    }
 
     try {
       // First try direct file read
@@ -235,25 +251,8 @@ export function Traces() {
         }
       }
 
-      // Not found - show GitHub link if project available
-      if (project) {
-        // Check if path looks like a repo reference (Org/repo format, no nested path)
-        const isRepoRef = /^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(path);
-
-        if (isRepoRef) {
-          // Path is a repo reference - link to that repo directly
-          const ghUrl = `https://github.com/${path}`;
-          setFileContent(`__GITHUB_LINK__${ghUrl}`);
-          return;
-        }
-
-        // Project may be "owner/repo" or "github.com/owner/repo"
-        const ghProject = project.includes('github.com') ? project : `github.com/${project}`;
-        const ghUrl = `https://${ghProject}/blob/main/${path}`;
-        setFileContent(`__GITHUB_LINK__${ghUrl}`);
-      } else {
-        setFileContent('File not found');
-      }
+      // Not found locally - content stays null, GitHub URL already set
+      setFileContent(null);
     } catch {
       setFileContent('Failed to load file');
     } finally {
@@ -417,20 +416,26 @@ export function Traces() {
                       <div className={styles.filePreview}>
                         {loadingFile ? (
                           <div className={styles.previewLoading}>Loading...</div>
-                        ) : fileContent?.startsWith('__GITHUB_LINK__') ? (
-                          <div className={styles.githubLink}>
-                            <span>File not found locally</span>
-                            <a
-                              href={fileContent.replace('__GITHUB_LINK__', '')}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={styles.viewOnGithub}
-                            >
-                              View on GitHub →
-                            </a>
-                          </div>
                         ) : (
-                          <pre className={styles.previewContent}>{fileContent}</pre>
+                          <>
+                            {fileContent ? (
+                              <pre className={styles.previewContent}>{fileContent}</pre>
+                            ) : (
+                              <div className={styles.notFoundLocal}>File not found locally</div>
+                            )}
+                            {fileGithubUrl && (
+                              <div className={styles.githubLink}>
+                                <a
+                                  href={fileGithubUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={styles.viewOnGithub}
+                                >
+                                  View on GitHub →
+                                </a>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
@@ -450,7 +455,8 @@ export function Traces() {
               )}
               <ul className={styles.commitList}>
                 {t.foundCommits.map((c, i) => {
-                  const commitUrl = t.project ? `https://${t.project}/commit/${c.hash}` : null;
+                  const ghProject = t.project?.includes('github.com') ? t.project : `github.com/${t.project}`;
+                  const commitUrl = t.project ? `https://${ghProject}/commit/${c.hash}` : null;
                   const displayHash = c.shortHash || c.hash.slice(0, 7);
                   return (
                   <li key={i} className={styles.commitItem}>
@@ -573,7 +579,8 @@ export function Traces() {
                   {trace.project && <div className={styles.commitRepo}>{trace.project}</div>}
                   <ul className={styles.commitList}>
                     {trace.foundCommits.map((c, i) => {
-                      const commitUrl = trace.project ? `https://${trace.project}/commit/${c.hash}` : null;
+                      const ghProject = trace.project?.includes('github.com') ? trace.project : `github.com/${trace.project}`;
+                      const commitUrl = trace.project ? `https://${ghProject}/commit/${c.hash}` : null;
                       const displayHash = c.shortHash || c.hash?.slice(0, 7);
                       return (
                         <li key={i} className={styles.commitItem}>
