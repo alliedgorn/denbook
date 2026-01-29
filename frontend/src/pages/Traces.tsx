@@ -438,6 +438,18 @@ export function Traces() {
                           <div className={styles.previewLoading}>Loading...</div>
                         ) : (
                           <>
+                            {fileGithubUrl && (
+                              <div className={styles.githubLink}>
+                                <a
+                                  href={fileGithubUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={styles.viewOnGithub}
+                                >
+                                  View on GitHub →
+                                </a>
+                              </div>
+                            )}
                             {fileConcepts.length > 0 && (
                               <div className={styles.conceptsBar}>
                                 <span className={styles.conceptLabel}>Related:</span>
@@ -450,18 +462,6 @@ export function Traces() {
                               <pre className={styles.previewContent}>{fileContent}</pre>
                             ) : (
                               <div className={styles.notFoundLocal}>File not found locally</div>
-                            )}
-                            {fileGithubUrl && (
-                              <div className={styles.githubLink}>
-                                <a
-                                  href={fileGithubUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={styles.viewOnGithub}
-                                >
-                                  View on GitHub →
-                                </a>
-                              </div>
                             )}
                           </>
                         )}
