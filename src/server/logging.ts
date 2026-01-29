@@ -1,8 +1,10 @@
 /**
  * Oracle v2 Logging Functions
+ *
+ * Refactored to use Drizzle ORM for type-safe queries.
  */
 
-import { db } from './db.js';
+import { db, searchLog, documentAccess, learnLog, consultLog } from '../db/index.js';
 import type { SearchResult } from './types.js';
 
 /**
@@ -28,10 +30,16 @@ export function logSearch(
         })))
       : null;
 
-    db.prepare(`
-      INSERT INTO search_log (query, type, mode, results_count, search_time_ms, created_at, project, results)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(query, type, mode, resultsCount, searchTimeMs, Date.now(), project || null, resultsJson);
+    db.insert(searchLog).values({
+      query,
+      type,
+      mode,
+      resultsCount,
+      searchTimeMs,
+      createdAt: Date.now(),
+      project: project || null,
+      results: resultsJson,
+    }).run();
 
     // Comprehensive console logging
     console.log(`\n${'='.repeat(60)}`);
@@ -69,10 +77,12 @@ export function logSearch(
  */
 export function logDocumentAccess(documentId: string, accessType: string, project?: string) {
   try {
-    db.prepare(`
-      INSERT INTO document_access (document_id, access_type, created_at, project)
-      VALUES (?, ?, ?, ?)
-    `).run(documentId, accessType, Date.now(), project || null);
+    db.insert(documentAccess).values({
+      documentId,
+      accessType,
+      createdAt: Date.now(),
+      project: project || null,
+    }).run();
   } catch (e) {
     console.error('Failed to log access:', e);
   }
@@ -83,10 +93,14 @@ export function logDocumentAccess(documentId: string, accessType: string, projec
  */
 export function logLearning(documentId: string, patternPreview: string, source: string, concepts: string[], project?: string) {
   try {
-    db.prepare(`
-      INSERT INTO learn_log (document_id, pattern_preview, source, concepts, created_at, project)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(documentId, patternPreview.substring(0, 100), source || 'Oracle Learn', JSON.stringify(concepts), Date.now(), project || null);
+    db.insert(learnLog).values({
+      documentId,
+      patternPreview: patternPreview.substring(0, 100),
+      source: source || 'Oracle Learn',
+      concepts: JSON.stringify(concepts),
+      createdAt: Date.now(),
+      project: project || null,
+    }).run();
   } catch (e) {
     console.error('Failed to log learning:', e);
   }
@@ -106,10 +120,15 @@ export function logConsult(
   project?: string
 ) {
   try {
-    db.prepare(`
-      INSERT INTO consult_log (decision, context, principles_found, patterns_found, guidance, created_at, project)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(decision, context || '', principlesFound, patternsFound, guidance.substring(0, 500), Date.now(), project || null);
+    db.insert(consultLog).values({
+      decision,
+      context: context || '',
+      principlesFound,
+      patternsFound,
+      guidance: guidance.substring(0, 500),
+      createdAt: Date.now(),
+      project: project || null,
+    }).run();
 
     // Comprehensive console logging
     console.log(`\n${'='.repeat(60)}`);
