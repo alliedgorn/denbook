@@ -5,9 +5,12 @@
  * - Create threads, add messages
  * - Oracle auto-responds from knowledge base
  * - Logs unanswered questions for later
+ *
+ * Refactored to use Drizzle ORM for type-safe queries.
  */
 
-import { db } from '../server/db.js';
+import { eq, desc, and, sql } from 'drizzle-orm';
+import { db, forumThreads, forumMessages } from '../db/index.js';
 import { handleConsult } from '../server/handlers.js';
 import { getProjectContext } from '../server/context.js';
 import type {
@@ -41,13 +44,17 @@ export function createThread(
 ): ForumThread {
   const now = Date.now();
 
-  const result = db.prepare(`
-    INSERT INTO forum_threads (title, created_by, status, project, created_at, updated_at)
-    VALUES (?, ?, 'active', ?, ?, ?)
-  `).run(title, createdBy, project || null, now, now);
+  const result = db.insert(forumThreads).values({
+    title,
+    createdBy,
+    status: 'active',
+    project: project || null,
+    createdAt: now,
+    updatedAt: now,
+  }).run();
 
   return {
-    id: result.lastInsertRowid as number,
+    id: Number(result.lastInsertRowid),
     title,
     createdBy,
     status: 'active',
@@ -61,23 +68,24 @@ export function createThread(
  * Get thread by ID
  */
 export function getThread(threadId: number): ForumThread | null {
-  const row = db.prepare(`
-    SELECT * FROM forum_threads WHERE id = ?
-  `).get(threadId) as any;
+  const row = db.select()
+    .from(forumThreads)
+    .where(eq(forumThreads.id, threadId))
+    .get();
 
   if (!row) return null;
 
   return {
     id: row.id,
     title: row.title,
-    createdBy: row.created_by,
-    status: row.status,
-    issueUrl: row.issue_url,
-    issueNumber: row.issue_number,
-    project: row.project,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    syncedAt: row.synced_at,
+    createdBy: row.createdBy || undefined,
+    status: row.status || undefined,
+    issueUrl: row.issueUrl || undefined,
+    issueNumber: row.issueNumber || undefined,
+    project: row.project || undefined,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    syncedAt: row.syncedAt || undefined,
   };
 }
 
@@ -85,9 +93,10 @@ export function getThread(threadId: number): ForumThread | null {
  * Update thread status
  */
 export function updateThreadStatus(threadId: number, status: ThreadStatus): void {
-  db.prepare(`
-    UPDATE forum_threads SET status = ?, updated_at = ? WHERE id = ?
-  `).run(status, Date.now(), threadId);
+  db.update(forumThreads)
+    .set({ status, updatedAt: Date.now() })
+    .where(eq(forumThreads.id, threadId))
+    .run();
 }
 
 /**
@@ -101,43 +110,47 @@ export function listThreads(options: {
 } = {}): { threads: ForumThread[]; total: number } {
   const { status, project, limit = 20, offset = 0 } = options;
 
-  let whereClause = '1=1';
-  const params: any[] = [];
-
+  // Build conditions array
+  const conditions = [];
   if (status) {
-    whereClause += ' AND status = ?';
-    params.push(status);
+    conditions.push(eq(forumThreads.status, status));
   }
   if (project) {
-    whereClause += ' AND project = ?';
-    params.push(project);
+    conditions.push(eq(forumThreads.project, project));
   }
 
-  const countRow = db.prepare(`
-    SELECT COUNT(*) as total FROM forum_threads WHERE ${whereClause}
-  `).get(...params) as { total: number };
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const rows = db.prepare(`
-    SELECT * FROM forum_threads
-    WHERE ${whereClause}
-    ORDER BY updated_at DESC
-    LIMIT ? OFFSET ?
-  `).all(...params, limit, offset) as any[];
+  // Get count
+  const countResult = db.select({ count: sql<number>`count(*)` })
+    .from(forumThreads)
+    .where(whereClause)
+    .get();
+  const total = countResult?.count || 0;
+
+  // Get threads
+  const rows = db.select()
+    .from(forumThreads)
+    .where(whereClause)
+    .orderBy(desc(forumThreads.updatedAt))
+    .limit(limit)
+    .offset(offset)
+    .all();
 
   return {
     threads: rows.map(row => ({
       id: row.id,
       title: row.title,
-      createdBy: row.created_by,
-      status: row.status,
-      issueUrl: row.issue_url,
-      issueNumber: row.issue_number,
-      project: row.project,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      syncedAt: row.synced_at,
+      createdBy: row.createdBy || undefined,
+      status: row.status || undefined,
+      issueUrl: row.issueUrl || undefined,
+      issueNumber: row.issueNumber || undefined,
+      project: row.project || undefined,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      syncedAt: row.syncedAt || undefined,
     })),
-    total: countRow.total,
+    total,
   };
 }
 
@@ -161,28 +174,25 @@ export function addMessage(
 ): ForumMessage {
   const now = Date.now();
 
-  const result = db.prepare(`
-    INSERT INTO forum_messages
-    (thread_id, role, content, author, principles_found, patterns_found, search_query, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  const result = db.insert(forumMessages).values({
     threadId,
     role,
     content,
-    options.author || null,
-    options.principlesFound || null,
-    options.patternsFound || null,
-    options.searchQuery || null,
-    now
-  );
+    author: options.author || null,
+    principlesFound: options.principlesFound || null,
+    patternsFound: options.patternsFound || null,
+    searchQuery: options.searchQuery || null,
+    createdAt: now,
+  }).run();
 
   // Update thread timestamp
-  db.prepare(`
-    UPDATE forum_threads SET updated_at = ? WHERE id = ?
-  `).run(now, threadId);
+  db.update(forumThreads)
+    .set({ updatedAt: now })
+    .where(eq(forumThreads.id, threadId))
+    .run();
 
   return {
-    id: result.lastInsertRowid as number,
+    id: Number(result.lastInsertRowid),
     threadId,
     role,
     content,
@@ -198,21 +208,23 @@ export function addMessage(
  * Get messages for a thread
  */
 export function getMessages(threadId: number): ForumMessage[] {
-  const rows = db.prepare(`
-    SELECT * FROM forum_messages WHERE thread_id = ? ORDER BY created_at ASC
-  `).all(threadId) as any[];
+  const rows = db.select()
+    .from(forumMessages)
+    .where(eq(forumMessages.threadId, threadId))
+    .orderBy(forumMessages.createdAt)
+    .all();
 
   return rows.map(row => ({
     id: row.id,
-    threadId: row.thread_id,
-    role: row.role,
+    threadId: row.threadId,
+    role: row.role as MessageRole,
     content: row.content,
-    author: row.author,
-    principlesFound: row.principles_found,
-    patternsFound: row.patterns_found,
-    searchQuery: row.search_query,
-    commentId: row.comment_id,
-    createdAt: row.created_at,
+    author: row.author || undefined,
+    principlesFound: row.principlesFound || undefined,
+    patternsFound: row.patternsFound || undefined,
+    searchQuery: row.searchQuery || undefined,
+    commentId: row.commentId || undefined,
+    createdAt: row.createdAt,
   }));
 }
 
