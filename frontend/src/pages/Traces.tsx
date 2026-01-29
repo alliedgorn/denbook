@@ -243,9 +243,9 @@ export function Traces() {
         }
       }
 
-      // Fallback: search Oracle docs by filename
-      const filename = path.split('/').pop()?.replace('.md', '') || '';
-      const searchRes = await fetch(`/api/search?q=${encodeURIComponent(filename)}&limit=1`);
+      // Search Oracle for related content (use last part of path or repo name)
+      const searchTerm = path.split('/').pop()?.replace('.md', '') || path.split('/').slice(-1)[0] || '';
+      const searchRes = await fetch(`/api/search?q=${encodeURIComponent(searchTerm)}&limit=1`);
       if (searchRes.ok) {
         const searchData = await searchRes.json();
         if (searchData.results?.[0]) {
@@ -256,6 +256,18 @@ export function Traces() {
             setFileConcepts(searchData.results[0].concepts);
           }
           return;
+        }
+      }
+
+      // Also try searching for the full path/repo name
+      if (!fileConcepts.length) {
+        const repoName = path.replace(/\//g, ' ');
+        const repoSearchRes = await fetch(`/api/search?q=${encodeURIComponent(repoName)}&limit=1`);
+        if (repoSearchRes.ok) {
+          const repoData = await repoSearchRes.json();
+          if (repoData.results?.[0]?.concepts) {
+            setFileConcepts(repoData.results[0].concepts);
+          }
         }
       }
 
@@ -426,6 +438,14 @@ export function Traces() {
                           <div className={styles.previewLoading}>Loading...</div>
                         ) : (
                           <>
+                            {fileConcepts.length > 0 && (
+                              <div className={styles.conceptsBar}>
+                                <span className={styles.conceptLabel}>Related:</span>
+                                {fileConcepts.map((c, j) => (
+                                  <span key={j} className={styles.conceptBadge}>{c}</span>
+                                ))}
+                              </div>
+                            )}
                             {fileContent ? (
                               <pre className={styles.previewContent}>{fileContent}</pre>
                             ) : (

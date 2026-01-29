@@ -664,10 +664,17 @@
 .conceptsBar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   padding: 10px 16px;
   border-bottom: 1px solid rgba(255,255,255,0.1);
   background: rgba(0,0,0,0.2);
+}
+
+.conceptLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-right: 4px;
 }
 
 .conceptBadge {
