@@ -1,8 +1,11 @@
 /**
  * Oracle v2 Dashboard Handlers
+ *
+ * Refactored to use Drizzle ORM for type-safe queries.
  */
 
-import { db } from './db.js';
+import { sql, gt, and, gte, lt, desc } from 'drizzle-orm';
+import { db, oracleDocuments, consultLog, searchLog, learnLog } from '../db/index.js';
 import type { DashboardSummary, DashboardActivity, DashboardGrowth } from './types.js';
 
 /**
@@ -10,17 +13,27 @@ import type { DashboardSummary, DashboardActivity, DashboardGrowth } from './typ
  */
 export function handleDashboardSummary(): DashboardSummary {
   // Document counts
-  const totalDocs = db.prepare('SELECT COUNT(*) as count FROM oracle_documents').get() as { count: number };
-  const byType = db.prepare(`
-    SELECT type, COUNT(*) as count
-    FROM oracle_documents
-    GROUP BY type
-  `).all() as { type: string; count: number }[];
+  const totalDocsResult = db.select({ count: sql<number>`count(*)` })
+    .from(oracleDocuments)
+    .get();
+  const totalDocs = totalDocsResult?.count || 0;
 
-  // Concept counts
-  const conceptsResult = db.prepare(`
-    SELECT concepts FROM oracle_documents WHERE concepts IS NOT NULL AND concepts != '[]'
-  `).all() as { concepts: string }[];
+  const byTypeResults = db.select({
+    type: oracleDocuments.type,
+    count: sql<number>`count(*)`
+  })
+    .from(oracleDocuments)
+    .groupBy(oracleDocuments.type)
+    .all();
+
+  // Concept counts - need to parse JSON concepts from all documents
+  const conceptsResult = db.select({ concepts: oracleDocuments.concepts })
+    .from(oracleDocuments)
+    .where(and(
+      sql`${oracleDocuments.concepts} IS NOT NULL`,
+      sql`${oracleDocuments.concepts} != '[]'`
+    ))
+    .all();
 
   const conceptCounts = new Map<string, number>();
   for (const row of conceptsResult) {
@@ -47,35 +60,38 @@ export function handleDashboardSummary(): DashboardSummary {
   let learnings7d = 0;
 
   try {
-    const consultResult = db.prepare(`
-      SELECT COUNT(*) as count FROM consult_log WHERE created_at > ?
-    `).get(sevenDaysAgo) as { count: number };
-    consultations7d = consultResult.count;
+    const consultResult = db.select({ count: sql<number>`count(*)` })
+      .from(consultLog)
+      .where(gt(consultLog.createdAt, sevenDaysAgo))
+      .get();
+    consultations7d = consultResult?.count || 0;
   } catch {}
 
   try {
-    const searchResult = db.prepare(`
-      SELECT COUNT(*) as count FROM search_log WHERE created_at > ?
-    `).get(sevenDaysAgo) as { count: number };
-    searches7d = searchResult.count;
+    const searchResult = db.select({ count: sql<number>`count(*)` })
+      .from(searchLog)
+      .where(gt(searchLog.createdAt, sevenDaysAgo))
+      .get();
+    searches7d = searchResult?.count || 0;
   } catch {}
 
   try {
-    const learnResult = db.prepare(`
-      SELECT COUNT(*) as count FROM learn_log WHERE created_at > ?
-    `).get(sevenDaysAgo) as { count: number };
-    learnings7d = learnResult.count;
+    const learnResult = db.select({ count: sql<number>`count(*)` })
+      .from(learnLog)
+      .where(gt(learnLog.createdAt, sevenDaysAgo))
+      .get();
+    learnings7d = learnResult?.count || 0;
   } catch {}
 
   // Health status
-  const lastIndexed = db.prepare(`
-    SELECT MAX(indexed_at) as last_indexed FROM oracle_documents
-  `).get() as { last_indexed: number | null };
+  const lastIndexedResult = db.select({ lastIndexed: sql<number | null>`max(${oracleDocuments.indexedAt})` })
+    .from(oracleDocuments)
+    .get();
 
   return {
     documents: {
-      total: totalDocs.count,
-      by_type: byType.reduce((acc, row) => ({ ...acc, [row.type]: row.count }), {})
+      total: totalDocs,
+      by_type: byTypeResults.reduce((acc, row) => ({ ...acc, [row.type]: row.count }), {})
     },
     concepts: {
       total: conceptCounts.size,
@@ -87,9 +103,9 @@ export function handleDashboardSummary(): DashboardSummary {
       learnings_7d: learnings7d
     },
     health: {
-      fts_status: totalDocs.count > 0 ? 'healthy' : 'empty',
-      last_indexed: lastIndexed.last_indexed
-        ? new Date(lastIndexed.last_indexed).toISOString()
+      fts_status: totalDocs > 0 ? 'healthy' : 'empty',
+      last_indexed: lastIndexedResult?.lastIndexed
+        ? new Date(lastIndexedResult.lastIndexed).toISOString()
         : null
     }
   };
@@ -104,53 +120,73 @@ export function handleDashboardActivity(days: number = 7): DashboardActivity {
   // Recent consultations
   let consultations: DashboardActivity['consultations'] = [];
   try {
-    consultations = db.prepare(`
-      SELECT decision, principles_found, patterns_found, created_at
-      FROM consult_log
-      WHERE created_at > ?
-      ORDER BY created_at DESC
-      LIMIT 20
-    `).all(since).map((row: any) => ({
+    const rows = db.select({
+      decision: consultLog.decision,
+      principlesFound: consultLog.principlesFound,
+      patternsFound: consultLog.patternsFound,
+      createdAt: consultLog.createdAt
+    })
+      .from(consultLog)
+      .where(gt(consultLog.createdAt, since))
+      .orderBy(desc(consultLog.createdAt))
+      .limit(20)
+      .all();
+
+    consultations = rows.map(row => ({
       decision: row.decision.substring(0, 100),
-      principles_found: row.principles_found,
-      patterns_found: row.patterns_found,
-      created_at: new Date(row.created_at).toISOString()
+      principles_found: row.principlesFound,
+      patterns_found: row.patternsFound,
+      created_at: new Date(row.createdAt).toISOString()
     }));
   } catch {}
 
   // Recent searches
   let searches: DashboardActivity['searches'] = [];
   try {
-    searches = db.prepare(`
-      SELECT query, type, results_count, search_time_ms, created_at
-      FROM search_log
-      WHERE created_at > ?
-      ORDER BY created_at DESC
-      LIMIT 20
-    `).all(since).map((row: any) => ({
+    const rows = db.select({
+      query: searchLog.query,
+      type: searchLog.type,
+      resultsCount: searchLog.resultsCount,
+      searchTimeMs: searchLog.searchTimeMs,
+      createdAt: searchLog.createdAt
+    })
+      .from(searchLog)
+      .where(gt(searchLog.createdAt, since))
+      .orderBy(desc(searchLog.createdAt))
+      .limit(20)
+      .all();
+
+    searches = rows.map(row => ({
       query: row.query.substring(0, 100),
       type: row.type,
-      results_count: row.results_count,
-      search_time_ms: row.search_time_ms,
-      created_at: new Date(row.created_at).toISOString()
+      results_count: row.resultsCount,
+      search_time_ms: row.searchTimeMs,
+      created_at: new Date(row.createdAt).toISOString()
     }));
   } catch {}
 
   // Recent learnings
   let learnings: DashboardActivity['learnings'] = [];
   try {
-    learnings = db.prepare(`
-      SELECT document_id, pattern_preview, source, concepts, created_at
-      FROM learn_log
-      WHERE created_at > ?
-      ORDER BY created_at DESC
-      LIMIT 20
-    `).all(since).map((row: any) => ({
-      document_id: row.document_id,
-      pattern_preview: row.pattern_preview,
+    const rows = db.select({
+      documentId: learnLog.documentId,
+      patternPreview: learnLog.patternPreview,
+      source: learnLog.source,
+      concepts: learnLog.concepts,
+      createdAt: learnLog.createdAt
+    })
+      .from(learnLog)
+      .where(gt(learnLog.createdAt, since))
+      .orderBy(desc(learnLog.createdAt))
+      .limit(20)
+      .all();
+
+    learnings = rows.map(row => ({
+      document_id: row.documentId,
+      pattern_preview: row.patternPreview,
       source: row.source,
       concepts: JSON.parse(row.concepts || '[]'),
-      created_at: new Date(row.created_at).toISOString()
+      created_at: new Date(row.createdAt).toISOString()
     }));
   } catch {}
 
@@ -177,34 +213,43 @@ export function handleDashboardGrowth(period: string = 'week'): DashboardGrowth 
     const date = new Date(dayStart).toISOString().split('T')[0];
 
     // Documents created that day
-    const docsResult = db.prepare(`
-      SELECT COUNT(*) as count FROM oracle_documents
-      WHERE created_at >= ? AND created_at < ?
-    `).get(dayStart, dayEnd) as { count: number };
+    const docsResult = db.select({ count: sql<number>`count(*)` })
+      .from(oracleDocuments)
+      .where(and(
+        gte(oracleDocuments.createdAt, dayStart),
+        lt(oracleDocuments.createdAt, dayEnd)
+      ))
+      .get();
 
     // Consultations that day
     let consultCount = 0;
     try {
-      const consultResult = db.prepare(`
-        SELECT COUNT(*) as count FROM consult_log
-        WHERE created_at >= ? AND created_at < ?
-      `).get(dayStart, dayEnd) as { count: number };
-      consultCount = consultResult.count;
+      const consultResult = db.select({ count: sql<number>`count(*)` })
+        .from(consultLog)
+        .where(and(
+          gte(consultLog.createdAt, dayStart),
+          lt(consultLog.createdAt, dayEnd)
+        ))
+        .get();
+      consultCount = consultResult?.count || 0;
     } catch {}
 
     // Searches that day
     let searchCount = 0;
     try {
-      const searchResult = db.prepare(`
-        SELECT COUNT(*) as count FROM search_log
-        WHERE created_at >= ? AND created_at < ?
-      `).get(dayStart, dayEnd) as { count: number };
-      searchCount = searchResult.count;
+      const searchResult = db.select({ count: sql<number>`count(*)` })
+        .from(searchLog)
+        .where(and(
+          gte(searchLog.createdAt, dayStart),
+          lt(searchLog.createdAt, dayEnd)
+        ))
+        .get();
+      searchCount = searchResult?.count || 0;
     } catch {}
 
     data.push({
       date,
-      documents: docsResult.count,
+      documents: docsResult?.count || 0,
       consultations: consultCount,
       searches: searchCount
     });
