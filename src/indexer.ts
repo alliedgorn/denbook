@@ -352,15 +352,16 @@ export class OracleIndexer {
 
   /**
    * Parse learning markdown into documents
-   * Now reads frontmatter tags and inherits them to all chunks
+   * Now reads frontmatter tags and project, inherits them to all chunks
    */
   private parseLearningFile(filename: string, content: string): OracleDocument[] {
     const documents: OracleDocument[] = [];
     const sourceFile = `ψ/memory/learnings/${filename}`;
     const now = Date.now();
 
-    // Extract file-level tags from frontmatter
+    // Extract file-level tags and project from frontmatter
     const fileTags = this.parseFrontmatterTags(content);
+    const fileProject = this.parseFrontmatterProject(content);
 
     // Extract title from frontmatter or filename
     const titleMatch = content.match(/^title:\s*(.+)$/m);
@@ -385,7 +386,8 @@ export class OracleIndexer {
         content: `${title} - ${sectionTitle}: ${body}`,
         concepts: this.mergeConceptsWithTags(extractedConcepts, fileTags),
         created_at: now,
-        updated_at: now
+        updated_at: now,
+        project: fileProject || undefined
       });
     });
 
@@ -399,7 +401,8 @@ export class OracleIndexer {
         content: content,
         concepts: this.mergeConceptsWithTags(extractedConcepts, fileTags),
         created_at: now,
-        updated_at: now
+        updated_at: now,
+        project: fileProject || undefined
       });
     }
 
@@ -508,6 +511,29 @@ export class OracleIndexer {
   }
 
   /**
+   * Parse frontmatter project from markdown content
+   * Returns the project field if found in frontmatter
+   */
+  private parseFrontmatterProject(content: string): string | null {
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    if (!frontmatterMatch) return null;
+
+    const frontmatter = frontmatterMatch[1];
+
+    // Match project: value
+    const projectMatch = frontmatter.match(/^project:\s*(.+)$/m);
+    if (!projectMatch) return null;
+
+    const project = projectMatch[1].trim();
+    // Handle quoted values
+    if ((project.startsWith('"') && project.endsWith('"')) ||
+        (project.startsWith("'") && project.endsWith("'"))) {
+      return project.slice(1, -1);
+    }
+    return project || null;
+  }
+
+  /**
    * Extract concept tags from text
    * Combines keyword matching with optional file-level tags
    */
@@ -566,7 +592,8 @@ export class OracleIndexer {
     const metadatas: any[] = [];
 
     for (const doc of documents) {
-      // SQLite metadata
+      // SQLite metadata - use doc.project if available, fall back to repo project
+      const docProject = doc.project || this.project;
       insertMeta.run(
         doc.id,
         doc.type,
@@ -575,7 +602,7 @@ export class OracleIndexer {
         doc.created_at,
         doc.updated_at,
         now,
-        this.project
+        docProject
       );
 
       // SQLite FTS
