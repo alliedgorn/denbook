@@ -455,8 +455,16 @@ export function Traces() {
               )}
               <ul className={styles.commitList}>
                 {t.foundCommits.map((c, i) => {
-                  const ghProject = t.project?.includes('github.com') ? t.project : `github.com/${t.project}`;
-                  const commitUrl = t.project ? `https://${ghProject}/commit/${c.hash}` : null;
+                  // Try to detect repo from commit message prefix (e.g., "floodboy-astro: ...")
+                  const repoMatch = c.message.match(/^([a-zA-Z0-9_-]+):\s/);
+                  const org = t.project?.split('/')[0] || 'LarisLabs';
+                  let targetProject = t.project;
+                  if (repoMatch) {
+                    // Use detected repo with same org
+                    targetProject = `${org}/${repoMatch[1]}`;
+                  }
+                  const ghProject = targetProject?.includes('github.com') ? targetProject : `github.com/${targetProject}`;
+                  const commitUrl = targetProject ? `https://${ghProject}/commit/${c.hash}` : null;
                   const displayHash = c.shortHash || c.hash.slice(0, 7);
                   return (
                   <li key={i} className={styles.commitItem}>
@@ -579,8 +587,15 @@ export function Traces() {
                   {trace.project && <div className={styles.commitRepo}>{trace.project}</div>}
                   <ul className={styles.commitList}>
                     {trace.foundCommits.map((c, i) => {
-                      const ghProject = trace.project?.includes('github.com') ? trace.project : `github.com/${trace.project}`;
-                      const commitUrl = trace.project ? `https://${ghProject}/commit/${c.hash}` : null;
+                      // Try to detect repo from commit message prefix (e.g., "floodboy-astro: ...")
+                      const repoMatch = c.message?.match(/^([a-zA-Z0-9_-]+):\s/);
+                      const org = trace.project?.split('/')[0] || 'LarisLabs';
+                      let targetProject = trace.project;
+                      if (repoMatch) {
+                        targetProject = `${org}/${repoMatch[1]}`;
+                      }
+                      const ghProject = targetProject?.includes('github.com') ? targetProject : `github.com/${targetProject}`;
+                      const commitUrl = targetProject ? `https://${ghProject}/commit/${c.hash}` : null;
                       const displayHash = c.shortHash || c.hash?.slice(0, 7);
                       return (
                         <li key={i} className={styles.commitItem}>
