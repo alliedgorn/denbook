@@ -57,6 +57,7 @@ export function Traces() {
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [fileGithubUrl, setFileGithubUrl] = useState<string | null>(null);
+  const [fileConcepts, setFileConcepts] = useState<string[]>([]);
   const [loadingFile, setLoadingFile] = useState(false);
   const [linkedChain, setLinkedChain] = useState<TraceDetail[]>([]);
   const [chainPosition, setChainPosition] = useState(0);
@@ -206,12 +207,14 @@ export function Traces() {
       setExpandedFile(null);
       setFileContent(null);
       setFileGithubUrl(null);
+      setFileConcepts([]);
       return;
     }
 
     setExpandedFile(path);
     setFileContent(null);
     setFileGithubUrl(null);
+    setFileConcepts([]);
     setLoadingFile(true);
 
     // Always compute GitHub URL if project available
@@ -245,8 +248,13 @@ export function Traces() {
       const searchRes = await fetch(`/api/search?q=${encodeURIComponent(filename)}&limit=1`);
       if (searchRes.ok) {
         const searchData = await searchRes.json();
-        if (searchData.results?.[0]?.content) {
-          setFileContent(searchData.results[0].content);
+        if (searchData.results?.[0]) {
+          if (searchData.results[0].content) {
+            setFileContent(searchData.results[0].content);
+          }
+          if (searchData.results[0].concepts) {
+            setFileConcepts(searchData.results[0].concepts);
+          }
           return;
         }
       }
@@ -565,6 +573,13 @@ export function Traces() {
                           <div className={styles.previewLoading}>Loading...</div>
                         ) : (
                           <>
+                            {fileConcepts.length > 0 && (
+                              <div className={styles.conceptsBar}>
+                                {fileConcepts.map((c, j) => (
+                                  <span key={j} className={styles.conceptBadge}>{c}</span>
+                                ))}
+                              </div>
+                            )}
                             {fileContent ? (
                               <pre className={styles.previewContent}>{fileContent}</pre>
                             ) : (
