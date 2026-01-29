@@ -43,6 +43,7 @@ describe("Database Integration (Drizzle ORM)", () => {
       "0000_unknown_viper.sql",
       "0001_chunky_dark_phoenix.sql",
       "0002_mixed_rhodey.sql",
+      "0003_rapid_strong_guy.sql",
     ];
 
     for (const file of migrationFiles) {
