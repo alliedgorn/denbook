@@ -17,19 +17,25 @@
 import fs from 'fs';
 import path from 'path';
 import { Database } from 'bun:sqlite';
+import { drizzle, BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { eq, sql } from 'drizzle-orm';
+import * as schema from './db/schema.js';
+import { oracleDocuments, indexingStatus } from './db/schema.js';
 import { ChromaMcpClient } from './chroma-mcp.js';
 import { detectProject } from './server/project-detect.js';
 import type { OracleDocument, OracleMetadata, IndexerConfig } from './types.js';
 
 export class OracleIndexer {
-  private db: Database;
+  private sqlite: Database;  // Raw bun:sqlite for FTS and schema operations
+  private db: BunSQLiteDatabase<typeof schema>;  // Drizzle for type-safe queries
   private chromaClient: ChromaMcpClient | null = null;
   private config: IndexerConfig;
   private project: string | null;
 
   constructor(config: IndexerConfig) {
     this.config = config;
-    this.db = new Database(config.dbPath);
+    this.sqlite = new Database(config.dbPath);  // Raw connection for FTS and schema
+    this.db = drizzle(this.sqlite, { schema });  // Drizzle wrapper for type-safe queries
     this.project = detectProject(config.repoRoot);
     console.log(`[Indexer] Detected project: ${this.project || '(universal)'}`);
     this.initDatabase();
@@ -39,7 +45,7 @@ export class OracleIndexer {
    * Initialize SQLite schema
    */
   private initDatabase(): void {
-    this.db.exec(`
+    this.sqlite.exec(`
       CREATE TABLE IF NOT EXISTS oracle_documents (
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL,
@@ -97,12 +103,12 @@ export class OracleIndexer {
   private setIndexingStatus(isIndexing: boolean, current: number = 0, total: number = 0, error?: string): void {
     // Ensure repo_root column exists (migration)
     try {
-      this.db.exec('ALTER TABLE indexing_status ADD COLUMN repo_root TEXT');
+      this.sqlite.exec('ALTER TABLE indexing_status ADD COLUMN repo_root TEXT');
     } catch {
       // Column already exists
     }
 
-    this.db.prepare(`
+    this.sqlite.prepare(`
       UPDATE indexing_status SET
         is_indexing = ?,
         progress_current = ?,
@@ -151,7 +157,7 @@ export class OracleIndexer {
     // Query all documents for export
     let docs: any[] = [];
     try {
-      docs = this.db.prepare(`
+      docs = this.sqlite.prepare(`
         SELECT d.id, d.type, d.source_file, d.concepts, d.project, f.content
         FROM oracle_documents d
         JOIN oracle_fts f ON d.id = f.id
@@ -214,8 +220,8 @@ export class OracleIndexer {
 
     // Clear existing data to prevent duplicates
     console.log('Clearing existing index data...');
-    this.db.exec('DELETE FROM oracle_fts');
-    this.db.exec('DELETE FROM oracle_documents');
+    this.sqlite.exec('DELETE FROM oracle_fts');
+    this.sqlite.exec('DELETE FROM oracle_documents');
 
     // Initialize ChromaMcpClient (uses chroma-mcp Python server)
     try {
@@ -575,13 +581,13 @@ export class OracleIndexer {
     const now = Date.now();
 
     // Prepare statements
-    const insertMeta = this.db.prepare(`
+    const insertMeta = this.sqlite.prepare(`
       INSERT OR REPLACE INTO oracle_documents
       (id, type, source_file, concepts, created_at, updated_at, indexed_at, project)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const insertFts = this.db.prepare(`
+    const insertFts = this.sqlite.prepare(`
       INSERT OR REPLACE INTO oracle_fts (id, content, concepts)
       VALUES (?, ?, ?)
     `);
@@ -658,7 +664,7 @@ export class OracleIndexer {
    * Close database connections
    */
   async close(): Promise<void> {
-    this.db.close();
+    this.sqlite.close();
     if (this.chromaClient) {
       await this.chromaClient.close();
     }
