@@ -18,7 +18,7 @@ import fs from 'fs';
 import path from 'path';
 import { Database } from 'bun:sqlite';
 import { drizzle, BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, inArray, sql } from 'drizzle-orm';
 import * as schema from './db/schema.js';
 import { oracleDocuments, indexingStatus } from './db/schema.js';
 import { ChromaMcpClient } from './chroma-mcp.js';
@@ -218,10 +218,39 @@ export class OracleIndexer {
     // SAFETY: Backup before clearing (Nothing is Deleted)
     this.backupDatabase();
 
-    // Clear existing data to prevent duplicates
-    console.log('Clearing existing index data...');
-    this.sqlite.exec('DELETE FROM oracle_fts');
-    this.sqlite.exec('DELETE FROM oracle_documents');
+    // Smart deletion: Only delete indexer-created docs from current project
+    // Preserves oracle_learn documents and docs from other projects
+    const docsToDelete = this.db.select({ id: oracleDocuments.id })
+      .from(oracleDocuments)
+      .where(
+        and(
+          // Match current project OR universal (null)
+          this.project
+            ? or(eq(oracleDocuments.project, this.project), isNull(oracleDocuments.project))
+            : isNull(oracleDocuments.project),
+          // Only delete indexer-created OR legacy (null) docs
+          or(eq(oracleDocuments.createdBy, 'indexer'), isNull(oracleDocuments.createdBy))
+        )
+      )
+      .all();
+
+    const idsToDelete = docsToDelete.map(d => d.id);
+    console.log(`Smart delete: ${idsToDelete.length} docs (preserving oracle_learn)`);
+
+    if (idsToDelete.length > 0) {
+      // Delete from oracle_documents (Drizzle)
+      this.db.delete(oracleDocuments)
+        .where(inArray(oracleDocuments.id, idsToDelete))
+        .run();
+
+      // Delete from FTS (raw SQL required for FTS5)
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < idsToDelete.length; i += BATCH_SIZE) {
+        const batch = idsToDelete.slice(i, i + BATCH_SIZE);
+        const placeholders = batch.map(() => '?').join(',');
+        this.sqlite.prepare(`DELETE FROM oracle_fts WHERE id IN (${placeholders})`).run(...batch);
+      }
+    }
 
     // Initialize ChromaMcpClient (uses chroma-mcp Python server)
     try {
@@ -549,6 +578,16 @@ export class OracleIndexer {
       }
     }
 
+    // Fallback: known project patterns in source field
+    const sourceField = frontmatter.match(/^source:\s*(.+)$/m);
+    if (sourceField) {
+      const source = sourceField[1].trim().toLowerCase();
+      // Map known sources to projects
+      if (source.includes('arthur oracle') || source.includes('arthur landing')) {
+        return 'github.com/laris-co/arthur-oracle';
+      }
+    }
+
     return null;
   }
 
@@ -589,17 +628,12 @@ export class OracleIndexer {
 
   /**
    * Store documents in SQLite + Chroma
+   * Uses Drizzle for type-safe inserts and sets createdBy: 'indexer'
    */
   private async storeDocuments(documents: OracleDocument[]): Promise<void> {
     const now = Date.now();
 
-    // Prepare statements
-    const insertMeta = this.sqlite.prepare(`
-      INSERT OR REPLACE INTO oracle_documents
-      (id, type, source_file, concepts, created_at, updated_at, indexed_at, project)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
+    // Prepare FTS statement (raw SQL required for FTS5)
     const insertFts = this.sqlite.prepare(`
       INSERT OR REPLACE INTO oracle_fts (id, content, concepts)
       VALUES (?, ?, ?)
@@ -613,18 +647,35 @@ export class OracleIndexer {
     for (const doc of documents) {
       // SQLite metadata - use doc.project if available, fall back to repo project
       const docProject = doc.project || this.project;
-      insertMeta.run(
-        doc.id,
-        doc.type,
-        doc.source_file,
-        JSON.stringify(doc.concepts),
-        doc.created_at,
-        doc.updated_at,
-        now,
-        docProject
-      );
 
-      // SQLite FTS
+      // Drizzle upsert with createdBy: 'indexer'
+      this.db.insert(oracleDocuments)
+        .values({
+          id: doc.id,
+          type: doc.type,
+          sourceFile: doc.source_file,
+          concepts: JSON.stringify(doc.concepts),
+          createdAt: doc.created_at,
+          updatedAt: doc.updated_at,
+          indexedAt: now,
+          project: docProject,
+          createdBy: 'indexer',  // Mark as indexer-created
+        })
+        .onConflictDoUpdate({
+          target: oracleDocuments.id,
+          set: {
+            type: doc.type,
+            sourceFile: doc.source_file,
+            concepts: JSON.stringify(doc.concepts),
+            updatedAt: doc.updated_at,
+            indexedAt: now,
+            project: docProject,
+            // Don't update createdBy - preserve original
+          }
+        })
+        .run();
+
+      // SQLite FTS (raw SQL required for FTS5)
       insertFts.run(
         doc.id,
         doc.content,
