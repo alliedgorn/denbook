@@ -315,6 +315,28 @@ export function DocDetail() {
           </div>
         )}
         <div className={styles.footerLinks}>
+          {doc.project && (
+            <div className={styles.footerLinksRow}>
+              <a
+                href={`https://${doc.project.includes('github.com') ? '' : 'github.com/'}${doc.project}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.repoLink}
+                title="View repository"
+              >
+                🔗 {doc.project.replace('github.com/', '')}
+              </a>
+              <a
+                href={`https://${doc.project.includes('github.com') ? '' : 'github.com/'}${doc.project}/blob/main/${doc.source_file}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.githubLink}
+                title="View on GitHub"
+              >
+                View on GitHub ↗
+              </a>
+            </div>
+          )}
           {!fileNotFound && (
             <a
               href={`/api/file?path=${encodeURIComponent(doc.source_file)}`}
@@ -328,17 +350,6 @@ export function DocDetail() {
           )}
           {fileNotFound && (
             <span className={styles.sourcePathMuted}>📁 {doc.source_file}</span>
-          )}
-          {doc.project && (
-            <a
-              href={`https://${doc.project.includes('github.com') ? '' : 'github.com/'}${doc.project}/blob/main/${doc.source_file}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.githubLink}
-              title="View on GitHub"
-            >
-              View on GitHub ↗
-            </a>
           )}
         </div>
       </footer>
