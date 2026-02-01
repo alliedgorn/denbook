@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { list, getFile, getDoc } from '../api/oracle';
@@ -23,6 +23,9 @@ export function DocDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [neighbors, setNeighbors] = useState<{ prev: Document | null; next: Document | null }>({ prev: null, next: null });
+  const [showRawModal, setShowRawModal] = useState(false);
+  const [rawContent, setRawContent] = useState<string | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   // Navigate to a document
   const goToDoc = useCallback((targetDoc: Document) => {
@@ -142,6 +145,34 @@ export function DocDetail() {
       setLoading(false);
     }
   }
+
+  // Show raw file in modal
+  async function handleShowRawFile(e: React.MouseEvent) {
+    e.preventDefault();
+    if (!doc?.source_file) return;
+
+    try {
+      const res = await fetch(`/api/file?path=${encodeURIComponent(doc.source_file)}${doc.project ? `&project=${encodeURIComponent(doc.project)}` : ''}`);
+      if (res.ok) {
+        const content = await res.text();
+        setRawContent(content);
+        setShowRawModal(true);
+      }
+    } catch (err) {
+      console.error('Failed to load raw file:', err);
+    }
+  }
+
+  // Close modal on escape key
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && showRawModal) {
+        setShowRawModal(false);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showRawModal]);
 
   // Strip YAML frontmatter only, keep all content
   function stripFrontmatter(content: string): string {
@@ -338,21 +369,37 @@ export function DocDetail() {
             </div>
           )}
           {!fileNotFound && (
-            <a
-              href={`/api/file?path=${encodeURIComponent(doc.source_file)}`}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={handleShowRawFile}
               className={styles.sourcePath}
-              title="Open local file"
+              title="View raw file"
             >
               📁 {doc.source_file}
-            </a>
+            </button>
           )}
           {fileNotFound && (
             <span className={styles.sourcePathMuted}>📁 {doc.source_file}</span>
           )}
         </div>
       </footer>
+
+      {/* Raw File Modal */}
+      {showRawModal && rawContent && (
+        <div className={styles.modalOverlay} onClick={() => setShowRawModal(false)}>
+          <div className={styles.modal} onClick={e => e.stopPropagation()} ref={modalRef}>
+            <div className={styles.modalHeader}>
+              <span className={styles.modalTitle}>📁 {doc.source_file}</span>
+              <button className={styles.modalClose} onClick={() => setShowRawModal(false)}>×</button>
+            </div>
+            <pre className={styles.modalContent}>{rawContent.split('\n').map((line, i) => (
+              <div key={i} className={styles.codeLine}>
+                <span className={styles.lineNumber}>{i + 1}</span>
+                <span className={styles.lineContent}>{line || ' '}</span>
+              </div>
+            ))}</pre>
+          </div>
+        </div>
+      )}
     </article>
     </SidebarLayout>
   );
