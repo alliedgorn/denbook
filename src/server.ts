@@ -7,7 +7,6 @@
 
 import { Hono, type Context, type Next } from 'hono';
 import { cors } from 'hono/cors';
-import { serveStatic } from 'hono/bun';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { createHmac, timingSafeEqual } from 'crypto';
 import fs from 'fs';
@@ -79,9 +78,6 @@ import {
   getTrace,
   getTraceChain
 } from './trace/handler.ts';
-
-// Frontend static file serving
-const FRONTEND_DIST = path.join(import.meta.dirname || __dirname, '..', 'frontend', 'dist');
 
 // Reset stale indexing status on startup using Drizzle
 try {
@@ -1127,25 +1123,6 @@ app.get('/legacy/oracle', (c) => {
 
 app.get('/legacy/dashboard', (c) => {
   const content = fs.readFileSync(DASHBOARD_PATH, 'utf-8');
-  return c.html(content);
-});
-
-// ============================================================================
-// Static Files + SPA Fallback
-// ============================================================================
-
-// Serve static files from frontend/dist (use absolute path)
-app.use('/*', serveStatic({ root: FRONTEND_DIST }));
-
-// SPA fallback - serve index.html for unmatched routes
-app.get('*', (c) => {
-  const indexPath = path.join(FRONTEND_DIST, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    const content = fs.readFileSync(indexPath, 'utf-8');
-    return c.html(content);
-  }
-  // Fallback to Arthur UI if no build exists
-  const content = fs.readFileSync(ARTHUR_UI_PATH, 'utf-8');
   return c.html(content);
 });
 

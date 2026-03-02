@@ -180,6 +180,7 @@ export const traceLog = sqliteTable('trace_log', {
 
   // Context
   project: text('project'),                   // ghq format project path
+  scope: text('scope').default('project'),    // 'project' | 'cross-project' | 'human'
   sessionId: text('session_id'),              // Claude session if available
   agentCount: integer('agent_count').default(1),
   durationMs: integer('duration_ms'),

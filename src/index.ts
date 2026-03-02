@@ -19,8 +19,6 @@ import { ChromaMcpClient } from './chroma-mcp.ts';
 import path from 'path';
 import fs from 'fs';
 
-import { ensureServerRunning } from './ensure-server.ts';
-
 // Tool handlers (all extracted to src/tools/)
 import type { ToolContext } from './tools/types.ts';
 import {
@@ -305,14 +303,6 @@ async function main() {
     console.error('[Startup] Chroma pre-connected successfully');
   } catch (e) {
     console.error('[Startup] Chroma pre-connect failed:', e instanceof Error ? e.message : e);
-  }
-
-  try {
-    console.error('[Startup] Ensuring HTTP server is running...');
-    await ensureServerRunning({ timeout: 5000 });
-    console.error('[Startup] HTTP server ready');
-  } catch (e) {
-    console.error('[Startup] HTTP server auto-start failed:', e instanceof Error ? e.message : e);
   }
 
   await server.run();

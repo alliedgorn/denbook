@@ -40,6 +40,7 @@ export const traceToolDef = {
       foundIssues: { type: 'array', items: { type: 'object', properties: { number: { type: 'number' }, title: { type: 'string' }, state: { type: 'string', enum: ['open', 'closed'] }, url: { type: 'string' } } }, description: 'GitHub issues discovered' },
       foundRetrospectives: { type: 'array', items: { type: 'string' }, description: 'Retrospective file paths' },
       foundLearnings: { type: 'array', items: { type: 'string' }, description: 'Learning file paths' },
+      scope: { type: 'string', enum: ['project', 'cross-project', 'human'], description: 'Trace scope. project=single repo, cross-project=spans repos, human=about the person' },
       parentTraceId: { type: 'string', description: 'Parent trace ID if this is a dig from another trace' },
       project: { type: 'string', description: 'Project context (ghq format)' },
       agentCount: { type: 'number', description: 'Number of agents used in trace' },
@@ -164,6 +165,7 @@ export async function handleTraceList(input: ListTracesInput): Promise<ToolRespo
         traces: result.traces.map(t => ({
           trace_id: t.traceId,
           query: t.query,
+          scope: t.scope,
           depth: t.depth,
           file_count: t.fileCount,
           commit_count: t.commitCount,
@@ -197,6 +199,7 @@ export async function handleTraceGet(input: GetTraceInput): Promise<ToolResponse
         trace_id: trace.traceId,
         query: trace.query,
         query_type: trace.queryType,
+        scope: trace.scope,
         depth: trace.depth,
         status: trace.status,
         found_files: trace.foundFiles,

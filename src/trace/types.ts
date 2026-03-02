@@ -38,6 +38,7 @@ export interface CreateTraceInput {
   foundRetrospectives?: string[];
   foundLearnings?: string[];
   foundResonance?: string[];
+  scope?: 'project' | 'cross-project' | 'human';
   parentTraceId?: string;
   project?: string;
   sessionId?: string;
@@ -85,6 +86,7 @@ export interface TraceRecord {
   childTraceIds: string[];
   prevTraceId: string | null;
   nextTraceId: string | null;
+  scope: string;
   project: string | null;
   sessionId: string | null;
   agentCount: number;
@@ -100,6 +102,7 @@ export interface TraceRecord {
 export interface TraceSummary {
   traceId: string;
   query: string;
+  scope: string;
   depth: number;
   fileCount: number;
   commitCount: number;
