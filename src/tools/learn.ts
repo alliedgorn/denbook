@@ -12,6 +12,13 @@ import { detectProject } from '../server/project-detect.ts';
 import { getVaultPsiRoot } from '../vault/handler.ts';
 import type { ToolContext, ToolResponse, OracleLearnInput } from './types.ts';
 
+/** Coerce concepts to string[] — handles string, array, or undefined from MCP input */
+export function coerceConcepts(concepts: unknown): string[] {
+  if (Array.isArray(concepts)) return concepts.map(String);
+  if (typeof concepts === 'string') return concepts.split(',').map(s => s.trim()).filter(Boolean);
+  return [];
+}
+
 export const learnToolDef = {
   name: 'oracle_learn',
   description: 'Add a new pattern or learning to the Oracle knowledge base. Creates a markdown file in ψ/memory/learnings/ and indexes it.',
@@ -138,7 +145,7 @@ export async function handleLearn(ctx: ToolContext, input: OracleLearnInput): Pr
   }
 
   const title = pattern.split('\n')[0].substring(0, 80);
-  const conceptsList = concepts || [];
+  const conceptsList = coerceConcepts(concepts);
   const frontmatter = [
     '---',
     `title: ${title}`,

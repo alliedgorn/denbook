@@ -14,6 +14,7 @@ import { logSearch, logDocumentAccess, logLearning } from './logging.ts';
 import type { SearchResult, SearchResponse } from './types.ts';
 import { ChromaMcpClient } from '../chroma-mcp.ts';
 import { detectProject } from './project-detect.ts';
+import { coerceConcepts } from '../tools/learn.ts';
 
 // Singleton ChromaMcpClient for vector search
 // HTTP server can use this because it's NOT an MCP server (no stdio conflict)
@@ -874,7 +875,7 @@ export function handleLearn(
   // Re-index the new file
   const content = frontmatter;
   const id = `learning_${dateStr}_${slug}`;
-  const conceptsList = concepts || [];
+  const conceptsList = coerceConcepts(concepts);
 
   // Insert into database with provenance using Drizzle
   db.insert(oracleDocuments).values({
