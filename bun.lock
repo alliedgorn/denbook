@@ -8,6 +8,7 @@
         "@anthropic-ai/sdk": "^0.31.0",
         "@modelcontextprotocol/sdk": "^1.27.1",
         "chromadb": "^3.2.0",
+        "commander": "^14.0.3",
         "drizzle-orm": "^0.45.1",
         "hono": "^4.11.3",
       },
@@ -144,6 +145,8 @@
     "chromadb-js-bindings-win32-x64-msvc": ["chromadb-js-bindings-win32-x64-msvc@1.2.0", "", { "os": "win32", "cpu": "x64" }, "sha512-1gmVdgw/spSSYvbc7Ogms9FXf+Zad41Cp7Enqfvrp7m9qQ+Nz4NqZINfOEX5OVzPHEj6cfXA11NdGeNHTPPHOg=="],
 
     "combined-stream": ["combined-stream@1.0.8", "", { "dependencies": { "delayed-stream": "~1.0.0" } }, "sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg=="],
+
+    "commander": ["commander@14.0.3", "", {}, "sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw=="],
 
     "content-disposition": ["content-disposition@1.0.1", "", {}, "sha512-oIXISMynqSqm241k6kcQ5UwttDILMK4BiurCfGEREw6+X9jkkpEe5T9FZaApyLGGOnFuyMWZpdolTXMtvEJ08Q=="],
 
