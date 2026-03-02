@@ -96,6 +96,8 @@ const PROJECT_CATEGORIES = [
 const UNIVERSAL_CATEGORIES = [
   'ψ/memory/resonance/',
   'ψ/inbox/schedule.md',
+  'ψ/inbox/focus-agent-main.md',
+  'ψ/active/',
 ];
 
 /**
