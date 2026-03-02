@@ -15,13 +15,13 @@ TypeScript MCP server for semantic search over Oracle philosophy — SQLite FTS5
 
 ```
 oracle-v2 (one package, two bins)
-├── bunx oracle-v2        → MCP server (src/index.ts)
-├── bunx oracle-vault     → Vault CLI (src/vault/cli.ts)
-├── bun run server        → HTTP API (src/server.ts)
-└── bun run index         → Indexer (src/indexer.ts)
+├── bunx oracle-v2                          → MCP server (src/index.ts)
+├── bunx --package oracle-v2 oracle-vault   → Vault CLI (src/vault/cli.ts)
+├── bun run server                          → HTTP API (src/server.ts)
+└── bun run index                           → Indexer (src/indexer.ts)
 
 oracle-studio (separate repo)
-└── bunx oracle-studio    → React dashboard
+└── bunx oracle-studio                      → React dashboard
 ```
 
 **Stack:**
@@ -42,8 +42,8 @@ Distributed via GitHub — no npm publish needed:
 # MCP server (stdio, for Claude Code)
 bunx --bun oracle-v2@github:Soul-Brews-Studio/oracle-v2#main
 
-# Vault CLI
-bunx --bun oracle-vault@github:Soul-Brews-Studio/oracle-v2#main --help
+# Vault CLI (secondary bin — use --package)
+bunx --bun --package oracle-v2@github:Soul-Brews-Studio/oracle-v2#main oracle-vault --help
 ```
 
 ### Add to Claude Code
