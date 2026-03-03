@@ -17,10 +17,12 @@
 import fs from 'fs';
 import path from 'path';
 import { Database } from 'bun:sqlite';
-import { drizzle, BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { eq, or, isNull, inArray } from 'drizzle-orm';
 import * as schema from './db/schema.ts';
-import { oracleDocuments, indexingStatus } from './db/schema.ts';
+import { oracleDocuments } from './db/schema.ts';
+import { createDatabase } from './db/index.ts';
+import { DB_PATH } from './config.ts';
 import { ChromaMcpClient } from './chroma-mcp.ts';
 import { detectProject } from './server/project-detect.ts';
 import { getVaultPsiRoot } from './vault/handler.ts';
@@ -36,69 +38,11 @@ export class OracleIndexer {
 
   constructor(config: IndexerConfig) {
     this.config = config;
-    this.sqlite = new Database(config.dbPath);  // Raw connection for FTS and schema
-    this.sqlite.exec('PRAGMA journal_mode = WAL');
-    this.sqlite.exec('PRAGMA busy_timeout = 5000');
-    this.db = drizzle(this.sqlite, { schema });  // Drizzle wrapper for type-safe queries
+    const { sqlite, db } = createDatabase(config.dbPath);
+    this.sqlite = sqlite;
+    this.db = db;
     this.project = detectProject(config.repoRoot);
     console.log(`[Indexer] Detected project: ${this.project || '(universal)'}`);
-    this.initDatabase();
-  }
-
-  /**
-   * Initialize SQLite schema
-   */
-  private initDatabase(): void {
-    this.sqlite.exec(`
-      CREATE TABLE IF NOT EXISTS oracle_documents (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        source_file TEXT NOT NULL,
-        concepts TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        indexed_at INTEGER NOT NULL,
-        project TEXT
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_type ON oracle_documents(type);
-      CREATE INDEX IF NOT EXISTS idx_source ON oracle_documents(source_file);
-
-      -- FTS5 for keyword search (with Porter stemmer for tire/tired matching)
-      CREATE VIRTUAL TABLE IF NOT EXISTS oracle_fts USING fts5(
-        id UNINDEXED,
-        content,
-        concepts,
-        tokenize='porter unicode61'
-      );
-
-      -- Consult log for tracking oracle_consult queries
-      CREATE TABLE IF NOT EXISTS consult_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        decision TEXT NOT NULL,
-        context TEXT,
-        principles_found INTEGER NOT NULL,
-        patterns_found INTEGER NOT NULL,
-        guidance TEXT NOT NULL,
-        created_at INTEGER NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_consult_created ON consult_log(created_at);
-
-      -- Indexing status for tray app
-      CREATE TABLE IF NOT EXISTS indexing_status (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        is_indexing INTEGER NOT NULL DEFAULT 0,
-        progress_current INTEGER DEFAULT 0,
-        progress_total INTEGER DEFAULT 0,
-        started_at INTEGER,
-        completed_at INTEGER,
-        error TEXT
-      );
-
-      -- Ensure single row exists
-      INSERT OR IGNORE INTO indexing_status (id, is_indexing) VALUES (1, 0);
-    `);
   }
 
   /**
@@ -905,7 +849,6 @@ export class OracleIndexer {
 const isMain = import.meta.url.endsWith('indexer.ts') || import.meta.url.endsWith('indexer.js');
 if (isMain) {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp';
-  const oracleDataDir = process.env.ORACLE_DATA_DIR || path.join(homeDir, '.oracle');
 
   // Prefer vault repo for centralized indexing, fall back to local ψ/ detection
   const scriptDir = import.meta.dirname || path.dirname(new URL(import.meta.url).pathname);
@@ -925,7 +868,7 @@ if (isMain) {
 
   const config: IndexerConfig = {
     repoRoot,
-    dbPath: process.env.ORACLE_DB_PATH || path.join(oracleDataDir, 'oracle.db'),
+    dbPath: DB_PATH,
     chromaPath: path.join(homeDir, '.chromadb'),
     sourcePaths: {
       resonance: 'ψ/memory/resonance',
