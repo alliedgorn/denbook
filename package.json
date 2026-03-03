@@ -6,7 +6,8 @@
   "main": "src/index.ts",
   "bin": {
     "oracle-v2": "./src/index.ts",
-    "oracle-cli": "./src/cli/index.ts"
+    "oracle-vault": "./src/vault/cli.ts",
+    "oracle": "./src/cli/index.ts"
   },
   "files": [
     "src",
@@ -27,7 +28,6 @@
     "server": "bun src/server.ts",
     "server:ensure": "bun src/ensure-server.ts",
     "server:status": "bun src/ensure-server.ts --status",
-    "server:legacy": "bun src/server-legacy.ts",
     "serve": "bun dist/server.js",
     "index": "bun src/indexer.ts",
     "build": "tsc --noEmit",
@@ -56,9 +56,7 @@
     "vault:rsync": "./scripts/vault-rsync.sh"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.31.0",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "chromadb": "^3.2.0",
     "commander": "^14.0.3",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.11.3"
