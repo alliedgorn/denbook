@@ -15,28 +15,8 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execSync } from 'child_process';
-import { eq } from 'drizzle-orm';
-import { db, settings } from '../db/index.ts';
+import { getSetting, setSetting } from '../db/index.ts';
 import { detectProject } from '../server/project-detect.ts';
-
-// ---------------------------------------------------------------------------
-// Settings helpers (same pattern as server.ts)
-// ---------------------------------------------------------------------------
-
-function getSetting(key: string): string | null {
-  const row = db.select().from(settings).where(eq(settings.key, key)).get();
-  return row?.value ?? null;
-}
-
-function setSetting(key: string, value: string | null): void {
-  db.insert(settings)
-    .values({ key, value, updatedAt: Date.now() })
-    .onConflictDoUpdate({
-      target: settings.key,
-      set: { value, updatedAt: Date.now() },
-    })
-    .run();
-}
 
 // ---------------------------------------------------------------------------
 // Helpers

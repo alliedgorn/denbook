@@ -13,19 +13,13 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import { eq } from 'drizzle-orm';
-import { db, settings } from '../db/index.ts';
+import { getSetting } from '../db/index.ts';
 import { detectProject } from '../server/project-detect.ts';
 import { mapToVaultPath, ensureFrontmatterProject } from './handler.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function getSetting(key: string): string | null {
-  const row = db.select().from(settings).where(eq(settings.key, key)).get();
-  return row?.value ?? null;
-}
 
 function resolveVaultPath(repo: string): string {
   const output = execSync(`ghq list -p ${repo}`, { encoding: 'utf-8' }).trim();

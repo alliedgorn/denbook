@@ -7,6 +7,7 @@
  * 3. Seed indexing_status row
  */
 
+import { eq } from 'drizzle-orm';
 import { drizzle, type BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { Database } from 'bun:sqlite';
@@ -104,43 +105,27 @@ export const db = defaultDb;
 export * from './schema.ts';
 
 /**
- * Rebuild FTS5 table with Porter stemmer
- * Required when upgrading from non-stemmed to stemmed FTS
- */
-export function rebuildFts5WithStemmer() {
-  console.log('[FTS5] Starting rebuild with Porter stemmer...');
-
-  const existingData = sqlite.prepare('SELECT id, content, concepts FROM oracle_fts').all() as {
-    id: string;
-    content: string;
-    concepts: string;
-  }[];
-  console.log(`[FTS5] Backed up ${existingData.length} documents`);
-
-  sqlite.exec('DROP TABLE IF EXISTS oracle_fts');
-
-  sqlite.exec(`
-    CREATE VIRTUAL TABLE oracle_fts USING fts5(
-      id UNINDEXED,
-      content,
-      concepts,
-      tokenize='porter unicode61'
-    )
-  `);
-  console.log('[FTS5] Created new table with Porter stemmer');
-
-  const insertStmt = sqlite.prepare('INSERT INTO oracle_fts (id, content, concepts) VALUES (?, ?, ?)');
-  for (const row of existingData) {
-    insertStmt.run(row.id, row.content, row.concepts);
-  }
-  console.log(`[FTS5] Re-inserted ${existingData.length} documents`);
-
-  return existingData.length;
-}
-
-/**
  * Close database connection
  */
 export function closeDb() {
   defaultSqlite.close();
+}
+
+// ============================================================================
+// Settings helpers
+// ============================================================================
+
+export function getSetting(key: string): string | null {
+  const row = db.select().from(schema.settings).where(eq(schema.settings.key, key)).get();
+  return row?.value ?? null;
+}
+
+export function setSetting(key: string, value: string | null): void {
+  db.insert(schema.settings)
+    .values({ key, value, updatedAt: Date.now() })
+    .onConflictDoUpdate({
+      target: schema.settings.key,
+      set: { value, updatedAt: Date.now() },
+    })
+    .run();
 }

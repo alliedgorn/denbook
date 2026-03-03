@@ -957,7 +957,6 @@ app.delete('/api/traces/:id/link', async (c) => {
       return c.json({ error: 'Missing or invalid direction (prev|next)' }, 400);
     }
 
-    const { unlinkTraces } = await import('./trace/handler.js');
     const result = unlinkTraces(traceId, direction);
 
     if (!result.success) {
@@ -975,7 +974,6 @@ app.delete('/api/traces/:id/link', async (c) => {
 app.get('/api/traces/:id/linked-chain', async (c) => {
   try {
     const traceId = c.req.param('id');
-    const { getTraceLinkedChain } = await import('./trace/handler.js');
     const result = getTraceLinkedChain(traceId);
     return c.json(result);
   } catch (err) {

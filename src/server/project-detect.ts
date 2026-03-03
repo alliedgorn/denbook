@@ -18,7 +18,6 @@
  */
 
 import fs from 'fs';
-import path from 'path';
 
 /**
  * Detect project from working directory by following symlinks to ghq path
@@ -55,22 +54,3 @@ export function detectProject(cwd?: string): string | null {
   }
 }
 
-/**
- * Detect project from a file path
- * @param filePath - Absolute file path
- * @returns Project identifier or null
- */
-export function detectProjectFromFile(filePath: string): string | null {
-  return detectProject(path.dirname(filePath));
-}
-
-/**
- * Check if a path is within a specific project
- * @param cwd - Current working directory
- * @param project - Project identifier to check against
- * @returns true if cwd is within the project
- */
-export function isInProject(cwd: string, project: string): boolean {
-  const detected = detectProject(cwd);
-  return detected === project;
-}
