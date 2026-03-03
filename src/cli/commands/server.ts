@@ -3,8 +3,7 @@ import { ensureServerRunning, getServerStatus } from '../../ensure-server.ts';
 import { readPidFile, isProcessAlive } from '../../process-manager/index.ts';
 import { httpShutdown, waitForPortFree } from '../../process-manager/HealthMonitor.ts';
 import { printJson } from '../format.ts';
-
-const PORT = parseInt(process.env.ORACLE_PORT || '47778', 10);
+import { PORT } from '../../config.ts';
 
 export function registerServer(program: Command): void {
   const srv = program

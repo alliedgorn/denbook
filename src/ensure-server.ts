@@ -21,13 +21,13 @@ import { waitForHealth, isPortInUse } from './process-manager/HealthMonitor.ts';
 const LOCK_FILE = () => path.join(getDataDir(), 'oracle-http.lock');
 const LOCK_TIMEOUT = 30000; // 30 seconds max lock age
 
-const PORT = parseInt(process.env.ORACLE_PORT || '47778', 10);
+import { PORT, ORACLE_DATA_DIR } from './config.ts';
+
 const HEALTH_URL = `http://localhost:${PORT}/api/health`;
 const SERVER_SCRIPT = path.join(import.meta.dirname || __dirname, 'server.ts');
 
 // Configure process manager to use oracle data dir
-const dataDir = path.join(import.meta.dirname || __dirname, '..');
-configure({ dataDir, pidFileName: 'oracle-http.pid' });
+configure({ dataDir: ORACLE_DATA_DIR, pidFileName: 'oracle-http.pid' });
 
 export interface EnsureServerOptions {
   /** Timeout in ms to wait for server to be healthy (default: 10000) */

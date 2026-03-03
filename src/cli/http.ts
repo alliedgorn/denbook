@@ -6,8 +6,8 @@
  */
 
 import { ensureServerRunning } from '../ensure-server.ts';
+import { PORT } from '../config.ts';
 
-const PORT = parseInt(process.env.ORACLE_PORT || '47778', 10);
 const BASE_URL = `http://localhost:${PORT}`;
 
 export interface FetchOptions {

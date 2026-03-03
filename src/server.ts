@@ -24,6 +24,7 @@ import { getVaultPsiRoot } from './vault/handler.ts';
 // Config constants (no DB dependency)
 import {
   PORT,
+  ORACLE_DATA_DIR,
   REPO_ROOT,
   DB_PATH,
   UI_PATH,
@@ -36,6 +37,8 @@ import {
   db,
   sqlite,
   closeDb,
+  getSetting,
+  setSetting,
   searchLog,
   learnLog,
   supersedeLog,
@@ -76,7 +79,10 @@ import {
 import {
   listTraces,
   getTrace,
-  getTraceChain
+  getTraceChain,
+  linkTraces,
+  unlinkTraces,
+  getTraceLinkedChain
 } from './trace/handler.ts';
 
 // Reset stale indexing status on startup using Drizzle
@@ -91,8 +97,7 @@ try {
 }
 
 // Configure process lifecycle management
-const dataDir = path.join(import.meta.dirname || __dirname, '..');
-configure({ dataDir, pidFileName: 'oracle-http.pid' });
+configure({ dataDir: ORACLE_DATA_DIR, pidFileName: 'oracle-http.pid' });
 
 // Write PID file for process tracking
 writePidFile({ pid: process.pid, port: Number(PORT), startedAt: new Date().toISOString(), name: 'oracle-http' });
@@ -123,23 +128,6 @@ app.use('*', cors());
 const SESSION_SECRET = process.env.ORACLE_SESSION_SECRET || crypto.randomUUID();
 const SESSION_COOKIE_NAME = 'oracle_session';
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-// Get a setting value
-function getSetting(key: string): string | null {
-  const row = db.select().from(settings).where(eq(settings.key, key)).get();
-  return row?.value ?? null;
-}
-
-// Set a setting value
-function setSetting(key: string, value: string | null): void {
-  db.insert(settings)
-    .values({ key, value, updatedAt: Date.now() })
-    .onConflictDoUpdate({
-      target: settings.key,
-      set: { value, updatedAt: Date.now() }
-    })
-    .run();
-}
 
 // Check if request is from local network
 function isLocalNetwork(c: Context): boolean {
@@ -946,7 +934,6 @@ app.post('/api/traces/:prevId/link', async (c) => {
       return c.json({ error: 'Missing nextId in request body' }, 400);
     }
 
-    const { linkTraces } = await import('./trace/handler.js');
     const result = linkTraces(prevId, nextId);
 
     if (!result.success) {
