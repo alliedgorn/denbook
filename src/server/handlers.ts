@@ -794,9 +794,15 @@ function simpleHash(str: string): number {
 export async function handleVectorStats(): Promise<{
   vector: { enabled: boolean; count: number; collection: string };
 }> {
+  const timeout = parseInt(process.env.ORACLE_CHROMA_TIMEOUT || '5000', 10);
   try {
     const client = getChromaClient();
-    const stats = await client.getStats();
+    const stats = await Promise.race([
+      client.getStats(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('ChromaDB timeout')), timeout)
+      ),
+    ]);
     return {
       vector: {
         enabled: true,

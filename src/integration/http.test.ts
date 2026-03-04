@@ -44,6 +44,7 @@ describe("HTTP API Integration", () => {
       cwd: import.meta.dir.replace("/src/integration", ""),
       stdout: "pipe",
       stderr: "pipe",
+      env: { ...process.env, ORACLE_CHROMA_TIMEOUT: "3000" },
     });
 
     const ready = await waitForServer();
@@ -51,7 +52,7 @@ describe("HTTP API Integration", () => {
       throw new Error("Server failed to start within 15 seconds");
     }
     console.log("Server ready");
-  });
+  }, 30_000);
 
   afterAll(() => {
     if (serverProcess) {
@@ -76,7 +77,7 @@ describe("HTTP API Integration", () => {
       expect(res.ok).toBe(true);
       const data = await res.json();
       expect(typeof data.total).toBe("number");
-    });
+    }, 15_000);
 
   });
 

@@ -70,6 +70,7 @@ export class ChromaMcpClient {
     }
 
     console.log('Connecting to chroma-mcp server...');
+    const timeout = parseInt(process.env.ORACLE_CHROMA_TIMEOUT || '10000', 10);
 
     try {
       this.transport = new StdioClientTransport({
@@ -90,7 +91,12 @@ export class ChromaMcpClient {
         capabilities: {}
       });
 
-      await this.client.connect(this.transport);
+      await Promise.race([
+        this.client.connect(this.transport),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Chroma connection timeout (${timeout}ms)`)), timeout)
+        ),
+      ]);
       this.connected = true;
 
       console.log('Connected to chroma-mcp server');
