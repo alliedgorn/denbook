@@ -7,7 +7,6 @@
 
 import { Hono, type Context, type Next } from 'hono';
 import { cors } from 'hono/cors';
-import { serveStatic } from 'hono/bun';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { createHmac, timingSafeEqual } from 'crypto';
 import fs from 'fs';
@@ -20,29 +19,32 @@ import {
   registerSignalHandlers,
   performGracefulShutdown,
 } from './process-manager/index.ts';
+import { getVaultPsiRoot } from './vault/handler.ts';
 
-// Import from modular components
+// Config constants (no DB dependency)
 import {
   PORT,
+  ORACLE_DATA_DIR,
   REPO_ROOT,
   DB_PATH,
   UI_PATH,
   ARTHUR_UI_PATH,
   DASHBOARD_PATH,
-  initLoggingTables,
-  closeDb
-} from './server/db.ts';
+} from './config.ts';
 
-import { eq, desc, gt, and, sql } from 'drizzle-orm';
+import { eq, desc, gt, sql } from 'drizzle-orm';
 import {
   db,
   sqlite,
-  oracleDocuments,
+  closeDb,
+  getSetting,
+  setSetting,
   searchLog,
   learnLog,
   supersedeLog,
   indexingStatus,
-  settings
+  settings,
+  schedule
 } from './db/index.ts';
 
 import {
@@ -51,7 +53,10 @@ import {
   handleList,
   handleStats,
   handleGraph,
-  handleLearn
+  handleLearn,
+  handleSimilar,
+  handleMap,
+  handleVectorStats
 } from './server/handlers.ts';
 
 import {
@@ -61,6 +66,8 @@ import {
 } from './server/dashboard.ts';
 
 import { handleContext } from './server/context.ts';
+import { handleScheduleAdd, handleScheduleList } from './tools/schedule.ts';
+import type { ToolContext } from './tools/types.ts';
 
 import {
   handleThreadMessage,
@@ -74,18 +81,11 @@ import {
 import {
   listTraces,
   getTrace,
-  getTraceChain
+  getTraceChain,
+  linkTraces,
+  unlinkTraces,
+  getTraceLinkedChain
 } from './trace/handler.ts';
-
-// Frontend static file serving
-const FRONTEND_DIST = path.join(import.meta.dirname || __dirname, '..', 'frontend', 'dist');
-
-// Initialize logging tables on startup
-try {
-  initLoggingTables();
-} catch (e) {
-  console.error('Failed to initialize logging tables:', e);
-}
 
 // Reset stale indexing status on startup using Drizzle
 try {
@@ -99,8 +99,7 @@ try {
 }
 
 // Configure process lifecycle management
-const dataDir = path.join(import.meta.dirname || __dirname, '..');
-configure({ dataDir, pidFileName: 'oracle-http.pid' });
+configure({ dataDir: ORACLE_DATA_DIR, pidFileName: 'oracle-http.pid' });
 
 // Write PID file for process tracking
 writePidFile({ pid: process.pid, port: Number(PORT), startedAt: new Date().toISOString(), name: 'oracle-http' });
@@ -131,23 +130,6 @@ app.use('*', cors());
 const SESSION_SECRET = process.env.ORACLE_SESSION_SECRET || crypto.randomUUID();
 const SESSION_COOKIE_NAME = 'oracle_session';
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-// Get a setting value
-function getSetting(key: string): string | null {
-  const row = db.select().from(settings).where(eq(settings.key, key)).get();
-  return row?.value ?? null;
-}
-
-// Set a setting value
-function setSetting(key: string, value: string | null): void {
-  db.insert(settings)
-    .values({ key, value, updatedAt: Date.now() })
-    .onConflictDoUpdate({
-      target: settings.key,
-      set: { value, updatedAt: Date.now() }
-    })
-    .run();
-}
 
 // Check if request is from local network
 function isLocalNetwork(c: Context): boolean {
@@ -313,11 +295,13 @@ app.get('/api/settings', (c) => {
   const authEnabled = getSetting('auth_enabled') === 'true';
   const localBypass = getSetting('auth_local_bypass') !== 'false';
   const hasPassword = !!getSetting('auth_password_hash');
+  const vaultRepo = getSetting('vault_repo');
 
   return c.json({
     authEnabled,
     localBypass,
-    hasPassword
+    hasPassword,
+    vaultRepo
   });
 });
 
@@ -410,9 +394,40 @@ app.get('/api/reflect', (c) => {
   return c.json(handleReflect());
 });
 
-// Stats
-app.get('/api/stats', (c) => {
-  return c.json(handleStats(DB_PATH));
+// Stats (extended with vector metrics)
+app.get('/api/stats', async (c) => {
+  const stats = handleStats(DB_PATH);
+  const vaultRepo = getSetting('vault_repo');
+  let vectorStats = { vector: { enabled: false, count: 0, collection: 'oracle_knowledge' } };
+  try {
+    vectorStats = await handleVectorStats();
+  } catch { /* vector unavailable */ }
+  return c.json({ ...stats, ...vectorStats, vault_repo: vaultRepo });
+});
+
+// Similar documents (vector nearest neighbors)
+app.get('/api/similar', async (c) => {
+  const id = c.req.query('id');
+  if (!id) {
+    return c.json({ error: 'Missing query parameter: id' }, 400);
+  }
+  const limit = parseInt(c.req.query('limit') || '5');
+  try {
+    const result = await handleSimilar(id, limit);
+    return c.json(result);
+  } catch (e: any) {
+    return c.json({ error: e.message, results: [], docId: id }, 500);
+  }
+});
+
+// Knowledge map (2D projection of all embeddings)
+app.get('/api/map', async (c) => {
+  try {
+    const result = await handleMap();
+    return c.json(result);
+  } catch (e: any) {
+    return c.json({ error: e.message, documents: [], total: 0 }, 500);
+  }
 });
 
 // Logs
@@ -479,7 +494,8 @@ app.get('/api/list', (c) => {
 
 // Graph
 app.get('/api/graph', (c) => {
-  return c.json(handleGraph());
+  const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!, 10) : undefined;
+  return c.json(handleGraph(limit));
 });
 
 // Context
@@ -523,7 +539,13 @@ app.get('/api/file', async (c) => {
       basePath = REPO_ROOT;
     }
 
-    const fullPath = path.join(basePath, filePath);
+    // Strip project prefix if source_file already contains it (vault-indexed docs)
+    let resolvedFilePath = filePath;
+    if (project && filePath.toLowerCase().startsWith(project.toLowerCase() + '/')) {
+      resolvedFilePath = filePath.slice(project.length + 1); // e.g. "ψ/memory/learnings/file.md"
+    }
+
+    const fullPath = path.join(basePath, resolvedFilePath);
 
     // Security: resolve symlinks and verify path is within allowed bounds
     let realPath: string;
@@ -544,9 +566,19 @@ app.get('/api/file', async (c) => {
     if (fs.existsSync(fullPath)) {
       const content = fs.readFileSync(fullPath, 'utf-8');
       return c.text(content);
-    } else {
-      return c.text('File not found', 404);
     }
+
+    // Fallback: try vault repo (project-first layout)
+    const vault = getVaultPsiRoot();
+    if ('path' in vault) {
+      const vaultFullPath = path.join(vault.path, filePath);
+      if (fs.existsSync(vaultFullPath)) {
+        const content = fs.readFileSync(vaultFullPath, 'utf-8');
+        return c.text(content);
+      }
+    }
+
+    return c.text('File not found', 404);
   } catch (e: any) {
     return c.text(e.message, 500);
   }
@@ -589,6 +621,53 @@ app.get('/api/session/stats', (c) => {
     learnings: learnings?.count || 0,
     since: sinceTime
   });
+});
+
+// ============================================================================
+// Schedule Routes
+// ============================================================================
+
+// Serve raw schedule.md for frontend rendering
+app.get('/api/schedule/md', (c) => {
+  const schedulePath = path.join(process.env.HOME || '/tmp', '.oracle', 'ψ/inbox/schedule.md');
+  if (fs.existsSync(schedulePath)) {
+    return c.text(fs.readFileSync(schedulePath, 'utf-8'));
+  }
+  return c.text('', 404);
+});
+
+app.get('/api/schedule', async (c) => {
+  const ctx = { db, sqlite, repoRoot: REPO_ROOT } as Pick<ToolContext, 'db' | 'sqlite' | 'repoRoot'>;
+  const result = await handleScheduleList(ctx as ToolContext, {
+    date: c.req.query('date'),
+    from: c.req.query('from'),
+    to: c.req.query('to'),
+    filter: c.req.query('filter'),
+    status: c.req.query('status') as 'pending' | 'done' | 'cancelled' | 'all' | undefined,
+    limit: c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined,
+  });
+  const text = result.content[0]?.text || '{}';
+  return c.json(JSON.parse(text));
+});
+
+app.post('/api/schedule', async (c) => {
+  const body = await c.req.json();
+  const ctx = { db, sqlite, repoRoot: REPO_ROOT } as Pick<ToolContext, 'db' | 'sqlite' | 'repoRoot'>;
+  const result = await handleScheduleAdd(ctx as ToolContext, body);
+  const text = result.content[0]?.text || '{}';
+  return c.json(JSON.parse(text));
+});
+
+// Update schedule event status
+app.patch('/api/schedule/:id', async (c) => {
+  const id = parseInt(c.req.param('id'));
+  const body = await c.req.json();
+  const now = Date.now();
+  db.update(schedule)
+    .set({ ...body, updatedAt: now })
+    .where(eq(schedule.id, id))
+    .run();
+  return c.json({ success: true, id });
 });
 
 // ============================================================================
@@ -854,7 +933,6 @@ app.post('/api/traces/:prevId/link', async (c) => {
       return c.json({ error: 'Missing nextId in request body' }, 400);
     }
 
-    const { linkTraces } = await import('./trace/handler.js');
     const result = linkTraces(prevId, nextId);
 
     if (!result.success) {
@@ -878,7 +956,6 @@ app.delete('/api/traces/:id/link', async (c) => {
       return c.json({ error: 'Missing or invalid direction (prev|next)' }, 400);
     }
 
-    const { unlinkTraces } = await import('./trace/handler.js');
     const result = unlinkTraces(traceId, direction);
 
     if (!result.success) {
@@ -896,7 +973,6 @@ app.delete('/api/traces/:id/link', async (c) => {
 app.get('/api/traces/:id/linked-chain', async (c) => {
   try {
     const traceId = c.req.param('id');
-    const { getTraceLinkedChain } = await import('./trace/handler.js');
     const result = getTraceLinkedChain(traceId);
     return c.json(result);
   } catch (err) {
@@ -1031,25 +1107,6 @@ app.get('/legacy/oracle', (c) => {
 
 app.get('/legacy/dashboard', (c) => {
   const content = fs.readFileSync(DASHBOARD_PATH, 'utf-8');
-  return c.html(content);
-});
-
-// ============================================================================
-// Static Files + SPA Fallback
-// ============================================================================
-
-// Serve static files from frontend/dist (use absolute path)
-app.use('/*', serveStatic({ root: FRONTEND_DIST }));
-
-// SPA fallback - serve index.html for unmatched routes
-app.get('*', (c) => {
-  const indexPath = path.join(FRONTEND_DIST, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    const content = fs.readFileSync(indexPath, 'utf-8');
-    return c.html(content);
-  }
-  // Fallback to Arthur UI if no build exists
-  const content = fs.readFileSync(ARTHUR_UI_PATH, 'utf-8');
   return c.html(content);
 });
 

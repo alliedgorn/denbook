@@ -1,19 +1,23 @@
 {
-  "name": "@laris-co/oracle-v2",
+  "name": "oracle-v2",
   "version": "0.4.0-nightly",
   "description": "Oracle v2 - MCP Memory Layer with semantic search, philosophy, and knowledge management",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
     "oracle-v2": "./src/index.ts",
-    "oracle-vault": "./src/vault/cli.ts"
+    "oracle-cli": "./src/cli/index.ts"
   },
+  "files": [
+    "src",
+    "README.md"
+  ],
   "engines": {
     "bun": ">=1.2.0"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/laris-co/oracle-v2.git"
+    "url": "https://github.com/Soul-Brews-Studio/oracle-v2.git"
   },
   "publishConfig": {
     "access": "public"
@@ -23,13 +27,12 @@
     "server": "bun src/server.ts",
     "server:ensure": "bun src/ensure-server.ts",
     "server:status": "bun src/ensure-server.ts --status",
-    "server:legacy": "bun src/server-legacy.ts",
     "serve": "bun dist/server.js",
     "index": "bun src/indexer.ts",
     "build": "tsc --noEmit",
     "start": "bun dist/index.js",
     "test": "bun run test:unit && bun run test:integration && bun run test:e2e",
-    "test:unit": "bun test src/tools/__tests__/ src/vault/__tests__/ src/drizzle-migration.test.ts src/indexer-preservation.test.ts",
+    "test:unit": "bun test src/tools/__tests__/ src/server/__tests__/ src/vault/__tests__/ src/drizzle-migration.test.ts src/indexer-preservation.test.ts",
     "test:integration": "bun test src/integration/",
     "test:integration:db": "bun test src/integration/database.test.ts",
     "test:integration:mcp": "bun test src/integration/mcp.test.ts",
@@ -49,13 +52,11 @@
     "vault:pull": "bun src/vault/cli.ts pull",
     "vault:status": "bun src/vault/cli.ts status",
     "vault:migrate": "bun src/vault/cli.ts migrate",
-    "frontend:build": "cd frontend && bun install && bun run build",
-    "frontend:dev": "cd frontend && bun run dev"
+    "vault:rsync": "./scripts/vault-rsync.sh"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.31.0",
-    "@modelcontextprotocol/sdk": "^0.5.0",
-    "chromadb": "^3.2.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "commander": "^14.0.3",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.11.3"
   },

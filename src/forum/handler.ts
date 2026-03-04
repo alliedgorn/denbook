@@ -228,25 +228,6 @@ export function getMessages(threadId: number): ForumMessage[] {
 }
 
 // ============================================================================
-// Oracle Auto-Response
-// ============================================================================
-
-/**
- * Generate Oracle response for a question.
- * Stub: oracle_consult was removed. Returns null (no auto-response).
- */
-export async function generateOracleResponse(
-  _question: string,
-  _context?: string
-): Promise<{
-  response: string;
-  principlesFound: number;
-  patternsFound: number;
-} | null> {
-  return null;
-}
-
-// ============================================================================
 // Main Thread API (MCP Tool Interface)
 // ============================================================================
 
@@ -297,32 +278,9 @@ export async function handleThreadMessage(
     author,
   });
 
-  // Try to generate Oracle response (for any question)
-  let oracleResponse: OracleThreadOutput['oracleResponse'];
-
+  // Mark as pending (no auto-response engine currently)
   if (role === 'human' || role === 'claude') {
-    const response = await generateOracleResponse(message);
-
-    if (response) {
-      // Oracle has an answer
-      addMessage(thread.id, 'oracle', response.response, {
-        author: 'oracle',
-        principlesFound: response.principlesFound,
-        patternsFound: response.patternsFound,
-        searchQuery: message,
-      });
-
-      oracleResponse = {
-        content: response.response,
-        principlesFound: response.principlesFound,
-        patternsFound: response.patternsFound,
-      };
-
-      updateThreadStatus(thread.id, 'answered');
-    } else {
-      // No answer - mark as pending for later
-      updateThreadStatus(thread.id, 'pending');
-    }
+    updateThreadStatus(thread.id, 'pending');
   }
 
   // Get updated thread status
@@ -331,7 +289,6 @@ export async function handleThreadMessage(
   return {
     threadId: thread.id,
     messageId: userMessage.id,
-    oracleResponse,
     status: updatedThread.status as ThreadStatus,
     issueUrl: updatedThread.issueUrl,
   };

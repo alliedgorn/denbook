@@ -17,10 +17,12 @@
 import fs from 'fs';
 import path from 'path';
 import { Database } from 'bun:sqlite';
-import { drizzle, BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { eq, or, isNull, inArray } from 'drizzle-orm';
 import * as schema from './db/schema.ts';
-import { oracleDocuments, indexingStatus } from './db/schema.ts';
+import { oracleDocuments } from './db/schema.ts';
+import { createDatabase } from './db/index.ts';
+import { DB_PATH } from './config.ts';
 import { ChromaMcpClient } from './chroma-mcp.ts';
 import { detectProject } from './server/project-detect.ts';
 import { getVaultPsiRoot } from './vault/handler.ts';
@@ -32,70 +34,15 @@ export class OracleIndexer {
   private chromaClient: ChromaMcpClient | null = null;
   private config: IndexerConfig;
   private project: string | null;
+  private seenContentHashes: Set<string> = new Set();  // Content dedup across projects
 
   constructor(config: IndexerConfig) {
     this.config = config;
-    this.sqlite = new Database(config.dbPath);  // Raw connection for FTS and schema
-    this.db = drizzle(this.sqlite, { schema });  // Drizzle wrapper for type-safe queries
+    const { sqlite, db } = createDatabase(config.dbPath);
+    this.sqlite = sqlite;
+    this.db = db;
     this.project = detectProject(config.repoRoot);
     console.log(`[Indexer] Detected project: ${this.project || '(universal)'}`);
-    this.initDatabase();
-  }
-
-  /**
-   * Initialize SQLite schema
-   */
-  private initDatabase(): void {
-    this.sqlite.exec(`
-      CREATE TABLE IF NOT EXISTS oracle_documents (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        source_file TEXT NOT NULL,
-        concepts TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        indexed_at INTEGER NOT NULL,
-        project TEXT
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_type ON oracle_documents(type);
-      CREATE INDEX IF NOT EXISTS idx_source ON oracle_documents(source_file);
-
-      -- FTS5 for keyword search (with Porter stemmer for tire/tired matching)
-      CREATE VIRTUAL TABLE IF NOT EXISTS oracle_fts USING fts5(
-        id UNINDEXED,
-        content,
-        concepts,
-        tokenize='porter unicode61'
-      );
-
-      -- Consult log for tracking oracle_consult queries
-      CREATE TABLE IF NOT EXISTS consult_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        decision TEXT NOT NULL,
-        context TEXT,
-        principles_found INTEGER NOT NULL,
-        patterns_found INTEGER NOT NULL,
-        guidance TEXT NOT NULL,
-        created_at INTEGER NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_consult_created ON consult_log(created_at);
-
-      -- Indexing status for tray app
-      CREATE TABLE IF NOT EXISTS indexing_status (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        is_indexing INTEGER NOT NULL DEFAULT 0,
-        progress_current INTEGER DEFAULT 0,
-        progress_total INTEGER DEFAULT 0,
-        started_at INTEGER,
-        completed_at INTEGER,
-        error TEXT
-      );
-
-      -- Ensure single row exists
-      INSERT OR IGNORE INTO indexing_status (id, is_indexing) VALUES (1, 0);
-    `);
   }
 
   /**
@@ -213,6 +160,9 @@ export class OracleIndexer {
   async index(): Promise<void> {
     console.log('Starting Oracle indexing...');
 
+    // Reset dedup for fresh index run
+    this.seenContentHashes.clear();
+
     // Set indexing status for tray app
     this.setIndexingStatus(true, 0, 100);
 
@@ -283,25 +233,48 @@ export class OracleIndexer {
    * Index ψ/memory/resonance/ files (identity, principles)
    */
   private async indexResonance(): Promise<OracleDocument[]> {
-    const resonancePath = path.join(this.config.repoRoot, this.config.sourcePaths.resonance);
-    if (!fs.existsSync(resonancePath)) {
-      console.log(`Skipping resonance: ${resonancePath} not found`);
-      return [];
-    }
-    const files = fs.readdirSync(resonancePath).filter(f => f.endsWith('.md'));
-    if (files.length === 0) {
-      console.log(`Warning: ${resonancePath} exists but contains no .md files`);
-    }
     const documents: OracleDocument[] = [];
+    let totalFiles = 0;
 
-    for (const file of files) {
-      const filePath = path.join(resonancePath, file);
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const docs = this.parseResonanceFile(file, content);
-      documents.push(...docs);
+    // 1. Root ψ/memory/resonance/
+    const resonancePath = path.join(this.config.repoRoot, this.config.sourcePaths.resonance);
+    if (fs.existsSync(resonancePath)) {
+      const files = this.getAllMarkdownFiles(resonancePath);
+      if (files.length === 0) {
+        console.log(`Warning: ${resonancePath} exists but contains no .md files`);
+      }
+      for (const filePath of files) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const relPath = path.relative(this.config.repoRoot, filePath);
+        const docs = this.parseResonanceFile(relPath, content, relPath);
+        documents.push(...docs);
+      }
+      totalFiles += files.length;
     }
 
-    console.log(`Indexed ${documents.length} resonance documents from ${files.length} files`);
+    // 2. Project-first vault dirs: github.com/*/*/ψ/memory/resonance/
+    let skippedDupes = 0;
+    const projectDirs = this.discoverProjectPsiDirs();
+    for (const projectDir of projectDirs) {
+      const projectResonance = path.join(projectDir, 'memory', 'resonance');
+      if (!fs.existsSync(projectResonance)) continue;
+      const files = this.getAllMarkdownFiles(projectResonance);
+      for (const filePath of files) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const contentHash = Bun.hash(content).toString(36);
+        if (this.seenContentHashes.has(contentHash)) {
+          skippedDupes++;
+          continue;
+        }
+        this.seenContentHashes.add(contentHash);
+        const relPath = path.relative(this.config.repoRoot, filePath);
+        const docs = this.parseResonanceFile(relPath, content, relPath);
+        documents.push(...docs);
+      }
+      totalFiles += files.length;
+    }
+
+    console.log(`Indexed ${documents.length} resonance documents from ${totalFiles} files (skipped ${skippedDupes} duplicate files)`);
     return documents;
   }
 
@@ -310,13 +283,17 @@ export class OracleIndexer {
    * Following claude-mem's pattern of splitting by sections
    * Now reads frontmatter tags and inherits them to all chunks
    */
-  private parseResonanceFile(filename: string, content: string): OracleDocument[] {
+  private parseResonanceFile(filename: string, content: string, sourceFileOverride?: string): OracleDocument[] {
     const documents: OracleDocument[] = [];
-    const sourceFile = `ψ/memory/resonance/${filename}`;
+    const sourceFile = sourceFileOverride || `ψ/memory/resonance/${filename}`;
     const now = Date.now();
 
     // Extract file-level tags from frontmatter
     const fileTags = this.parseFrontmatterTags(content);
+
+    // Infer project from path
+    const fileProject = this.parseFrontmatterProject(content)
+      || this.inferProjectFromPath(sourceFile);
 
     // Split by ### headers (principles, sections)
     const sections = content.split(/^###\s+/m).filter(s => s.trim());
@@ -338,7 +315,8 @@ export class OracleIndexer {
         content: `${title}: ${body}`,
         concepts: this.mergeConceptsWithTags(extractedConcepts, fileTags),
         created_at: now,
-        updated_at: now
+        updated_at: now,
+        project: fileProject || undefined
       });
 
       // Split bullet points into sub-documents (granular pattern)
@@ -354,7 +332,8 @@ export class OracleIndexer {
             content: bulletText,
             concepts: this.mergeConceptsWithTags(bulletConcepts, fileTags),
             created_at: now,
-            updated_at: now
+            updated_at: now,
+            project: fileProject || undefined
           });
         });
       }
@@ -365,45 +344,108 @@ export class OracleIndexer {
 
   /**
    * Index ψ/memory/learnings/ files (patterns discovered)
+   * Also scans project-first vault dirs: github.com/org/repo/ψ/memory/learnings/
    */
   private async indexLearnings(): Promise<OracleDocument[]> {
-    const learningsPath = path.join(this.config.repoRoot, this.config.sourcePaths.learnings);
-    if (!fs.existsSync(learningsPath)) {
-      console.log(`Skipping learnings: ${learningsPath} not found`);
-      return [];
-    }
-
-    const files = this.getAllMarkdownFiles(learningsPath);
-    if (files.length === 0) {
-      console.log(`Warning: ${learningsPath} exists but contains no .md files`);
-    }
     const documents: OracleDocument[] = [];
+    let totalFiles = 0;
 
-    for (const filePath of files) {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const relName = path.relative(learningsPath, filePath);
-      const docs = this.parseLearningFile(relName, content);
-      documents.push(...docs);
+    // 1. Root ψ/memory/learnings/
+    const learningsPath = path.join(this.config.repoRoot, this.config.sourcePaths.learnings);
+    if (fs.existsSync(learningsPath)) {
+      const files = this.getAllMarkdownFiles(learningsPath);
+      if (files.length === 0) {
+        console.log(`Warning: ${learningsPath} exists but contains no .md files`);
+      }
+      for (const filePath of files) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const relPath = path.relative(this.config.repoRoot, filePath);
+        const docs = this.parseLearningFile(relPath, content, relPath);
+        documents.push(...docs);
+      }
+      totalFiles += files.length;
     }
 
-    console.log(`Indexed ${documents.length} learning documents from ${files.length} files`);
+    // 2. Project-first vault dirs: github.com/*/*/ψ/memory/learnings/
+    let skippedDupes = 0;
+    const projectDirs = this.discoverProjectPsiDirs();
+    for (const projectDir of projectDirs) {
+      const projectLearnings = path.join(projectDir, 'memory', 'learnings');
+      if (!fs.existsSync(projectLearnings)) continue;
+      const files = this.getAllMarkdownFiles(projectLearnings);
+      for (const filePath of files) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const contentHash = Bun.hash(content).toString(36);
+        if (this.seenContentHashes.has(contentHash)) {
+          skippedDupes++;
+          continue;
+        }
+        this.seenContentHashes.add(contentHash);
+        const relPath = path.relative(this.config.repoRoot, filePath);
+        const docs = this.parseLearningFile(relPath, content, relPath);
+        documents.push(...docs);
+      }
+      totalFiles += files.length;
+    }
+
+    console.log(`Indexed ${documents.length} learning documents from ${totalFiles} files (skipped ${skippedDupes} duplicate files)`);
     return documents;
   }
 
   /**
+   * Discover project-first psi directories in vault.
+   * Scans {host}/{org}/{repo}/psi/ at repoRoot for github.com, gitlab.com, bitbucket.org.
+   * Returns absolute paths to each project's psi directory.
+   */
+  private discoverProjectPsiDirs(): string[] {
+    const dirs: string[] = [];
+    const hosts = ['github.com', 'gitlab.com', 'bitbucket.org'];
+
+    for (const host of hosts) {
+      const hostDir = path.join(this.config.repoRoot, host);
+      if (!fs.existsSync(hostDir)) continue;
+
+      for (const org of fs.readdirSync(hostDir)) {
+        const orgDir = path.join(hostDir, org);
+        if (!fs.statSync(orgDir).isDirectory()) continue;
+
+        for (const repo of fs.readdirSync(orgDir)) {
+          const psiDir = path.join(orgDir, repo, 'ψ');
+          if (fs.existsSync(psiDir) && fs.statSync(psiDir).isDirectory()) {
+            dirs.push(psiDir);
+          }
+        }
+      }
+    }
+
+    if (dirs.length > 0) {
+      console.log(`Discovered ${dirs.length} project-first ψ/ directories`);
+    }
+    return dirs;
+  }
+
+  /**
    * Infer project from a vault-nested path.
-   * e.g. "ψ/memory/learnings/github.com/org/repo/file.md" → "github.com/org/repo"
-   * Works for any category: learnings, retrospectives, inbox/handoff.
+   * Project-first layout: "github.com/org/repo/ψ/..." → "github.com/org/repo"
+   * Also supports legacy layout: "ψ/memory/{category}/github.com/org/repo/..."
    */
   private inferProjectFromPath(relativePath: string): string | null {
-    // Match: ψ/memory/{category}/github.com/org/repo/...
-    // or:    ψ/inbox/handoff/github.com/org/repo/...
-    const match = relativePath.match(
+    // Project-first layout: github.com/org/repo/ψ/...
+    const projectFirst = relativePath.match(
+      /^(github\.com|gitlab\.com|bitbucket\.org)\/([^/]+\/[^/]+)\/ψ\//
+    );
+    if (projectFirst) {
+      return `${projectFirst[1]}/${projectFirst[2]}`.toLowerCase();
+    }
+
+    // Legacy layout: ψ/memory/{category}/github.com/org/repo/...
+    const legacy = relativePath.match(
       /^ψ\/(?:memory\/(?:learnings|retrospectives)|inbox\/handoff)\/(github\.com|gitlab\.com|bitbucket\.org)\/([^/]+\/[^/]+)\//
     );
-    if (match) {
-      return `${match[1]}/${match[2]}`;
+    if (legacy) {
+      return `${legacy[1]}/${legacy[2]}`.toLowerCase();
     }
+
     return null;
   }
 
@@ -411,10 +453,13 @@ export class OracleIndexer {
    * Parse learning markdown into documents
    * Now reads frontmatter tags and project, inherits them to all chunks.
    * Falls back to path-based project inference for vault-nested files.
+   * @param filename - relative name within learnings dir (legacy) or full relative path
+   * @param content - markdown content
+   * @param sourceFileOverride - if provided, use as sourceFile instead of generating from filename
    */
-  private parseLearningFile(filename: string, content: string): OracleDocument[] {
+  private parseLearningFile(filename: string, content: string, sourceFileOverride?: string): OracleDocument[] {
     const documents: OracleDocument[] = [];
-    const sourceFile = `ψ/memory/learnings/${filename}`;
+    const sourceFile = sourceFileOverride || `ψ/memory/learnings/${filename}`;
     const now = Date.now();
 
     // Extract file-level tags and project from frontmatter
@@ -469,23 +514,48 @@ export class OracleIndexer {
   }
 
   /**
-   * Index ψ/memory/retrospectives/ files (session history)
+   * Index retrospective files from root and project-first vault dirs.
    */
   private async indexRetrospectives(): Promise<OracleDocument[]> {
-    const retroPath = path.join(this.config.repoRoot, this.config.sourcePaths.retrospectives);
-    if (!fs.existsSync(retroPath)) return [];
-
     const documents: OracleDocument[] = [];
-    const files = this.getAllMarkdownFiles(retroPath);
+    let totalFiles = 0;
 
-    for (const filePath of files) {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const relativePath = path.relative(this.config.repoRoot, filePath);
-      const docs = this.parseRetroFile(relativePath, content);
-      documents.push(...docs);
+    // 1. Root retrospectives
+    const retroPath = path.join(this.config.repoRoot, this.config.sourcePaths.retrospectives);
+    if (fs.existsSync(retroPath)) {
+      const files = this.getAllMarkdownFiles(retroPath);
+      for (const filePath of files) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const relativePath = path.relative(this.config.repoRoot, filePath);
+        const docs = this.parseRetroFile(relativePath, content);
+        documents.push(...docs);
+      }
+      totalFiles += files.length;
     }
 
-    console.log(`Indexed ${documents.length} retrospective documents from ${files.length} files`);
+    // 2. Project-first vault dirs
+    let skippedDupes = 0;
+    const projectDirs = this.discoverProjectPsiDirs();
+    for (const projectDir of projectDirs) {
+      const projectRetros = path.join(projectDir, 'memory', 'retrospectives');
+      if (!fs.existsSync(projectRetros)) continue;
+      const files = this.getAllMarkdownFiles(projectRetros);
+      for (const filePath of files) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const contentHash = Bun.hash(content).toString(36);
+        if (this.seenContentHashes.has(contentHash)) {
+          skippedDupes++;
+          continue;
+        }
+        this.seenContentHashes.add(contentHash);
+        const relativePath = path.relative(this.config.repoRoot, filePath);
+        const docs = this.parseRetroFile(relativePath, content);
+        documents.push(...docs);
+      }
+      totalFiles += files.length;
+    }
+
+    console.log(`Indexed ${documents.length} retrospective documents from ${totalFiles} files (skipped ${skippedDupes} duplicate files)`);
     return documents;
   }
 
@@ -674,52 +744,60 @@ export class OracleIndexer {
     const contents: string[] = [];
     const metadatas: any[] = [];
 
-    for (const doc of documents) {
-      // SQLite metadata - use doc.project if available, fall back to repo project
-      const docProject = doc.project || this.project;
+    // Wrap SQLite inserts in a transaction for performance + atomicity
+    this.sqlite.exec('BEGIN');
+    try {
+      for (const doc of documents) {
+        // SQLite metadata - use doc.project if available, fall back to repo project
+        const docProject = (doc.project || this.project)?.toLowerCase();
 
-      // Drizzle upsert with createdBy: 'indexer'
-      this.db.insert(oracleDocuments)
-        .values({
-          id: doc.id,
-          type: doc.type,
-          sourceFile: doc.source_file,
-          concepts: JSON.stringify(doc.concepts),
-          createdAt: doc.created_at,
-          updatedAt: doc.updated_at,
-          indexedAt: now,
-          project: docProject,
-          createdBy: 'indexer',  // Mark as indexer-created
-        })
-        .onConflictDoUpdate({
-          target: oracleDocuments.id,
-          set: {
+        // Drizzle upsert with createdBy: 'indexer'
+        this.db.insert(oracleDocuments)
+          .values({
+            id: doc.id,
             type: doc.type,
             sourceFile: doc.source_file,
             concepts: JSON.stringify(doc.concepts),
+            createdAt: doc.created_at,
             updatedAt: doc.updated_at,
             indexedAt: now,
             project: docProject,
-            // Don't update createdBy - preserve original
-          }
-        })
-        .run();
+            createdBy: 'indexer',  // Mark as indexer-created
+          })
+          .onConflictDoUpdate({
+            target: oracleDocuments.id,
+            set: {
+              type: doc.type,
+              sourceFile: doc.source_file,
+              concepts: JSON.stringify(doc.concepts),
+              updatedAt: doc.updated_at,
+              indexedAt: now,
+              project: docProject,
+              // Don't update createdBy - preserve original
+            }
+          })
+          .run();
 
-      // SQLite FTS (raw SQL required for FTS5)
-      insertFts.run(
-        doc.id,
-        doc.content,
-        doc.concepts.join(' ')
-      );
+        // SQLite FTS (raw SQL required for FTS5)
+        insertFts.run(
+          doc.id,
+          doc.content,
+          doc.concepts.join(' ')
+        );
 
-      // Chroma vector (metadata must be primitives, not arrays)
-      ids.push(doc.id);
-      contents.push(doc.content);
-      metadatas.push({
-        type: doc.type,
-        source_file: doc.source_file,
-        concepts: doc.concepts.join(',')  // Convert array to string for ChromaDB
-      });
+        // Chroma vector (metadata must be primitives, not arrays)
+        ids.push(doc.id);
+        contents.push(doc.content);
+        metadatas.push({
+          type: doc.type,
+          source_file: doc.source_file,
+          concepts: doc.concepts.join(',')  // Convert array to string for ChromaDB
+        });
+      }
+      this.sqlite.exec('COMMIT');
+    } catch (e) {
+      this.sqlite.exec('ROLLBACK');
+      throw e;
     }
 
     // Batch insert to Chroma in chunks of 100 (skip if no client)
@@ -771,7 +849,6 @@ export class OracleIndexer {
 const isMain = import.meta.url.endsWith('indexer.ts') || import.meta.url.endsWith('indexer.js');
 if (isMain) {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp';
-  const oracleDataDir = process.env.ORACLE_DATA_DIR || path.join(homeDir, '.oracle-v2');
 
   // Prefer vault repo for centralized indexing, fall back to local ψ/ detection
   const scriptDir = import.meta.dirname || path.dirname(new URL(import.meta.url).pathname);
@@ -780,13 +857,18 @@ if (isMain) {
   const vaultResult = getVaultPsiRoot();
   const vaultRoot = 'path' in vaultResult ? vaultResult.path : null;
 
+  // Vault may have project-first layout (github.com/org/repo/ψ/) without a root ψ/
+  const vaultHasContent = vaultRoot && (
+    fs.existsSync(path.join(vaultRoot, 'ψ')) ||
+    fs.existsSync(path.join(vaultRoot, 'github.com'))
+  );
   const repoRoot = process.env.ORACLE_REPO_ROOT ||
-    (vaultRoot && fs.existsSync(path.join(vaultRoot, 'ψ')) ? vaultRoot :
+    (vaultHasContent ? vaultRoot :
      fs.existsSync(path.join(projectRoot, 'ψ')) ? projectRoot : process.cwd());
 
   const config: IndexerConfig = {
     repoRoot,
-    dbPath: process.env.ORACLE_DB_PATH || path.join(oracleDataDir, 'oracle.db'),
+    dbPath: DB_PATH,
     chromaPath: path.join(homeDir, '.chromadb'),
     sourcePaths: {
       resonance: 'ψ/memory/resonance',

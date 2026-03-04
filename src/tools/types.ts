@@ -35,6 +35,8 @@ export interface OracleSearchInput {
   limit?: number;
   offset?: number;
   mode?: 'hybrid' | 'fts' | 'vector';
+  project?: string;
+  cwd?: string;
 }
 
 export interface OracleReflectInput {}
@@ -79,4 +81,21 @@ export interface OracleInboxInput {
 export interface OracleVerifyInput {
   check?: boolean;
   type?: string;
+}
+
+export interface OracleScheduleAddInput {
+  date: string;
+  event: string;
+  time?: string;
+  notes?: string;
+  recurring?: 'daily' | 'weekly' | 'monthly';
+}
+
+export interface OracleScheduleListInput {
+  date?: string;
+  from?: string;
+  to?: string;
+  filter?: string;
+  status?: 'pending' | 'done' | 'cancelled' | 'all';
+  limit?: number;
 }

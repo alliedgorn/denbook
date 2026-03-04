@@ -37,6 +37,10 @@ playwright-report/
 test-results/
 *.pid
 
-# Oracle instance data (per-user, not shared in generic software)
-ψ/*
-!ψ/.gitkeep
+# Oracle instance data (per-user, symlink to vault)
+ψ
+
+# Generated report files (use oracle-vault-report repo instead)
+vault-report.html
+vault-repos.html
+vault-data.json

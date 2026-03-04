@@ -12,6 +12,13 @@ import { detectProject } from '../server/project-detect.ts';
 import { getVaultPsiRoot } from '../vault/handler.ts';
 import type { ToolContext, ToolResponse, OracleLearnInput } from './types.ts';
 
+/** Coerce concepts to string[] — handles string, array, or undefined from MCP input */
+export function coerceConcepts(concepts: unknown): string[] {
+  if (Array.isArray(concepts)) return concepts.map(String);
+  if (typeof concepts === 'string') return concepts.split(',').map(s => s.trim()).filter(Boolean);
+  return [];
+}
+
 export const learnToolDef = {
   name: 'oracle_learn',
   description: 'Add a new pattern or learning to the Oracle knowledge base. Creates a markdown file in ψ/memory/learnings/ and indexes it.',
@@ -53,20 +60,20 @@ export function normalizeProject(input?: string): string | null {
 
   // Already normalized
   if (input.match(/^github\.com\/[^\/]+\/[^\/]+$/)) {
-    return input;
+    return input.toLowerCase();
   }
 
   // GitHub URL
   const urlMatch = input.match(/https?:\/\/github\.com\/([^\/]+\/[^\/]+)/);
-  if (urlMatch) return `github.com/${urlMatch[1].replace(/\.git$/, '')}`;
+  if (urlMatch) return `github.com/${urlMatch[1].replace(/\.git$/, '')}`.toLowerCase();
 
   // Local path with github.com
   const pathMatch = input.match(/github\.com\/([^\/]+\/[^\/]+)/);
-  if (pathMatch) return `github.com/${pathMatch[1]}`;
+  if (pathMatch) return `github.com/${pathMatch[1]}`.toLowerCase();
 
   // Short format: owner/repo
   const shortMatch = input.match(/^([^\/\s]+\/[^\/\s]+)$/);
-  if (shortMatch) return `github.com/${shortMatch[1]}`;
+  if (shortMatch) return `github.com/${shortMatch[1]}`.toLowerCase();
 
   return null;
 }
@@ -79,13 +86,13 @@ export function extractProjectFromSource(source?: string): string | null {
   if (!source) return null;
 
   const oracleLearnMatch = source.match(/from\s+(github\.com\/[^\/\s]+\/[^\/\s]+)/);
-  if (oracleLearnMatch) return oracleLearnMatch[1];
+  if (oracleLearnMatch) return oracleLearnMatch[1].toLowerCase();
 
   const rrrMatch = source.match(/^rrr:\s*([^\/\s]+\/[^\/\s]+)/);
-  if (rrrMatch) return `github.com/${rrrMatch[1]}`;
+  if (rrrMatch) return `github.com/${rrrMatch[1]}`.toLowerCase();
 
   const directMatch = source.match(/(github\.com\/[^\/\s]+\/[^\/\s]+)/);
-  if (directMatch) return directMatch[1];
+  if (directMatch) return directMatch[1].toLowerCase();
 
   return null;
 }
@@ -122,10 +129,10 @@ export async function handleLearn(ctx: ToolContext, input: OracleLearnInput): Pr
   let filePath: string;
   let sourceFileRel: string;
   if (vaultRoot) {
-    const dir = path.join(vaultRoot, 'ψ/memory/learnings', projectDir);
+    const dir = path.join(vaultRoot, projectDir, 'ψ', 'memory', 'learnings');
     fs.mkdirSync(dir, { recursive: true });
     filePath = path.join(dir, filename);
-    sourceFileRel = `ψ/memory/learnings/${projectDir}/${filename}`;
+    sourceFileRel = `${projectDir}/ψ/memory/learnings/${filename}`;
   } else {
     const dir = path.join(ctx.repoRoot, 'ψ/memory/learnings');
     fs.mkdirSync(dir, { recursive: true });
@@ -138,7 +145,7 @@ export async function handleLearn(ctx: ToolContext, input: OracleLearnInput): Pr
   }
 
   const title = pattern.split('\n')[0].substring(0, 80);
-  const conceptsList = concepts || [];
+  const conceptsList = coerceConcepts(concepts);
   const frontmatter = [
     '---',
     `title: ${title}`,

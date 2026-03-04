@@ -10,9 +10,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { eq, desc, and, like, sql, isNull } from 'drizzle-orm';
 import { db, traceLog } from '../db/index.ts';
-
-// Get repo root for ψ directory
-const REPO_ROOT = process.env.REPO_ROOT || process.cwd();
+import { REPO_ROOT } from '../config.ts';
 import type {
   CreateTraceInput,
   CreateTraceResult,
@@ -154,6 +152,7 @@ export function createTrace(input: CreateTraceInput): CreateTraceResult {
     depth,
     parentTraceId: input.parentTraceId || null,
     childTraceIds: '[]',
+    scope: input.scope || 'project',
     project: input.project || null,
     sessionId: input.sessionId || null,
     agentCount: input.agentCount || 1,
@@ -237,6 +236,7 @@ export function listTraces(input: ListTracesInput): ListTracesResult {
       fileCount: traceLog.fileCount,
       commitCount: traceLog.commitCount,
       issueCount: traceLog.issueCount,
+      scope: traceLog.scope,
       status: traceLog.status,
       awakening: traceLog.awakening,
       parentTraceId: traceLog.parentTraceId,
@@ -258,6 +258,7 @@ export function listTraces(input: ListTracesInput): ListTracesResult {
       prevTraceId: r.prevTraceId,
       nextTraceId: r.nextTraceId,
       query: r.query,
+      scope: r.scope || 'project',
       depth: r.depth || 0,
       fileCount: r.fileCount || 0,
       commitCount: r.commitCount || 0,
@@ -533,6 +534,7 @@ function parseTraceRow(row: typeof traceLog.$inferSelect): TraceRecord {
     childTraceIds: JSON.parse(row.childTraceIds || '[]'),
     prevTraceId: row.prevTraceId,
     nextTraceId: row.nextTraceId,
+    scope: row.scope || 'project',
     project: row.project,
     sessionId: row.sessionId,
     agentCount: row.agentCount || 1,
@@ -553,6 +555,7 @@ function toSummary(t: TraceRecord): TraceSummary {
   return {
     traceId: t.traceId,
     query: t.query,
+    scope: t.scope,
     depth: t.depth,
     fileCount: t.fileCount,
     commitCount: t.commitCount,

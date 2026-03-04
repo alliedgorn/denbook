@@ -180,6 +180,7 @@ export const traceLog = sqliteTable('trace_log', {
 
   // Context
   project: text('project'),                   // ghq format project path
+  scope: text('scope').default('project'),    // 'project' | 'cross-project' | 'human'
   sessionId: text('session_id'),              // Claude session if available
   agentCount: integer('agent_count').default(1),
   durationMs: integer('duration_ms'),
@@ -256,6 +257,26 @@ export const activityLog = sqliteTable('activity_log', {
   index('idx_activity_date').on(table.date),
   index('idx_activity_type').on(table.type),
   index('idx_activity_project').on(table.project),
+]);
+
+// ============================================================================
+// Schedule Table - Appointments & events (per-human, shared across Oracles)
+// ============================================================================
+
+export const schedule = sqliteTable('schedule', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  date: text('date').notNull(),          // YYYY-MM-DD (canonical, for queries)
+  dateRaw: text('date_raw'),             // Original input ("5 Mar", "28 ก.พ.")
+  time: text('time'),                    // HH:MM or "TBD"
+  event: text('event').notNull(),        // Event description
+  notes: text('notes'),                  // Optional notes
+  recurring: text('recurring'),          // null | "daily" | "weekly" | "monthly"
+  status: text('status').default('pending'), // pending | done | cancelled
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => [
+  index('idx_schedule_date').on(table.date),
+  index('idx_schedule_status').on(table.status),
 ]);
 
 // ============================================================================
