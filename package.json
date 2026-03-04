@@ -5,8 +5,7 @@
   "type": "module",
   "main": "src/index.ts",
   "bin": {
-    "oracle-v2": "./src/index.ts",
-    "oracle-cli": "./src/cli/index.ts"
+    "oracle-v2": "./src/index.ts"
   },
   "files": [
     "src",
