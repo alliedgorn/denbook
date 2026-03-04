@@ -59,20 +59,6 @@ beforeAll(() => {
       tokenize='porter unicode61'
     );
 
-    -- Consultation log
-    CREATE TABLE consult_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      decision TEXT NOT NULL,
-      context TEXT,
-      principles_found INTEGER NOT NULL,
-      patterns_found INTEGER NOT NULL,
-      guidance TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      project TEXT
-    );
-
-    CREATE INDEX idx_consult_created ON consult_log(created_at);
-
     -- Indexing status
     CREATE TABLE indexing_status (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -148,72 +134,6 @@ afterAll(() => {
   if (fs.existsSync(TEST_DB_PATH)) {
     fs.unlinkSync(TEST_DB_PATH);
   }
-});
-
-// ============================================================================
-// handleConsult Tests - INSERT consult_log
-// ============================================================================
-
-describe('handleConsult - INSERT consult_log', () => {
-  beforeEach(() => {
-    db.exec('DELETE FROM consult_log');
-  });
-
-  it('should insert consultation with all fields', () => {
-    const now = Date.now();
-    db.prepare(`
-      INSERT INTO consult_log (decision, context, principles_found, patterns_found, guidance, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      'Should I use Drizzle ORM?',
-      'Migrating oracle-v2 codebase',
-      3,
-      2,
-      'Based on Oracle philosophy, type safety is valuable',
-      now
-    );
-
-    const result = db.prepare('SELECT * FROM consult_log WHERE decision = ?')
-      .get('Should I use Drizzle ORM?') as any;
-
-    expect(result).toBeDefined();
-    expect(result.decision).toBe('Should I use Drizzle ORM?');
-    expect(result.context).toBe('Migrating oracle-v2 codebase');
-    expect(result.principles_found).toBe(3);
-    expect(result.patterns_found).toBe(2);
-    expect(result.guidance).toContain('type safety');
-    expect(result.created_at).toBe(now);
-  });
-
-  it('should insert consultation with null context', () => {
-    const now = Date.now();
-    db.prepare(`
-      INSERT INTO consult_log (decision, context, principles_found, patterns_found, guidance, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run('Quick decision', null, 1, 0, 'Guidance text', now);
-
-    const result = db.prepare('SELECT * FROM consult_log WHERE decision = ?')
-      .get('Quick decision') as any;
-
-    expect(result).toBeDefined();
-    expect(result.context).toBeNull();
-  });
-
-  it('should auto-increment id', () => {
-    const now = Date.now();
-    db.prepare(`
-      INSERT INTO consult_log (decision, context, principles_found, patterns_found, guidance, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run('Decision 1', null, 1, 1, 'Guidance 1', now);
-
-    db.prepare(`
-      INSERT INTO consult_log (decision, context, principles_found, patterns_found, guidance, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run('Decision 2', null, 2, 2, 'Guidance 2', now);
-
-    const results = db.prepare('SELECT id FROM consult_log ORDER BY id').all() as any[];
-    expect(results[1].id).toBeGreaterThan(results[0].id);
-  });
 });
 
 // ============================================================================
@@ -734,17 +654,18 @@ describe('Drizzle Pattern Verification', () => {
 
   it('should verify INSERT RETURNING pattern behavior', () => {
     const now = Date.now();
+    const id = `returning_test_${now}`;
 
     // Drizzle .returning() returns the inserted row
     // SQLite supports RETURNING clause
     const result = db.prepare(`
-      INSERT INTO consult_log (decision, context, principles_found, patterns_found, guidance, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO oracle_documents (id, type, source_file, concepts, created_at, updated_at, indexed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       RETURNING *
-    `).get('Test decision', null, 1, 1, 'Test guidance', now) as any;
+    `).get(id, 'learning', 'test-returning.md', '["test"]', now, now, now) as any;
 
     expect(result).toBeDefined();
-    expect(result.id).toBeDefined();
-    expect(result.decision).toBe('Test decision');
+    expect(result.id).toBe(id);
+    expect(result.type).toBe('learning');
   });
 });

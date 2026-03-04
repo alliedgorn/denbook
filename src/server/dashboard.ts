@@ -5,7 +5,7 @@
  */
 
 import { sql, gt, and, gte, lt, desc } from 'drizzle-orm';
-import { db, oracleDocuments, consultLog, searchLog, learnLog } from '../db/index.ts';
+import { db, oracleDocuments, searchLog, learnLog } from '../db/index.ts';
 import type { DashboardSummary, DashboardActivity, DashboardGrowth } from './types.ts';
 
 /**
@@ -55,17 +55,8 @@ export function handleDashboardSummary(): DashboardSummary {
   // Activity counts (last 7 days)
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-  let consultations7d = 0;
   let searches7d = 0;
   let learnings7d = 0;
-
-  try {
-    const consultResult = db.select({ count: sql<number>`count(*)` })
-      .from(consultLog)
-      .where(gt(consultLog.createdAt, sevenDaysAgo))
-      .get();
-    consultations7d = consultResult?.count || 0;
-  } catch {}
 
   try {
     const searchResult = db.select({ count: sql<number>`count(*)` })
@@ -98,7 +89,6 @@ export function handleDashboardSummary(): DashboardSummary {
       top: topConcepts
     },
     activity: {
-      consultations_7d: consultations7d,
       searches_7d: searches7d,
       learnings_7d: learnings7d
     },
@@ -116,29 +106,6 @@ export function handleDashboardSummary(): DashboardSummary {
  */
 export function handleDashboardActivity(days: number = 7): DashboardActivity {
   const since = Date.now() - days * 24 * 60 * 60 * 1000;
-
-  // Recent consultations
-  let consultations: DashboardActivity['consultations'] = [];
-  try {
-    const rows = db.select({
-      decision: consultLog.decision,
-      principlesFound: consultLog.principlesFound,
-      patternsFound: consultLog.patternsFound,
-      createdAt: consultLog.createdAt
-    })
-      .from(consultLog)
-      .where(gt(consultLog.createdAt, since))
-      .orderBy(desc(consultLog.createdAt))
-      .limit(20)
-      .all();
-
-    consultations = rows.map(row => ({
-      decision: row.decision.substring(0, 100),
-      principles_found: row.principlesFound,
-      patterns_found: row.patternsFound,
-      created_at: new Date(row.createdAt).toISOString()
-    }));
-  } catch {}
 
   // Recent searches
   let searches: DashboardActivity['searches'] = [];
@@ -190,7 +157,7 @@ export function handleDashboardActivity(days: number = 7): DashboardActivity {
     }));
   } catch {}
 
-  return { consultations, searches, learnings, days };
+  return { searches, learnings, days };
 }
 
 /**
@@ -221,19 +188,6 @@ export function handleDashboardGrowth(period: string = 'week'): DashboardGrowth 
       ))
       .get();
 
-    // Consultations that day
-    let consultCount = 0;
-    try {
-      const consultResult = db.select({ count: sql<number>`count(*)` })
-        .from(consultLog)
-        .where(and(
-          gte(consultLog.createdAt, dayStart),
-          lt(consultLog.createdAt, dayEnd)
-        ))
-        .get();
-      consultCount = consultResult?.count || 0;
-    } catch {}
-
     // Searches that day
     let searchCount = 0;
     try {
@@ -250,7 +204,6 @@ export function handleDashboardGrowth(period: string = 'week'): DashboardGrowth 
     data.push({
       date,
       documents: docsResult?.count || 0,
-      consultations: consultCount,
       searches: searchCount
     });
   }

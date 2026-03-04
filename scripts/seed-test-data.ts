@@ -19,10 +19,10 @@ const insertDoc = sqlite.prepare(`
   VALUES (?, ?, ?, ?, ?, ?, ?)
 `);
 
-// Insert into FTS5 table for content search
+// Insert into FTS5 table for content search (3-column schema: id, content, concepts)
 const insertFts = sqlite.prepare(`
-  INSERT OR IGNORE INTO oracle_fts (id, type, title, content, concepts)
-  VALUES (?, ?, ?, ?, ?)
+  INSERT OR IGNORE INTO oracle_fts (id, content, concepts)
+  VALUES (?, ?, ?)
 `);
 
 const testDocs = [
@@ -54,7 +54,7 @@ const testDocs = [
 
 for (const doc of testDocs) {
   insertDoc.run(doc.id, doc.type, doc.source_file, doc.concepts, now, now, now);
-  insertFts.run(doc.id, doc.type, doc.title, doc.content, doc.concepts);
+  insertFts.run(doc.id, doc.content, doc.concepts);
 }
 
 console.log(`✅ Seeded ${testDocs.length} test documents`);
