@@ -48,7 +48,7 @@ const MONTHS: Record<string, number> = {
  * Parse flexible date input to YYYY-MM-DD.
  * Handles: "5 Mar", "2026-03-05", "March 5", "5/3", "tomorrow", "today"
  */
-function parseDate(input: string): string {
+export function parseDate(input: string): string {
   const trimmed = input.trim();
 
   // Already YYYY-MM-DD
