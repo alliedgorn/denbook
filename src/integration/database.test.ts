@@ -254,31 +254,6 @@ describe("Database Integration (Drizzle ORM)", () => {
   });
 
   // ===================
-  // Consult Logging (Drizzle)
-  // ===================
-  describe("Consult Logging (Drizzle ORM)", () => {
-    test("LOG consultation", async () => {
-      await db.insert(schema.consultLog).values({
-        decision: "Should I use Drizzle?",
-        context: "Building oracle-v2",
-        principlesFound: 3,
-        patternsFound: 5,
-        guidance: "Yes, Drizzle provides type safety",
-        createdAt: Date.now(),
-        project: "oracle-v2",
-      });
-
-      const logs = await db
-        .select()
-        .from(schema.consultLog)
-        .where(eq(schema.consultLog.project, "oracle-v2"));
-
-      expect(logs.length).toBe(1);
-      expect(logs[0].principlesFound).toBe(3);
-    });
-  });
-
-  // ===================
   // Forum Operations (Drizzle)
   // ===================
   describe("Forum Operations (Drizzle ORM)", () => {

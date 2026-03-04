@@ -60,21 +60,6 @@ export const searchLog = sqliteTable('search_log', {
   index('idx_search_created').on(table.createdAt),
 ]);
 
-// Consultation logging
-export const consultLog = sqliteTable('consult_log', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  decision: text('decision').notNull(),
-  context: text('context'),
-  principlesFound: integer('principles_found').notNull(),
-  patternsFound: integer('patterns_found').notNull(),
-  guidance: text('guidance').notNull(),
-  createdAt: integer('created_at').notNull(),
-  project: text('project'),
-}, (table) => [
-  index('idx_consult_project').on(table.project),
-  index('idx_consult_created').on(table.createdAt),
-]);
-
 // Learning/pattern logging
 export const learnLog = sqliteTable('learn_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
