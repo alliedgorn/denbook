@@ -27,9 +27,6 @@ import {
   ORACLE_DATA_DIR,
   REPO_ROOT,
   DB_PATH,
-  UI_PATH,
-  ARTHUR_UI_PATH,
-  DASHBOARD_PATH,
 } from './config.ts';
 
 import { eq, desc, gt, sql } from 'drizzle-orm';
@@ -58,6 +55,8 @@ import {
   handleMap,
   handleVectorStats
 } from './server/handlers.ts';
+
+import { handleRead } from './tools/read.ts';
 
 import {
   handleDashboardSummary,
@@ -584,6 +583,25 @@ app.get('/api/file', async (c) => {
   }
 });
 
+// Read document by file path or ID (resolves vault/ghq paths server-side)
+app.get('/api/read', async (c) => {
+  const file = c.req.query('file');
+  const id = c.req.query('id');
+  if (!file && !id) {
+    return c.json({ error: 'Provide file or id parameter' }, 400);
+  }
+  const ctx = { db, sqlite, repoRoot: REPO_ROOT } as Pick<ToolContext, 'db' | 'sqlite' | 'repoRoot'>;
+  const result = await handleRead(ctx as ToolContext, {
+    file: file || undefined,
+    id: id || undefined,
+  });
+  const text = result.content[0]?.text || '{}';
+  if (result.isError) {
+    return c.json(JSON.parse(text), 404);
+  }
+  return c.json(JSON.parse(text));
+});
+
 // ============================================================================
 // Dashboard Routes
 // ============================================================================
@@ -1089,25 +1107,6 @@ app.post('/api/learn', async (c) => {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, 500);
   }
-});
-
-// ============================================================================
-// Legacy HTML UIs
-// ============================================================================
-
-app.get('/legacy/arthur', (c) => {
-  const content = fs.readFileSync(ARTHUR_UI_PATH, 'utf-8');
-  return c.html(content);
-});
-
-app.get('/legacy/oracle', (c) => {
-  const content = fs.readFileSync(UI_PATH, 'utf-8');
-  return c.html(content);
-});
-
-app.get('/legacy/dashboard', (c) => {
-  const content = fs.readFileSync(DASHBOARD_PATH, 'utf-8');
-  return c.html(content);
 });
 
 // ============================================================================

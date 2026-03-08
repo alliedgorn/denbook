@@ -12,21 +12,20 @@ import { db, sqlite, oracleDocuments, indexingStatus } from '../db/index.ts';
 import { REPO_ROOT } from '../config.ts';
 import { logSearch, logDocumentAccess, logLearning } from './logging.ts';
 import type { SearchResult, SearchResponse } from './types.ts';
-import { ChromaMcpClient } from '../chroma-mcp.ts';
+import { createVectorStore } from '../vector/factory.ts';
+import type { VectorStoreAdapter } from '../vector/types.ts';
 import { detectProject } from './project-detect.ts';
 import { coerceConcepts } from '../tools/learn.ts';
 
-// Singleton ChromaMcpClient for vector search
+// Singleton VectorStoreAdapter for vector search
 // HTTP server can use this because it's NOT an MCP server (no stdio conflict)
-const HOME_DIR = process.env.HOME || process.env.USERPROFILE || '/tmp';
-const CHROMA_PATH = path.join(HOME_DIR, '.chromadb');
-let chromaClient: ChromaMcpClient | null = null;
+let vectorStore: VectorStoreAdapter | null = null;
 
-function getChromaClient(): ChromaMcpClient {
-  if (!chromaClient) {
-    chromaClient = new ChromaMcpClient('oracle_knowledge', CHROMA_PATH, '3.12');
+function getVectorStore(): VectorStoreAdapter {
+  if (!vectorStore) {
+    vectorStore = createVectorStore();
   }
-  return chromaClient;
+  return vectorStore;
 }
 
 /**
@@ -126,7 +125,7 @@ export async function handleSearch(
   if (mode !== 'fts') {
     try {
       console.log(`[Hybrid] Starting vector search for: "${query.substring(0, 30)}..."`);
-      const client = getChromaClient();
+      const client = getVectorStore();
       const whereFilter = type !== 'all' ? { type } : undefined;
       const chromaResults = await client.query(query, limit * 2, whereFilter);
 
@@ -183,7 +182,7 @@ export async function handleSearch(
   let total = Math.max(ftsTotal, combined.length);
   if (mode === 'vector' && vectorResults.length > 0) {
     try {
-      const client = getChromaClient();
+      const client = getVectorStore();
       const stats = await client.getStats();
       if (stats.count > 0) total = stats.count;
     } catch (error) {
@@ -581,7 +580,7 @@ export async function handleSimilar(
   limit: number = 5
 ): Promise<{ results: SearchResult[]; docId: string }> {
   try {
-    const client = getChromaClient();
+    const client = getVectorStore();
     const chromaResults = await client.queryById(docId, limit);
 
     if (!chromaResults.ids || chromaResults.ids.length === 0) {
@@ -796,11 +795,11 @@ export async function handleVectorStats(): Promise<{
 }> {
   const timeout = parseInt(process.env.ORACLE_CHROMA_TIMEOUT || '5000', 10);
   try {
-    const client = getChromaClient();
+    const client = getVectorStore();
     const stats = await Promise.race([
       client.getStats(),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('ChromaDB timeout')), timeout)
+        setTimeout(() => reject(new Error('Vector store timeout')), timeout)
       ),
     ]);
     return {
@@ -851,7 +850,9 @@ export function handleLearn(
     .replace(/^-|-$/g, '');
 
   const filename = `${dateStr}_${slug}.md`;
-  const filePath = path.join(REPO_ROOT, 'ψ/memory/learnings', filename);
+  const learningsDir = path.join(REPO_ROOT, 'ψ/memory/learnings');
+  fs.mkdirSync(learningsDir, { recursive: true });
+  const filePath = path.join(learningsDir, filename);
 
   // Check if file already exists
   if (fs.existsSync(filePath)) {

@@ -5,7 +5,7 @@
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { Database } from 'bun:sqlite';
 import type * as schema from '../db/schema.ts';
-import type { ChromaMcpClient } from '../chroma-mcp.ts';
+import type { VectorStoreAdapter } from '../vector/types.ts';
 
 /**
  * Context object passed to all tool handlers.
@@ -15,8 +15,8 @@ export interface ToolContext {
   db: BunSQLiteDatabase<typeof schema>;
   sqlite: Database;
   repoRoot: string;
-  chromaMcp: ChromaMcpClient;
-  chromaStatus: 'unknown' | 'connected' | 'unavailable';
+  vectorStore: VectorStoreAdapter;
+  vectorStatus: 'unknown' | 'connected' | 'unavailable';
   version: string;
 }
 
@@ -98,4 +98,9 @@ export interface OracleScheduleListInput {
   filter?: string;
   status?: 'pending' | 'done' | 'cancelled' | 'all';
   limit?: number;
+}
+
+export interface OracleReadInput {
+  file?: string;
+  id?: string;
 }

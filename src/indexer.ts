@@ -23,7 +23,8 @@ import * as schema from './db/schema.ts';
 import { oracleDocuments } from './db/schema.ts';
 import { createDatabase } from './db/index.ts';
 import { DB_PATH } from './config.ts';
-import { ChromaMcpClient } from './chroma-mcp.ts';
+import { createVectorStore } from './vector/factory.ts';
+import type { VectorStoreAdapter } from './vector/types.ts';
 import { detectProject } from './server/project-detect.ts';
 import { getVaultPsiRoot } from './vault/handler.ts';
 import type { OracleDocument, OracleMetadata, IndexerConfig } from './types.ts';
@@ -31,7 +32,7 @@ import type { OracleDocument, OracleMetadata, IndexerConfig } from './types.ts';
 export class OracleIndexer {
   private sqlite: Database;  // Raw bun:sqlite for FTS and schema operations
   private db: BunSQLiteDatabase<typeof schema>;  // Drizzle for type-safe queries
-  private chromaClient: ChromaMcpClient | null = null;
+  private vectorClient: VectorStoreAdapter | null = null;
   private config: IndexerConfig;
   private project: string | null;
   private seenContentHashes: Set<string> = new Set();  // Content dedup across projects
@@ -198,19 +199,18 @@ export class OracleIndexer {
       }
     }
 
-    // Initialize ChromaMcpClient (uses chroma-mcp Python server)
+    // Initialize vector store (pluggable: ChromaDB, sqlite-vec, etc.)
     try {
-      this.chromaClient = new ChromaMcpClient(
-        'oracle_knowledge',
-        this.config.chromaPath,
-        '3.12'  // Python version
-      );
-      await this.chromaClient.deleteCollection();
-      await this.chromaClient.ensureCollection();
-      console.log('ChromaDB connected via MCP');
+      this.vectorClient = createVectorStore({
+        dataPath: this.config.chromaPath,
+      });
+      await this.vectorClient.connect();
+      await this.vectorClient.deleteCollection();
+      await this.vectorClient.ensureCollection();
+      console.log(`Vector store (${this.vectorClient.name}) connected`);
     } catch (e) {
-      console.log('ChromaDB not available, using SQLite-only mode:', e instanceof Error ? e.message : e);
-      this.chromaClient = null;
+      console.log('Vector store not available, using SQLite-only mode:', e instanceof Error ? e.message : e);
+      this.vectorClient = null;
     }
 
     const documents: OracleDocument[] = [];
@@ -800,14 +800,14 @@ export class OracleIndexer {
       throw e;
     }
 
-    // Batch insert to Chroma in chunks of 100 (skip if no client)
-    if (!this.chromaClient) {
-      console.log('Skipping Chroma indexing (SQLite-only mode)');
+    // Batch insert to vector store in chunks of 100 (skip if no client)
+    if (!this.vectorClient) {
+      console.log('Skipping vector indexing (SQLite-only mode)');
       return;
     }
 
     const BATCH_SIZE = 100;
-    let chromaSuccess = true;
+    let vectorSuccess = true;
 
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
       const batchIds = ids.slice(i, i + BATCH_SIZE);
@@ -815,21 +815,20 @@ export class OracleIndexer {
       const batchMetadatas = metadatas.slice(i, i + BATCH_SIZE);
 
       try {
-        // Format as ChromaDocument array for MCP client
-        const chromaDocs = batchIds.map((id, idx) => ({
+        const vectorDocs = batchIds.map((id, idx) => ({
           id,
           document: batchContents[idx],
           metadata: batchMetadatas[idx]
         }));
-        await this.chromaClient.addDocuments(chromaDocs);
-        console.log(`Chroma batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(ids.length / BATCH_SIZE)} stored`);
+        await this.vectorClient.addDocuments(vectorDocs);
+        console.log(`Vector batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(ids.length / BATCH_SIZE)} stored`);
       } catch (error) {
-        console.error(`Chroma batch failed:`, error);
-        chromaSuccess = false;
+        console.error(`Vector batch failed:`, error);
+        vectorSuccess = false;
       }
     }
 
-    console.log(`Stored in SQLite${chromaSuccess ? ' + Chroma' : ' (Chroma failed)'}`);
+    console.log(`Stored in SQLite${vectorSuccess ? ` + ${this.vectorClient.name}` : ` (${this.vectorClient.name} failed)`}`);
   }
 
   /**
@@ -837,8 +836,8 @@ export class OracleIndexer {
    */
   async close(): Promise<void> {
     this.sqlite.close();
-    if (this.chromaClient) {
-      await this.chromaClient.close();
+    if (this.vectorClient) {
+      await this.vectorClient.close();
     }
   }
 }
