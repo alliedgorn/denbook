@@ -126,7 +126,7 @@ export async function vectorSearch(
     const whereFilter = type !== 'all' ? { type } : undefined;
     console.error(`[VectorSearch] Query: "${query.substring(0, 50)}..." limit=${limit}`);
 
-    const results = await ctx.chromaMcp.query(query, limit, whereFilter);
+    const results = await ctx.vectorStore.query(query, limit, whereFilter);
     console.error(`[VectorSearch] Results: ${results.ids?.length || 0} documents`);
 
     if (!results.ids || results.ids.length === 0) {
