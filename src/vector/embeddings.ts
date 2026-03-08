@@ -25,24 +25,35 @@ export class ChromaDBInternalEmbeddings implements EmbeddingProvider {
  */
 export class OllamaEmbeddings implements EmbeddingProvider {
   readonly name = 'ollama';
-  readonly dimensions: number;
+  dimensions: number;
   private baseUrl: string;
   private model: string;
+  private _dimensionsDetected = false;
 
   constructor(config: { baseUrl?: string; model?: string } = {}) {
     this.baseUrl = config.baseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
     this.model = config.model || 'nomic-embed-text';
-    this.dimensions = 768; // nomic-embed-text default
+    // Known model dimensions (fallback before auto-detect)
+    const KNOWN_DIMS: Record<string, number> = {
+      'nomic-embed-text': 768,
+      'qwen3-embedding': 4096,
+      'bge-m3': 1024,
+      'mxbai-embed-large': 1024,
+      'all-minilm': 384,
+    };
+    this.dimensions = KNOWN_DIMS[this.model] || 768;
   }
 
   async embed(texts: string[]): Promise<number[][]> {
     const embeddings: number[][] = [];
 
     for (const text of texts) {
+      // Truncate to ~2000 chars — Thai text uses 2-3x more tokens than English
+      const truncated = text.length > 2000 ? text.slice(0, 2000) : text;
       const response = await fetch(`${this.baseUrl}/api/embeddings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: this.model, prompt: text }),
+        body: JSON.stringify({ model: this.model, prompt: truncated }),
       });
 
       if (!response.ok) {
@@ -52,6 +63,12 @@ export class OllamaEmbeddings implements EmbeddingProvider {
 
       const data = await response.json() as { embedding: number[] };
       embeddings.push(data.embedding);
+
+      // Auto-detect dimensions from first response
+      if (!this._dimensionsDetected && data.embedding.length > 0) {
+        this.dimensions = data.embedding.length;
+        this._dimensionsDetected = true;
+      }
     }
 
     return embeddings;

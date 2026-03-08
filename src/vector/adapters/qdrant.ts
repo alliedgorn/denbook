@@ -127,8 +127,8 @@ export class QdrantAdapter implements VectorStoreAdapter {
 
     const numericId = this.hashId(id);
 
-    // Get the point's vector
-    const points = await this.client.getPoints(this.collectionName, {
+    // Get the point's vector (retrieve replaces getPoints in newer client versions)
+    const points = await this.client.retrieve(this.collectionName, {
       ids: [numericId],
       with_vector: true,
     });

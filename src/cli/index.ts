@@ -50,6 +50,7 @@ program.parseAsync = async function (...args: any[]) {
 // Register all commands
 import { registerHealth } from './commands/health.ts';
 import { registerSearch } from './commands/search.ts';
+import { registerRead } from './commands/read.ts';
 import { registerLearn } from './commands/learn.ts';
 import { registerList } from './commands/list.ts';
 import { registerStats } from './commands/stats.ts';
@@ -62,6 +63,7 @@ import { registerVault } from './commands/vault.ts';
 
 registerHealth(program);
 registerSearch(program);
+registerRead(program);
 registerLearn(program);
 registerList(program);
 registerStats(program);

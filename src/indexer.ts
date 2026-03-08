@@ -204,6 +204,7 @@ export class OracleIndexer {
       this.vectorClient = createVectorStore({
         dataPath: this.config.chromaPath,
       });
+      await this.vectorClient.connect();
       await this.vectorClient.deleteCollection();
       await this.vectorClient.ensureCollection();
       console.log(`Vector store (${this.vectorClient.name}) connected`);

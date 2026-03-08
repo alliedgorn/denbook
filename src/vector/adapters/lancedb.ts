@@ -91,36 +91,37 @@ export class LanceDBAdapter implements VectorStoreAdapter {
 
     const [queryEmbedding] = await this.embedder.embed([text]);
 
-    let search = this.table.search(queryEmbedding).limit(limit);
+    // Fetch extra results if filtering in JS (metadata is stored as string, not binary)
+    const fetchLimit = where ? limit * 3 : limit;
+    const results = await this.table.search(queryEmbedding).limit(fetchLimit).toArray();
 
-    // LanceDB supports SQL-like where clauses on columns
+    // Filter metadata in JavaScript (LanceDB json_extract requires LargeBinary, not Utf8)
+    let filtered = results;
     if (where) {
-      const conditions = Object.entries(where)
-        .map(([k, v]) => `json_extract(metadata, '$.${k}') = '${v}'`)
-        .join(' AND ');
-      search = search.where(conditions);
+      filtered = results.filter((r: any) => {
+        const meta = JSON.parse(r.metadata || '{}');
+        return Object.entries(where).every(([k, v]) => meta[k] === v);
+      }).slice(0, limit);
     }
 
-    const results = await search.toArray();
-
     return {
-      ids: results.map((r: any) => r.id),
-      documents: results.map((r: any) => r.text),
-      distances: results.map((r: any) => r._distance ?? 0),
-      metadatas: results.map((r: any) => JSON.parse(r.metadata || '{}')),
+      ids: filtered.map((r: any) => r.id),
+      documents: filtered.map((r: any) => r.text),
+      distances: filtered.map((r: any) => r._distance ?? 0),
+      metadatas: filtered.map((r: any) => JSON.parse(r.metadata || '{}')),
     };
   }
 
   async queryById(id: string, nResults: number = 5): Promise<VectorQueryResult> {
     if (!this.table) throw new Error('LanceDB collection not initialized');
 
-    // Get the document's vector
-    const rows = await this.table.search().where(`id = '${id}'`).limit(1).toArray();
+    // Get the document's vector using filter query (not vector search)
+    const rows = await this.table.query().where(`id = '${id}'`).limit(1).toArray();
     if (rows.length === 0) {
       throw new Error(`No embedding found for document: ${id}`);
     }
 
-    const vector = rows[0].vector;
+    const vector = Array.from(rows[0].vector);
     const results = await this.table.search(vector).limit(nResults + 1).toArray();
 
     const filtered = results.filter((r: any) => r.id !== id).slice(0, nResults);
@@ -151,11 +152,11 @@ export class LanceDBAdapter implements VectorStoreAdapter {
   async getAllEmbeddings(limit: number = 5000): Promise<{ ids: string[]; embeddings: number[][]; metadatas: any[] }> {
     if (!this.table) return { ids: [], embeddings: [], metadatas: [] };
 
-    const rows = await this.table.search().limit(limit).toArray();
+    const rows = await this.table.query().limit(limit).toArray();
 
     return {
       ids: rows.map((r: any) => r.id),
-      embeddings: rows.map((r: any) => r.vector),
+      embeddings: rows.map((r: any) => Array.from(r.vector)),
       metadatas: rows.map((r: any) => JSON.parse(r.metadata || '{}')),
     };
   }

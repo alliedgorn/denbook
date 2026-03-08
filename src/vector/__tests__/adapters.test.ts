@@ -11,6 +11,8 @@ import { createVectorStore } from '../factory.ts';
 import { createEmbeddingProvider, OllamaEmbeddings } from '../embeddings.ts';
 import { SqliteVecAdapter } from '../adapters/sqlite-vec.ts';
 import { ChromaMcpAdapter } from '../adapters/chroma-mcp.ts';
+import { LanceDBAdapter } from '../adapters/lancedb.ts';
+import { QdrantAdapter } from '../adapters/qdrant.ts';
 import type { VectorStoreAdapter, VectorDocument } from '../types.ts';
 import path from 'path';
 import fs from 'fs';
@@ -293,5 +295,213 @@ describe('ChromaMcpAdapter', () => {
     const result = await store.queryById('test_1', 2);
     expect(result.ids.length).toBeGreaterThan(0);
     expect(result.ids).not.toContain('test_1');
+  });
+});
+
+// ============================================================================
+// Adapter Interface Compliance: LanceDB + Ollama
+// ============================================================================
+
+describe('LanceDBAdapter + Ollama', () => {
+  let store: VectorStoreAdapter;
+  let tmpDir: string;
+  let available = false;
+
+  const setup = async () => {
+    available = await isOllamaAvailable();
+    if (!available) return;
+
+    tmpDir = path.join(os.tmpdir(), `oracle-lance-test-${Date.now()}`);
+    store = createVectorStore({
+      type: 'lancedb',
+      dataPath: tmpDir,
+      collectionName: 'oracle_test_lance',
+      embeddingProvider: 'ollama',
+    });
+  };
+
+  afterAll(async () => {
+    if (store) await store.close();
+    if (tmpDir) {
+      try { fs.rmSync(tmpDir, { recursive: true }); } catch {}
+    }
+  });
+
+  test('connect + ensureCollection', async () => {
+    await setup();
+    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+
+    await store.connect();
+    await store.ensureCollection();
+
+    const info = await store.getCollectionInfo();
+    expect(info.name).toBe('oracle_test_lance');
+    expect(info.count).toBe(0);
+  });
+
+  test('addDocuments', async () => {
+    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+
+    await store.addDocuments(TEST_DOCS);
+
+    const stats = await store.getStats();
+    expect(stats.count).toBe(5);
+  });
+
+  test('query: semantic search', async () => {
+    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+
+    const result = await store.query('git history preservation', 3);
+
+    expect(result.ids.length).toBeGreaterThan(0);
+    expect(result.ids.length).toBeLessThanOrEqual(3);
+    expect(result.documents.length).toBe(result.ids.length);
+    expect(result.distances.length).toBe(result.ids.length);
+
+    console.log('  Top result for "git history preservation":', result.ids[0]);
+    expect(result.ids).toContain('test_1');
+  });
+
+  test('query: with where filter', async () => {
+    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+
+    const result = await store.query('search technology', 5, { type: 'learning' });
+
+    for (const meta of result.metadatas) {
+      expect(meta.type).toBe('learning');
+    }
+  });
+
+  test('queryById: nearest neighbors', async () => {
+    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+
+    const result = await store.queryById('test_1', 3);
+
+    expect(result.ids.length).toBeGreaterThan(0);
+    expect(result.ids.length).toBeLessThanOrEqual(3);
+    expect(result.ids).not.toContain('test_1');
+  });
+
+  test('getAllEmbeddings', async () => {
+    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+
+    const all = await store.getAllEmbeddings!();
+
+    expect(all.ids).toHaveLength(5);
+    expect(all.embeddings).toHaveLength(5);
+    expect(all.embeddings[0]).toHaveLength(768);
+    expect(all.metadatas).toHaveLength(5);
+  });
+
+  test('deleteCollection + getStats returns 0', async () => {
+    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+
+    await store.deleteCollection();
+    await store.ensureCollection();
+    const stats = await store.getStats();
+    expect(stats.count).toBe(0);
+  });
+});
+
+// ============================================================================
+// Adapter Interface Compliance: Qdrant + Ollama
+// ============================================================================
+
+async function isQdrantAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch('http://localhost:6333/collections');
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+describe('QdrantAdapter + Ollama', () => {
+  let store: VectorStoreAdapter;
+  let available = false;
+
+  const setup = async () => {
+    const [ollama, qdrant] = await Promise.all([isOllamaAvailable(), isQdrantAvailable()]);
+    available = ollama && qdrant;
+    if (!available) return;
+
+    store = createVectorStore({
+      type: 'qdrant',
+      collectionName: 'oracle_test_qdrant',
+      embeddingProvider: 'ollama',
+    });
+  };
+
+  afterAll(async () => {
+    if (store && available) {
+      try { await store.deleteCollection(); } catch {}
+      await store.close();
+    }
+  });
+
+  test('connect + ensureCollection', async () => {
+    await setup();
+    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+
+    await store.connect();
+    await store.ensureCollection();
+
+    const info = await store.getCollectionInfo();
+    expect(info.name).toBe('oracle_test_qdrant');
+  });
+
+  test('addDocuments', async () => {
+    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+
+    await store.addDocuments(TEST_DOCS);
+
+    // Qdrant is eventually consistent — wait briefly
+    await new Promise(r => setTimeout(r, 500));
+
+    const stats = await store.getStats();
+    expect(stats.count).toBe(5);
+  });
+
+  test('query: semantic search', async () => {
+    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+
+    const result = await store.query('git history preservation', 3);
+
+    expect(result.ids.length).toBeGreaterThan(0);
+    expect(result.ids.length).toBeLessThanOrEqual(3);
+    expect(result.documents.length).toBe(result.ids.length);
+    expect(result.distances.length).toBe(result.ids.length);
+
+    console.log('  Top result for "git history preservation":', result.ids[0]);
+    expect(result.ids).toContain('test_1');
+  });
+
+  test('query: with where filter', async () => {
+    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+
+    const result = await store.query('search technology', 5, { type: 'learning' });
+
+    for (const meta of result.metadatas) {
+      expect(meta.type).toBe('learning');
+    }
+  });
+
+  test('queryById: nearest neighbors', async () => {
+    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+
+    const result = await store.queryById('test_1', 3);
+
+    expect(result.ids.length).toBeGreaterThan(0);
+    expect(result.ids.length).toBeLessThanOrEqual(3);
+    expect(result.ids).not.toContain('test_1');
+  });
+
+  test('deleteCollection + recreate', async () => {
+    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+
+    await store.deleteCollection();
+    await store.ensureCollection();
+    const stats = await store.getStats();
+    expect(stats.count).toBe(0);
   });
 });

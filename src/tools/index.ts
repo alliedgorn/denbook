@@ -19,6 +19,7 @@ export type {
   OracleVerifyInput,
   OracleScheduleAddInput,
   OracleScheduleListInput,
+  OracleReadInput,
 } from './types.ts';
 
 // Search (+ pure helpers)
@@ -66,6 +67,9 @@ export { verifyToolDef, handleVerify } from './verify.ts';
 
 // Schedule
 export { scheduleAddToolDef, handleScheduleAdd, scheduleListToolDef, handleScheduleList } from './schedule.ts';
+
+// Read
+export { readToolDef, handleRead } from './read.ts';
 
 // Forum
 export type {
