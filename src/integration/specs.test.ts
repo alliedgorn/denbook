@@ -356,4 +356,91 @@ describe("Specs API Integration", () => {
       expect(res.status).toBe(404);
     });
   });
+
+  // T#754 / Spec #57 Phase 1 — reopen endpoint + version chain
+  describe("Reopen + Version Chain (Spec #57)", () => {
+    test("POST /api/specs/99999/reopen returns 404", async () => {
+      const res = await fetch(`${BASE_URL}/api/specs/99999/reopen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ author: "karo", reason: "test" }),
+      });
+      expect(res.status).toBe(404);
+    });
+
+    test("POST /api/specs/:id/reopen rejects non-approved specs", async () => {
+      if (createdSpecIds.length === 0) return;
+      // Test spec is pending, not approved
+      const res = await fetch(
+        `${BASE_URL}/api/specs/${createdSpecIds[0]}/reopen`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ author: "pip", reason: "test" }),
+        }
+      );
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain("approved specs");
+    });
+
+    test("POST /api/specs/:id/reopen requires reason", async () => {
+      const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
+      const approvedData = await approvedRes.json();
+      if (!approvedData.specs || approvedData.specs.length === 0) return;
+      const specId = approvedData.specs[0].id;
+      const res = await fetch(`${BASE_URL}/api/specs/${specId}/reopen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ author: "gorn" }),
+      });
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain("reason required");
+    });
+
+    test("POST /api/specs/:id/reopen requires identity", async () => {
+      const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
+      const approvedData = await approvedRes.json();
+      if (!approvedData.specs || approvedData.specs.length === 0) return;
+      const specId = approvedData.specs[0].id;
+      const res = await fetch(`${BASE_URL}/api/specs/${specId}/reopen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "test" }),
+      });
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain("Identity required");
+    });
+
+    test("POST /api/specs/:id/reopen rejects unauthorized requester", async () => {
+      const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
+      const approvedData = await approvedRes.json();
+      if (!approvedData.specs || approvedData.specs.length === 0) return;
+      const specId = approvedData.specs[0].id;
+      // bertus is not author/sable/gorn — should be rejected
+      const res = await fetch(`${BASE_URL}/api/specs/${specId}/reopen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ author: "bertus", reason: "unauthorized test" }),
+      });
+      expect(res.status).toBe(403);
+    });
+
+    test("POST /api/specs/:id/resubmit on approved spec points at reopen", async () => {
+      const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
+      const approvedData = await approvedRes.json();
+      if (!approvedData.specs || approvedData.specs.length === 0) return;
+      const specId = approvedData.specs[0].id;
+      const res = await fetch(`${BASE_URL}/api/specs/${specId}/resubmit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ author: "karo" }),
+      });
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain("reopen");
+    });
+  });
 });
