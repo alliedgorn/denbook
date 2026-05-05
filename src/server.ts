@@ -1601,7 +1601,7 @@ const HELP_ENDPOINTS = [
     { method: 'GET', path: '/api/dm/dashboard', desc: 'DM dashboard stats', params: null },
     { method: 'GET', path: '/api/dm/unread-count', desc: 'Get unread DM count', params: null },
     // Tasks (PM Board)
-    { method: 'GET', path: '/api/tasks', desc: 'List tasks (Spec #56: parent_id filter)', params: '?assignee=&reviewer=&status=&parent_id=&limit=100&offset=0' },
+    { method: 'GET', path: '/api/tasks', desc: 'List tasks (Spec #56: parent_id filter)', params: '?assignee=&reviewer=&status=&parent_id=&limit=100&offset=0&include_deleted=true' },
     { method: 'GET', path: '/api/tasks/:id', desc: 'Get task by ID (includes subtasks summary if parent)', params: null },
     { method: 'GET', path: '/api/tasks/:id/subtree', desc: 'Get parent task + all direct subtasks (Spec #56)', params: null },
     { method: 'POST', path: '/api/tasks', desc: 'Create task (Spec #56: parent_task_id for subtasks)', params: 'body: { title, assigned_to, reviewer, project_id, description?, status?, parent_task_id? }' },
@@ -5938,6 +5938,10 @@ app.get('/api/tasks', (c) => {
 
   let query = 'SELECT t.*, p.name as project_name FROM tasks t LEFT JOIN projects p ON t.project_id = p.id WHERE 1=1';
   const params: any[] = [];
+
+  // T#759: exclude soft-deleted tasks by default; ?include_deleted=true for audit/admin
+  const includeDeleted = c.req.query('include_deleted') === 'true';
+  if (!includeDeleted) { query += " AND t.status != 'deleted'"; }
 
   if (projectId) { query += ' AND t.project_id = ?'; params.push(parseInt(projectId, 10)); }
   if (status) {
