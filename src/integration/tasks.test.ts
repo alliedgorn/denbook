@@ -271,4 +271,48 @@ describe("Tasks & Board API Integration", () => {
       expect(data).toBeTruthy();
     });
   });
+
+  // T#759: deleted tasks excluded from list by default
+  describe("Deleted task exclusion (T#759)", () => {
+    test("GET /api/tasks excludes deleted tasks by default", async () => {
+      const { data: task } = await createTask();
+      // Delete it
+      await fetch(`${BASE_URL}/api/tasks/${task.id}`, { method: "DELETE" });
+      // List should not include deleted task
+      const listRes = await fetch(`${BASE_URL}/api/tasks`);
+      const listData = await listRes.json();
+      const found = listData.tasks.find((t: any) => t.id === task.id);
+      expect(found).toBeUndefined();
+    });
+
+    test("GET /api/tasks?include_deleted=true returns deleted tasks", async () => {
+      const { data: task } = await createTask();
+      await fetch(`${BASE_URL}/api/tasks/${task.id}`, { method: "DELETE" });
+      const listRes = await fetch(`${BASE_URL}/api/tasks?include_deleted=true`);
+      const listData = await listRes.json();
+      const found = listData.tasks.find((t: any) => t.id === task.id);
+      expect(found).toBeTruthy();
+      expect(found.status).toBe("deleted");
+    });
+
+    test("GET /api/board excludes deleted tasks", async () => {
+      const { data: task } = await createTask();
+      await fetch(`${BASE_URL}/api/tasks/${task.id}`, { method: "DELETE" });
+      const boardRes = await fetch(`${BASE_URL}/api/board`);
+      const boardData = await boardRes.json();
+      const allTasks = Object.values(boardData.columns || {}).flat() as any[];
+      const found = allTasks.find((t: any) => t.id === task.id);
+      expect(found).toBeUndefined();
+    });
+
+    test("GET /api/tasks/:id/subtree excludes deleted subtasks", async () => {
+      const { data: parent } = await createTask({ title: `${TEST_PREFIX}parent_${Date.now()}` });
+      const { data: child } = await createTask({ title: `${TEST_PREFIX}child_${Date.now()}`, parent_task_id: parent.id });
+      await fetch(`${BASE_URL}/api/tasks/${child.id}`, { method: "DELETE" });
+      const subtreeRes = await fetch(`${BASE_URL}/api/tasks/${parent.id}/subtree`);
+      const subtreeData = await subtreeRes.json();
+      const found = subtreeData.subtasks.find((t: any) => t.id === child.id);
+      expect(found).toBeUndefined();
+    });
+  });
 });
