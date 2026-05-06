@@ -1644,6 +1644,7 @@ const HELP_ENDPOINTS = [
     { method: 'POST', path: '/api/specs', desc: 'Submit new spec', params: 'body: { title, content, author, task_ids?, thread_ids? }' },
     { method: 'POST', path: '/api/specs/:id/review', desc: 'Review a spec', params: 'body: { reviewer, action, comment? }' },
     { method: 'POST', path: '/api/specs/:id/resubmit', desc: 'Resubmit spec with changes', params: 'body: { content, author, change_summary? }' },
+    { method: 'POST', path: '/api/specs/:id/reopen', desc: 'Reopen approved spec for amendment (Spec #57)', params: 'body: { author, reason }' },
     { method: 'DELETE', path: '/api/specs/:id', desc: 'Delete spec', params: 'body: { beast }' },
     { method: 'GET', path: '/api/specs/:id/links', desc: 'Get linked tasks/threads', params: null },
     { method: 'POST', path: '/api/specs/:id/link', desc: 'Link task or thread to spec', params: 'body: { type, target_id }' },
@@ -8197,6 +8198,59 @@ function resolveSpecPath(repo: string, filePath: string): string | null {
   return resolved;
 }
 
+// T#754 / Spec #57 Phase 1 — spec_versions table for amendment + version chain
+sqlite.prepare(`
+  CREATE TABLE IF NOT EXISTS spec_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    spec_id INTEGER NOT NULL REFERENCES spec_reviews(id),
+    version TEXT NOT NULL,
+    content TEXT NOT NULL,
+    stamped_at TEXT NOT NULL,
+    stamped_by TEXT NOT NULL,
+    change_summary TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(spec_id, version)
+  )
+`).run();
+try { sqlite.prepare('CREATE INDEX IF NOT EXISTS idx_spec_versions_spec ON spec_versions(spec_id)').run(); } catch { /* exists */ }
+
+// Add current_version to spec_reviews (default v1, snapshot tracking pointer)
+try { sqlite.prepare("ALTER TABLE spec_reviews ADD COLUMN current_version TEXT DEFAULT 'v1'").run(); } catch { /* exists */ }
+
+// Backfill: every existing approved spec gets v1 row in spec_versions if not present.
+// Skips specs whose markdown file is not on disk (consistent with /content endpoint).
+try {
+  const approvedSpecs = sqlite.prepare("SELECT id, repo, file_path, reviewed_at, updated_at FROM spec_reviews WHERE status = 'approved'").all() as any[];
+  const insertVersion = sqlite.prepare(
+    'INSERT OR IGNORE INTO spec_versions (spec_id, version, content, stamped_at, stamped_by, change_summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  );
+  const nowIso = new Date().toISOString();
+  for (const s of approvedSpecs) {
+    const resolved = resolveSpecPath(s.repo, s.file_path);
+    if (!resolved) continue;
+    let content: string;
+    try { content = fs.readFileSync(resolved, 'utf-8'); } catch { continue; }
+    insertVersion.run(s.id, 'v1', content, s.reviewed_at || s.updated_at, 'gorn', 'v1 (initial approval, backfilled)', nowIso);
+  }
+} catch { /* backfill safe to skip on re-run */ }
+
+// Helper: parse 'vN' to N, return null if not a vN string
+function parseVersionN(version: string): number | null {
+  const m = /^v(\d+)$/.exec(version);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Helper: get next version label after the highest existing version for a spec
+function nextVersionFor(specId: number): string {
+  const rows = sqlite.prepare('SELECT version FROM spec_versions WHERE spec_id = ?').all(specId) as any[];
+  let max = 0;
+  for (const r of rows) {
+    const n = parseVersionN(r.version);
+    if (n !== null && n > max) max = n;
+  }
+  return `v${max + 1}`;
+}
+
 // GET /api/specs — list all specs
 app.get('/api/specs', (c) => {
   const status = c.req.query('status');
@@ -8354,7 +8408,9 @@ app.post('/api/specs/:id/review', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   const spec = sqlite.prepare('SELECT * FROM spec_reviews WHERE id = ?').get(id) as any;
   if (!spec) return c.json({ error: 'Spec not found' }, 404);
-  if (spec.status !== 'pending') return c.json({ error: 'Only pending specs can be reviewed' }, 400);
+  if (spec.status !== 'pending' && spec.status !== 'reopened-amendment') {
+    return c.json({ error: 'Only pending or reopened-amendment specs can be reviewed' }, 400);
+  }
   try {
     const data = await c.req.json();
     const { action, feedback } = data;
@@ -8366,6 +8422,19 @@ app.post('/api/specs/:id/review', async (c) => {
     }
     const now = new Date().toISOString();
     const status = action === 'approve' ? 'approved' : 'rejected';
+    // T#754 / Spec #57 Phase 1: on approve from reopened-amendment, snapshot the new version
+    let newVersion: string | null = null;
+    if (action === 'approve' && spec.status === 'reopened-amendment') {
+      const resolved = resolveSpecPath(spec.repo, spec.file_path);
+      if (!resolved) return c.json({ error: 'Cannot snapshot — invalid spec path' }, 500);
+      let content: string;
+      try { content = fs.readFileSync(resolved, 'utf-8'); } catch { return c.json({ error: 'Cannot snapshot — spec file not found on disk' }, 500); }
+      newVersion = nextVersionFor(id);
+      sqlite.prepare(
+        'INSERT INTO spec_versions (spec_id, version, content, stamped_at, stamped_by, change_summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, newVersion, content, now, 'gorn', feedback || null, now);
+      sqlite.prepare('UPDATE spec_reviews SET current_version = ? WHERE id = ?').run(newVersion, id);
+    }
     sqlite.prepare(
       'UPDATE spec_reviews SET status = ?, reviewer_feedback = ?, reviewed_at = ?, updated_at = ? WHERE id = ?'
     ).run(status, feedback || null, now, now, id);
@@ -8480,12 +8549,12 @@ app.get('/api/specs/by-thread/:threadId', (c) => {
   return c.json({ specs });
 });
 
-// POST /api/specs/:id/resubmit — reset rejected spec to pending (author/assignee only)
+// POST /api/specs/:id/resubmit — reset rejected/reopened spec to pending (author/assignee only)
 app.post('/api/specs/:id/resubmit', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   const spec = sqlite.prepare('SELECT * FROM spec_reviews WHERE id = ?').get(id) as any;
   if (!spec) return c.json({ error: 'Spec not found' }, 404);
-  if (spec.status === 'approved') return c.json({ error: 'Approved specs cannot be resubmitted' }, 400);
+  if (spec.status === 'approved') return c.json({ error: 'Approved specs cannot be resubmitted directly — POST /api/specs/:id/reopen first to enter reopened-amendment state' }, 400);
   // Require identity — only spec author or task assignee can resubmit
   let requester: string;
   try {
@@ -8519,6 +8588,61 @@ app.post('/api/specs/:id/resubmit', async (c) => {
   ).run('pending', now, id);
   const updated = sqlite.prepare('SELECT * FROM spec_reviews WHERE id = ?').get(id);
   wsBroadcast('spec_resubmitted', { id: (updated as any).id });
+  return c.json(updated);
+});
+
+// T#754 / Spec #57 Phase 1 — POST /api/specs/:id/reopen
+// Snapshot current approved content as historical version, transition status to reopened-amendment.
+// Only spec author + sable + gorn may reopen (per spec threat model).
+app.post('/api/specs/:id/reopen', async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  const spec = sqlite.prepare('SELECT * FROM spec_reviews WHERE id = ?').get(id) as any;
+  if (!spec) return c.json({ error: 'Spec not found' }, 404);
+  if (spec.status !== 'approved') {
+    return c.json({ error: `Only approved specs can be reopened (current status: ${spec.status})` }, 400);
+  }
+
+  let body: any = {};
+  try { body = await c.req.json(); } catch { /* allow empty */ }
+  const reason = (body.reason || '').trim();
+  if (!reason) return c.json({ error: 'reason required to reopen an approved spec' }, 400);
+
+  const requester = (body.author || c.req.query('as') || (hasSessionAuth(c) ? 'gorn' : '')).toLowerCase();
+  if (!requester) return c.json({ error: 'Identity required: pass author in body or ?as= param' }, 400);
+  const allowed = new Set<string>(['sable', 'gorn']);
+  if (spec.author) allowed.add(spec.author.toLowerCase());
+  if (!allowed.has(requester)) {
+    return c.json({ error: `Only the spec author (${spec.author}), Sable, or Gorn can reopen approved specs` }, 403);
+  }
+
+  const resolved = resolveSpecPath(spec.repo, spec.file_path);
+  if (!resolved) return c.json({ error: 'Cannot snapshot — invalid spec path' }, 500);
+  let content: string;
+  try { content = fs.readFileSync(resolved, 'utf-8'); } catch {
+    return c.json({ error: 'Cannot snapshot — spec file not found on disk' }, 500);
+  }
+
+  const now = new Date().toISOString();
+  // Snapshot the current approved content as the existing current_version (default v1
+  // for specs that predate the version chain — backfill should have populated this already
+  // but if the file changed since backfill we re-capture the current state).
+  const currentVersion: string = spec.current_version || 'v1';
+  sqlite.prepare(
+    'INSERT OR IGNORE INTO spec_versions (spec_id, version, content, stamped_at, stamped_by, change_summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, currentVersion, content, spec.reviewed_at || spec.updated_at, 'gorn', `${currentVersion} (snapshot at reopen)`, now);
+
+  // Transition status; preserve current_version pointer (still points at currentVersion until next stamp).
+  sqlite.prepare(
+    "UPDATE spec_reviews SET status = 'reopened-amendment', reviewer_feedback = NULL, reviewed_at = NULL, updated_at = ? WHERE id = ?"
+  ).run(now, id);
+
+  // Record reopen as a spec comment for audit trail.
+  sqlite.prepare(
+    'INSERT INTO spec_comments (spec_id, author, content, created_at) VALUES (?, ?, ?, ?)'
+  ).run(id, requester, `**Spec reopened for amendment** (snapshot ${currentVersion}). Reason: ${reason}`, now);
+
+  const updated = sqlite.prepare('SELECT * FROM spec_reviews WHERE id = ?').get(id);
+  wsBroadcast('spec_reopened', { id: (updated as any).id });
   return c.json(updated);
 });
 
