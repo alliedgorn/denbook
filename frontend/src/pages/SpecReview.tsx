@@ -25,12 +25,20 @@ interface Spec {
   task_id: string | null;
   title: string;
   author: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'reopened-amendment';
   content?: string;
+  current_version?: string;
   reviewer_feedback: string | null;
   reviewed_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface SpecVersionSnapshot {
+  version: string;
+  stamped_at: string;
+  stamped_by: string;
+  change_summary: string | null;
 }
 
 interface SpecComment {
@@ -66,6 +74,9 @@ export function SpecReview() {
   const [commentText, setCommentText] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const [specLinks, setSpecLinks] = useState<any[]>([]);
+  const [specVersionChain, setSpecVersionChain] = useState<SpecVersionSnapshot[]>([]);
+  const [viewingVersion, setViewingVersion] = useState<string | null>(null);
+  const [versionContent, setVersionContent] = useState<string | null>(null);
 
   const specParam = searchParams.get('spec');
 
@@ -102,6 +113,33 @@ export function SpecReview() {
       .then(d => setSpecLinks(d.links || []))
       .catch(() => setSpecLinks([]));
   }, [selectedSpec]);
+
+  // T#756 / Spec #57 Phase 3: fetch version chain for approved/reopened specs
+  useEffect(() => {
+    if (!selectedSpec) { setSpecVersionChain([]); setViewingVersion(null); setVersionContent(null); return; }
+    fetch(`${API_BASE}/specs/${selectedSpec.id}/versions`)
+      .then(r => r.ok ? r.json() : { versions: [] })
+      .then(d => setSpecVersionChain(d.versions || []))
+      .catch(() => setSpecVersionChain([]));
+    setViewingVersion(null);
+    setVersionContent(null);
+  }, [selectedSpec]);
+
+  async function loadVersionContent(specId: number, version: string) {
+    try {
+      const res = await fetch(`${API_BASE}/specs/${specId}/content?version=${version}`);
+      if (res.ok) {
+        const data = await res.json();
+        setVersionContent(data.content || null);
+        setViewingVersion(version);
+      }
+    } catch { /* ignore */ }
+  }
+
+  function clearVersionView() {
+    setViewingVersion(null);
+    setVersionContent(null);
+  }
 
   const loadComments = useCallback(async (specId: number) => {
     const res = await fetch(`${API_BASE}/specs/${specId}/comments?limit=30&offset=0`);
@@ -274,6 +312,37 @@ export function SpecReview() {
           )}
         </div>
 
+        {/* T#756 / Spec #57 Phase 3: version picker */}
+        {specVersionChain.length > 0 && (
+          <div className={styles.versionPicker}>
+            <span className={styles.versionLabel}>Version:</span>
+            <select
+              className={styles.versionSelect}
+              value={viewingVersion || 'current'}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'current') clearVersionView();
+                else loadVersionContent(selectedSpec.id, val);
+              }}
+            >
+              <option value="current">Current ({selectedSpec.current_version || 'v1'})</option>
+              {specVersionChain.map(v => (
+                <option key={v.version} value={v.version}>
+                  {v.version} — {v.stamped_by} {v.stamped_at ? `(${new Date(v.stamped_at).toLocaleDateString()})` : ''}
+                </option>
+              ))}
+            </select>
+            {viewingVersion && (
+              <span className={styles.versionNote}>
+                Viewing historical snapshot {viewingVersion}
+                {specVersionChain.find(v => v.version === viewingVersion)?.change_summary && (
+                  <> — {specVersionChain.find(v => v.version === viewingVersion)?.change_summary}</>
+                )}
+              </span>
+            )}
+          </div>
+        )}
+
         <div className={styles.detailContent}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
@@ -295,7 +364,7 @@ export function SpecReview() {
               },
             }}
           >
-            {selectedSpec.content || '*Spec file not found on disk.*'}
+            {viewingVersion && versionContent ? versionContent : (selectedSpec.content || '*Spec file not found on disk.*')}
           </ReactMarkdown>
         </div>
 
