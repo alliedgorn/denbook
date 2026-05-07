@@ -468,6 +468,47 @@
   color: var(--accent);
 }
 
+/* Version picker (Spec #57 Phase 3) */
+.versionPicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-md);
+  font-size: 13px;
+}
+
+.versionLabel {
+  color: var(--text-muted);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.versionSelect {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.versionSelect:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.versionNote {
+  color: var(--warning);
+  font-size: 12px;
+  font-style: italic;
+}
+
 /* Review controls */
 .reviewControls {
   border-top: 1px solid var(--border);
