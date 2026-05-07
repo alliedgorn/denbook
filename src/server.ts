@@ -1638,7 +1638,8 @@ const HELP_ENDPOINTS = [
     // Specs (SDD)
     { method: 'GET', path: '/api/specs', desc: 'List all specs', params: '?status=&author=' },
     { method: 'GET', path: '/api/specs/:id', desc: 'Get spec by ID', params: null },
-    { method: 'GET', path: '/api/specs/:id/content', desc: 'Get spec markdown content', params: null },
+    { method: 'GET', path: '/api/specs/:id/content', desc: 'Get spec markdown content (Spec #57: ?version=vN for historical)', params: '?version=v1' },
+    { method: 'GET', path: '/api/specs/:id/versions', desc: 'List spec version snapshots (Spec #57)', params: null },
     { method: 'GET', path: '/api/specs/:id/history', desc: 'Get spec review history', params: null },
     { method: 'GET', path: '/api/specs/:id/diff', desc: 'Get spec version diff', params: '?v1=&v2=' },
     { method: 'POST', path: '/api/specs', desc: 'Submit new spec', params: 'body: { title, content, author, task_ids?, thread_ids? }' },
@@ -8286,19 +8287,40 @@ app.get('/api/specs/:id', (c) => {
   return c.json(spec);
 });
 
-// GET /api/specs/:id/content — raw markdown content from repo
+// GET /api/specs/:id/content — raw markdown content from repo (or historical version via ?version=vN)
 app.get('/api/specs/:id/content', (c) => {
   const id = parseInt(c.req.param('id'), 10);
-  const spec = sqlite.prepare('SELECT repo, file_path FROM spec_reviews WHERE id = ?').get(id) as any;
+  const spec = sqlite.prepare('SELECT repo, file_path, current_version FROM spec_reviews WHERE id = ?').get(id) as any;
   if (!spec) return c.json({ error: 'Spec not found' }, 404);
+
+  // T#755 / Spec #57 Phase 2: serve historical version if ?version=vN specified
+  const versionParam = c.req.query('version');
+  if (versionParam) {
+    const row = sqlite.prepare('SELECT * FROM spec_versions WHERE spec_id = ? AND version = ?').get(id, versionParam) as any;
+    if (!row) return c.json({ error: `Version ${versionParam} not found for spec #${id}` }, 404);
+    return c.json({ content: row.content, version: row.version, stamped_at: row.stamped_at, stamped_by: row.stamped_by, change_summary: row.change_summary, file_path: spec.file_path, repo: spec.repo });
+  }
+
+  // Default: serve current on-disk content
   const resolved = resolveSpecPath(spec.repo, spec.file_path);
   if (!resolved) return c.json({ error: 'Invalid spec path' }, 400);
   try {
     const content = fs.readFileSync(resolved, 'utf-8');
-    return c.json({ content, file_path: spec.file_path, repo: spec.repo });
+    return c.json({ content, file_path: spec.file_path, repo: spec.repo, current_version: spec.current_version || 'v1' });
   } catch {
     return c.json({ error: 'Spec file not found on disk' }, 404);
   }
+});
+
+// T#755 / Spec #57 Phase 2: GET /api/specs/:id/versions — list all version snapshots
+app.get('/api/specs/:id/versions', (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  const spec = sqlite.prepare('SELECT id, current_version FROM spec_reviews WHERE id = ?').get(id) as any;
+  if (!spec) return c.json({ error: 'Spec not found' }, 404);
+  const versions = sqlite.prepare(
+    'SELECT version, stamped_at, stamped_by, change_summary, created_at FROM spec_versions WHERE spec_id = ? ORDER BY created_at ASC'
+  ).all(id) as any[];
+  return c.json({ spec_id: id, current_version: spec.current_version || 'v1', versions });
 });
 
 // GET /api/specs/:id/history — git log for spec file

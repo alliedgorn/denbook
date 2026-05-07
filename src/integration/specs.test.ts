@@ -428,6 +428,49 @@ describe("Specs API Integration", () => {
       expect(res.status).toBe(403);
     });
 
+    // T#755 / Spec #57 Phase 2 — version endpoints
+    test("GET /api/specs/:id/versions returns version list", async () => {
+      const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
+      const approvedData = await approvedRes.json();
+      if (!approvedData.specs || approvedData.specs.length === 0) return;
+      const specId = approvedData.specs[0].id;
+      const res = await fetch(`${BASE_URL}/api/specs/${specId}/versions`);
+      expect(res.ok).toBe(true);
+      const data = await res.json();
+      expect(data.spec_id).toBe(specId);
+      expect(data.versions).toBeInstanceOf(Array);
+      expect(data.current_version).toBeTruthy();
+    });
+
+    test("GET /api/specs/:id/content?version=v1 returns v1 snapshot", async () => {
+      const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
+      const approvedData = await approvedRes.json();
+      if (!approvedData.specs || approvedData.specs.length === 0) return;
+      const specId = approvedData.specs[0].id;
+      const versionsRes = await fetch(`${BASE_URL}/api/specs/${specId}/versions`);
+      const versionsData = await versionsRes.json();
+      if (!versionsData.versions || versionsData.versions.length === 0) return;
+      const res = await fetch(`${BASE_URL}/api/specs/${specId}/content?version=v1`);
+      expect(res.ok).toBe(true);
+      const data = await res.json();
+      expect(data.version).toBe("v1");
+      expect(data.content).toBeTruthy();
+    });
+
+    test("GET /api/specs/:id/content?version=v999 returns 404", async () => {
+      const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
+      const approvedData = await approvedRes.json();
+      if (!approvedData.specs || approvedData.specs.length === 0) return;
+      const specId = approvedData.specs[0].id;
+      const res = await fetch(`${BASE_URL}/api/specs/${specId}/content?version=v999`);
+      expect(res.status).toBe(404);
+    });
+
+    test("GET /api/specs/99999/versions returns 404", async () => {
+      const res = await fetch(`${BASE_URL}/api/specs/99999/versions`);
+      expect(res.status).toBe(404);
+    });
+
     test("POST /api/specs/:id/resubmit on approved spec points at reopen", async () => {
       const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
       const approvedData = await approvedRes.json();
