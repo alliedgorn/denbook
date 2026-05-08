@@ -7389,6 +7389,11 @@ function runDrainCycle() {
       // that defeats the offline-resilience guarantee.
       if (perBeastDrainAlive(pidPath)) continue;
 
+      // T#738 / Spec #54 Phase 5 Window 2: log-only-warning when server-drain
+      // falls back to handling a queue that should be per-Beast-drained.
+      // After 7 days of zero warnings → Window 3 removes runDrainCycle entirely.
+      console.warn(`[Notify] WINDOW-2-WARNING: server-drain fallback for ${beast} — per-Beast drain NOT alive (pid: ${pidPath})`);
+
       // Check spacing — don't send to same Beast within DRAIN_SPACING
       const lastSent = drainLastSent.get(beast) || 0;
       if (Date.now() - lastSent < DRAIN_SPACING) continue;
