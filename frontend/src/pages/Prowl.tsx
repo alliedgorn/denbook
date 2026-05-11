@@ -217,6 +217,20 @@ export function Prowl() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
+  function formatCreatedAt(iso: string): string {
+    const d = new Date(iso);
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    const mins = Math.round(diff / 60000);
+    const hours = Math.round(diff / 3600000);
+    const days = Math.round(diff / 86400000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
   const filterTabs: { key: FilterTab; label: string; count?: number }[] = [
     { key: 'all', label: 'All', count: counts.pending },
     { key: 'high', label: 'High', count: counts.high },
@@ -351,6 +365,7 @@ export function Prowl() {
                     {task.source && task.source !== 'manual' && (
                       <span className={styles.source}>{task.source}{task.source_id ? ` #${task.source_id}` : ''}</span>
                     )}
+                    <span className={styles.createdAt}>{formatCreatedAt(task.created_at)}</span>
                   </div>
                 </div>
               </div>
