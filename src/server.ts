@@ -11874,6 +11874,19 @@ try { sqlite.prepare(`ALTER TABLE prowl_tasks ADD COLUMN notified_at TEXT`).run(
 // Add remind_before column for advance reminders (T#471) — values: null, 15m, 30m, 1h, 1d
 try { sqlite.prepare(`ALTER TABLE prowl_tasks ADD COLUMN remind_before TEXT`).run(); } catch { /* already exists */ }
 
+// --- Prowl Checklist Items (T#628) ---
+try { sqlite.prepare(`
+  CREATE TABLE IF NOT EXISTS checklist_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES prowl_tasks(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    checked INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )
+`).run(); } catch { /* exists */ }
+
 // Prowl routes extracted to src/prowl/routes.ts (T#767)
 registerProwlRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, wsBroadcast, enqueueNotification });
 // ============================================================================
