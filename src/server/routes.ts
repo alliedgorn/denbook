@@ -6,7 +6,7 @@ import {
   SESSION_COOKIE_NAME, SESSION_DURATION_MS, GUEST_SESSION_DURATION_MS,
   LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW_MS, WEB_PRESENCE_TIMEOUT_MS,
   getRateLimit, clearRateLimit,
-  generateSessionToken, isAuthenticated, isLocalNetwork,
+  generateSessionToken, parseSessionToken, isAuthenticated, isLocalNetwork,
 } from '../server.ts';
 import {
   createGuest, listGuests, getGuest, getGuestByUsername,
