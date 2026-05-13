@@ -284,12 +284,12 @@ app.use('*', async (c, next) => {
 
 // Session secret - generate once per server run
 const SESSION_SECRET = process.env.ORACLE_SESSION_SECRET || crypto.randomUUID();
-const SESSION_COOKIE_NAME = 'oracle_session';
-const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (owner)
-const GUEST_SESSION_DURATION_MS = 4 * 60 * 60 * 1000; // 4 hours (guest)
+export const SESSION_COOKIE_NAME = 'oracle_session';
+export const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (owner)
+export const GUEST_SESSION_DURATION_MS = 4 * 60 * 60 * 1000; // 4 hours (guest)
 
 // Check if request is from local network
-function isLocalNetwork(c: Context): boolean {
+export function isLocalNetwork(c: Context): boolean {
   // Check actual client IP — do NOT trust Via header (spoofable).
   // Caddy should be configured to set X-Real-IP to the actual client IP.
   const forwarded = c.req.header('x-forwarded-for');
@@ -322,7 +322,7 @@ function isLocalNetwork(c: Context): boolean {
 // Generate session token using HMAC-SHA256
 // Format: role:data:expires:signature
 // role = 'owner' or 'guest', data = '' for owner or 'username' for guest
-function generateSessionToken(role: Role = 'owner', data: string = ''): string {
+export function generateSessionToken(role: Role = 'owner', data: string = ''): string {
   const duration = role === 'guest' ? GUEST_SESSION_DURATION_MS : SESSION_DURATION_MS;
   const expires = Date.now() + duration;
   const payload = `${role}:${data}:${expires}`;
@@ -334,7 +334,7 @@ function generateSessionToken(role: Role = 'owner', data: string = ''): string {
 
 // Verify session token with timing-safe comparison
 // Returns { valid, role, data } or { valid: false }
-interface SessionInfo {
+export interface SessionInfo {
   valid: boolean;
   role?: Role;
   data?: string;
@@ -344,7 +344,7 @@ function verifySessionToken(token: string): boolean {
   return parseSessionToken(token).valid;
 }
 
-function parseSessionToken(token: string): SessionInfo {
+export function parseSessionToken(token: string): SessionInfo {
   if (!token) return { valid: false };
 
   // Support both old format (expires:sig) and new format (role:data:expires:sig)
@@ -416,7 +416,7 @@ function requireBeastIdentity(c: Context): string | null {
 }
 
 // Check if auth is required and user is authenticated
-function isAuthenticated(c: Context): boolean {
+export function isAuthenticated(c: Context): boolean {
   const authEnabled = getSetting('auth_enabled') === 'true';
   if (!authEnabled) return true; // Auth not enabled, everyone is "authenticated"
 
@@ -734,8 +734,8 @@ app.get('/api/auth/status', (c) => {
 // Login
 // Login rate limiting: max 5 attempts per IP per 15 minutes
 // Persisted to SQLite so restarts don't reset the window (T#594)
-const LOGIN_RATE_LIMIT = 5;
-const LOGIN_RATE_WINDOW_MS = 15 * 60 * 1000;
+export const LOGIN_RATE_LIMIT = 5;
+export const LOGIN_RATE_WINDOW_MS = 15 * 60 * 1000;
 
 sqlite.exec(`CREATE TABLE IF NOT EXISTS login_rate_limits (
   ip TEXT PRIMARY KEY,
@@ -765,7 +765,7 @@ sqlite.exec(`CREATE TABLE IF NOT EXISTS telegram_messages (
 // Retention-shape-reserved index for future cleanup cron (Bertus #887 flag 2).
 sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_telegram_messages_date_unix ON telegram_messages(date_unix)`);
 
-function getRateLimit(ip: string): { count: number; firstAttempt: number } | null {
+export function getRateLimit(ip: string): { count: number; firstAttempt: number } | null {
   const row = sqlite.prepare('SELECT count, first_attempt_at FROM login_rate_limits WHERE ip = ?').get(ip) as any;
   if (!row) return null;
   return { count: row.count, firstAttempt: row.first_attempt_at };
@@ -775,7 +775,7 @@ function setRateLimit(ip: string, count: number, firstAttempt: number): void {
   sqlite.prepare('INSERT OR REPLACE INTO login_rate_limits (ip, count, first_attempt_at) VALUES (?, ?, ?)').run(ip, count, firstAttempt);
 }
 
-function clearRateLimit(ip: string): void {
+export function clearRateLimit(ip: string): void {
   sqlite.prepare('DELETE FROM login_rate_limits WHERE ip = ?').run(ip);
 }
 
@@ -4735,7 +4735,7 @@ registerTelegramRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, uploadsD
 // Web presence tracking — in-memory, ephemeral (T#595)
 // Keyed by identity (e.g. 'gorn', 'gorn_guest'). Rebuilt on server restart.
 const webPresence = new Map<string, { identity: string; role: string; lastSeen: number }>();
-const WEB_PRESENCE_TIMEOUT_MS = 90_000; // 90s — 3 missed heartbeats
+export const WEB_PRESENCE_TIMEOUT_MS = 90_000; // 90s — 3 missed heartbeats
 registerPackRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast, getTmuxStatus, normalizeAvatarUrl, webPresence, WEB_PRESENCE_TIMEOUT_MS });
 
 // ============================================================================
