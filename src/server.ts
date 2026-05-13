@@ -4731,6 +4731,13 @@ registerSearchRoutes(app, sqlite, { hasSessionAuth, isLocalNetwork, isTrustedReq
 // Telegram routes + polling — extracted to src/telegram/routes.ts (T#770)
 registerTelegramRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, uploadsDir: UPLOADS_DIR });
 
+// Pack routes — must register BEFORE the SPA fallback catch-all below, else /api/pack* gets 404'd by `app.get('*', ...)`
+// Web presence tracking — in-memory, ephemeral (T#595)
+// Keyed by identity (e.g. 'gorn', 'gorn_guest'). Rebuilt on server restart.
+const webPresence = new Map<string, { identity: string; role: string; lastSeen: number }>();
+const WEB_PRESENCE_TIMEOUT_MS = 90_000; // 90s — 3 missed heartbeats
+registerPackRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast, getTmuxStatus, normalizeAvatarUrl, webPresence, WEB_PRESENCE_TIMEOUT_MS });
+
 // ============================================================================
 // OpenAPI Schema + Swagger UI (Spec #55 Phase 1)
 // ============================================================================
@@ -4796,12 +4803,6 @@ if (fs.existsSync(FRONTEND_DIST)) {
 // ============================================================================
 
 const wsClients = new Set<any>();
-
-// Web presence tracking — in-memory, ephemeral (T#595)
-// Keyed by identity (e.g. 'gorn', 'gorn_guest'). Rebuilt on server restart.
-const webPresence = new Map<string, { identity: string; role: string; lastSeen: number }>();
-const WEB_PRESENCE_TIMEOUT_MS = 90_000; // 90s — 3 missed heartbeats
-registerPackRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast, getTmuxStatus, normalizeAvatarUrl, webPresence, WEB_PRESENCE_TIMEOUT_MS });
 
 // Allowed origins for WebSocket connections
 const WS_ALLOWED_ORIGINS = new Set([
