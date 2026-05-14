@@ -221,6 +221,11 @@ registerSignalHandlers(async () => {
 type AppEnv = { Variables: Record<string, any> };
 const app = new OpenAPIHono<AppEnv>();
 
+// Upload paths — defined early to avoid TDZ when referenced by guest/files module
+// registrations later in the file (T#807 hotfix).
+const UPLOADS_DIR = path.join(ORACLE_DATA_DIR, 'uploads');
+const ARCHIVE_DIR = path.join(ORACLE_DATA_DIR, 'uploads', 'archive');
+
 // Custom 404 with did-you-mean hints for API routes
 // Uses HELP_ENDPOINTS (defined below with /api/help) for path matching
 function findSimilarPaths(requested: string): string[] {
@@ -1014,11 +1019,8 @@ try { sqlite.prepare("ALTER TABLE beast_profiles ADD COLUMN rest_status TEXT DEF
 try { sqlite.prepare(`ALTER TABLE files ADD COLUMN archived_at INTEGER`).run(); } catch { /* exists */ }
 try { sqlite.prepare(`ALTER TABLE files ADD COLUMN archive_path TEXT`).run(); } catch { /* exists */ }
 
-// UPLOADS_DIR + ARCHIVE_DIR kept here — still used by guest avatar upload (line ~2122) and
-// telegram routes registration (~line 3497). File-specific constants + magic-byte detection
-// moved to src/files/routes.ts as part of T#804 P3-E.
-const UPLOADS_DIR = path.join(ORACLE_DATA_DIR, 'uploads');
-const ARCHIVE_DIR = path.join(ORACLE_DATA_DIR, 'uploads', 'archive');
+// UPLOADS_DIR moved up — needed by registerGuestRoutes + registerFilesRoutes (T#807 hotfix:
+// TDZ error if defined after first use).
 
 // Files + upload routes extracted to src/files/routes.ts (T#804 P3-E)
 registerFilesRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, isLocalNetwork, verifySessionToken, uploadsDir: UPLOADS_DIR, sessionCookieName: SESSION_COOKIE_NAME });
