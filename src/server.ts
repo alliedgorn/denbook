@@ -1642,7 +1642,7 @@ registerProwlRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, requireBeas
 registerLibraryRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, searchIndexUpsert, searchIndexDelete, wsBroadcast });
 
 // Risk routes extracted to src/risk/routes.ts (T#769)
-registerRiskRoutes(app, sqlite, { hasSessionAuth, wsBroadcast });
+registerRiskRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, wsBroadcast });
 // Search routes + Meilisearch + FTS5 — extracted to src/search/routes.ts (T#771)
 initSearch(sqlite);
 registerSearchRoutes(app, sqlite, { hasSessionAuth, isLocalNetwork, isTrustedRequest, handleSearch });
