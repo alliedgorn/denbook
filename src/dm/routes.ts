@@ -23,17 +23,23 @@ interface DmHelpers {
 }
 
 export function registerDmRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: DmHelpers): void {
-  const { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast, sendDm, withRetry } = helpers;
+  // T#795 P1: hasSessionAuth + isTrustedRequest no longer needed in this file —
+  // requireBeastIdentity handles both auth paths internally (token > session > null).
+  // Interface entries kept for backward-compat with call site at server.ts:4056.
+  const { requireBeastIdentity, wsBroadcast, sendDm, withRetry } = helpers;
   const sqlite: Database = sqliteDb;
 
   app.get('/api/dm/dashboard', (c) => {
+    // T#795 P1 — close localhost-trust read-bypass. Require bearer-token or owner session.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
     const limit = parseInt(c.req.query('limit') || '50');
     const data = getDashboard(limit);
-    const actor = (c.get as any)('actor') as string | undefined;
-    const authMethod = (c.get as any)('authMethod') as string | undefined;
-    // T#728: bearer-token callers see only their own conversations
-    const filtered = (authMethod === 'token' && actor)
-      ? data.conversations.filter(conv => conv.participants.some((p: string) => p.toLowerCase() === actor.toLowerCase()))
+    // T#728 + T#795 P1: non-gorn callers see only their own conversations.
+    const filtered = (caller !== 'gorn')
+      ? data.conversations.filter(conv => conv.participants.some((p: string) => p.toLowerCase() === caller))
       : data.conversations;
     return c.json({
       conversations: filtered.map(conv => ({
@@ -46,7 +52,7 @@ export function registerDmRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: 
         last_at: new Date(conv.lastAt).toISOString(),
         created_at: new Date(conv.createdAt).toISOString(),
       })),
-      total_conversations: (authMethod === 'token' && actor) ? filtered.length : data.totalConversations,
+      total_conversations: (caller !== 'gorn') ? filtered.length : data.totalConversations,
       total_messages: data.totalMessages,
     });
   });
@@ -168,18 +174,14 @@ export function registerDmRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: 
 
   app.get('/api/dm/:name', (c) => {
     const name = c.req.param('name');
-    const as = c.req.query('as')?.toLowerCase();
-    const actor = (c.get as any)('actor') as string | undefined;
-    const authMethod = (c.get as any)('authMethod') as string | undefined;
-    // T#728: bearer-token callers can only list their own conversations
-    if (authMethod === 'token' && actor && actor.toLowerCase() !== name.toLowerCase()) {
-      return c.json({ error: 'Access denied. You can only view your own conversations.' }, 403);
+    // T#795 P1 — close localhost-trust read-bypass. Require bearer-token or owner session,
+    // then scope to caller (gorn sees all; beasts see their own).
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
     }
-    if (!isTrustedRequest(c)) {
-      if (!as) return c.json({ error: 'as param required for DM access' }, 400);
-      if (as !== 'gorn' && as !== name.toLowerCase()) {
-        return c.json({ error: 'Access denied. You can only view your own conversations.' }, 403);
-      }
+    if (caller !== 'gorn' && caller !== name.toLowerCase()) {
+      return c.json({ error: 'Access denied. You can only view your own conversations.' }, 403);
     }
     const limit = parseInt(c.req.query('limit') || '20');
     const offset = parseInt(c.req.query('offset') || '0');
@@ -201,7 +203,6 @@ export function registerDmRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: 
   app.get('/api/dm/:name/:other', (c) => {
     let name = c.req.param('name');
     let other = c.req.param('other');
-    const as = c.req.query('as')?.toLowerCase();
 
     // Resolve guest usernames to [Guest] tags
     // If name/other doesn't match a known beast and matches a guest account, use the [Guest] tag
@@ -216,20 +217,14 @@ export function registerDmRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: 
         }
       }
     }
-    const actor = (c.get as any)('actor') as string | undefined;
-    const authMethod = (c.get as any)('authMethod') as string | undefined;
-    // T#728: bearer-token callers can only read conversations they are part of
-    if (authMethod === 'token' && actor) {
-      const actorLower = actor.toLowerCase();
-      if (actorLower !== name.toLowerCase() && actorLower !== other.toLowerCase()) {
-        return c.json({ error: 'Access denied. You can only read conversations you are part of.' }, 403);
-      }
+    // T#795 P1 — close localhost-trust read-bypass. Require bearer-token or owner session,
+    // then scope to participants (gorn sees all; beasts see only conversations they are part of).
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
     }
-    if (!isTrustedRequest(c)) {
-      if (!as) return c.json({ error: 'as param required for DM access' }, 400);
-      if (as !== 'gorn' && as !== name.toLowerCase() && as !== other.toLowerCase()) {
-        return c.json({ error: 'Access denied. You can only read conversations you are part of.' }, 403);
-      }
+    if (caller !== 'gorn' && caller !== name.toLowerCase() && caller !== other.toLowerCase()) {
+      return c.json({ error: 'Access denied. You can only read conversations you are part of.' }, 403);
     }
     const parsedDmLimit = parseInt(c.req.query('limit') || '50', 10);
     const limit = isNaN(parsedDmLimit) || parsedDmLimit < 1 ? 50 : parsedDmLimit;
@@ -254,12 +249,14 @@ export function registerDmRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: 
   app.patch('/api/dm/:name/:other/read', (c) => {
     const reader = c.req.param('name');
     const other = c.req.param('other');
-    if (!isTrustedRequest(c)) {
-      const as = c.req.query('as')?.toLowerCase();
-      if (!as) return c.json({ error: 'as param required' }, 400);
-      if (as !== reader.toLowerCase() && as !== 'gorn') {
-        return c.json({ error: 'Can only mark your own messages as read' }, 403);
-      }
+    // T#795 P1 — close localhost-trust read-bypass. Require bearer-token or owner session,
+    // then scope to caller (gorn marks any; beasts mark only their own).
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (caller !== 'gorn' && caller !== reader.toLowerCase()) {
+      return c.json({ error: 'Can only mark your own messages as read' }, 403);
     }
     const result = markRead(reader, other);
     if (result.markedRead > 0) wsBroadcast('dm_read', { conversation_id: result.conversationId, reader });
@@ -272,12 +269,14 @@ export function registerDmRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: 
   app.patch('/api/dm/:name/:other/read-all', (c) => {
     const name = c.req.param('name');
     const other = c.req.param('other');
-    if (!isTrustedRequest(c)) {
-      const as = c.req.query('as')?.toLowerCase();
-      if (!as) return c.json({ error: 'as param required' }, 400);
-      if (as !== name.toLowerCase() && as !== other.toLowerCase() && as !== 'gorn') {
-        return c.json({ error: 'Can only mark messages as read in your own conversations' }, 403);
-      }
+    // T#795 P1 — close localhost-trust read-bypass. Require bearer-token or owner session,
+    // then scope to participants (gorn marks any; beasts mark only conversations they are part of).
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (caller !== 'gorn' && caller !== name.toLowerCase() && caller !== other.toLowerCase()) {
+      return c.json({ error: 'Can only mark messages as read in your own conversations' }, 403);
     }
     const result = markAllRead(name, other);
     if (result.markedRead > 0) wsBroadcast('dm_read', { conversation_id: result.conversationId, reader: name });

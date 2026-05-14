@@ -4153,7 +4153,7 @@ try { sqlite.prepare(`
 `).run(); } catch { /* exists */ }
 
 // Prowl routes extracted to src/prowl/routes.ts (T#767)
-registerProwlRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, wsBroadcast, enqueueNotification });
+registerProwlRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, requireBeastIdentity, wsBroadcast, enqueueNotification });
 
 // Library routes extracted to src/library/routes.ts (T#768)
 registerLibraryRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, searchIndexUpsert, searchIndexDelete, wsBroadcast });
