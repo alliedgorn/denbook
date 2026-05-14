@@ -6,11 +6,12 @@ const ALLOWED_RISK_CREATORS = ['gorn', 'bertus', 'talon'];
 
 interface RiskHelpers {
   hasSessionAuth: (c: Context) => boolean;
+  requireBeastIdentity: (c: Context) => string | null;
   wsBroadcast: (event: string, data: any) => void;
 }
 
 export function registerRiskRoutes(app: OpenAPIHono, sqlite: Database, helpers: RiskHelpers) {
-  const { hasSessionAuth, wsBroadcast } = helpers;
+  const { hasSessionAuth, requireBeastIdentity, wsBroadcast } = helpers;
 
   // GET /api/risks — list risks
   app.get('/api/risks', (c) => {
@@ -95,8 +96,16 @@ export function registerRiskRoutes(app: OpenAPIHono, sqlite: Database, helpers: 
       const data = await c.req.json();
       if (!data.title?.trim()) return c.json({ error: 'title required' }, 400);
 
-      const requester = (c.req.query('as') || data.created_by || (hasSessionAuth(c) ? 'gorn' : '')).toLowerCase();
-      if (!requester || !ALLOWED_RISK_CREATORS.includes(requester)) {
+      // T#788 — derive requester from auth-layer (T#718 pattern), reject body-asserted mismatch.
+      const caller = requireBeastIdentity(c);
+      if (!caller) {
+        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      }
+      if (data.created_by && data.created_by.toLowerCase() !== caller) {
+        return c.json({ error: 'Sender impersonation blocked. body.created_by must match authenticated caller or be omitted.' }, 403);
+      }
+      const requester = caller;
+      if (!ALLOWED_RISK_CREATORS.includes(requester)) {
         return c.json({ error: `Only ${ALLOWED_RISK_CREATORS.join(', ')} can create risks` }, 403);
       }
 
@@ -143,8 +152,12 @@ export function registerRiskRoutes(app: OpenAPIHono, sqlite: Database, helpers: 
     const existing = sqlite.prepare('SELECT * FROM risks WHERE id = ? AND deleted_at IS NULL').get(id) as any;
     if (!existing) return c.json({ error: 'Risk not found' }, 404);
 
-    const requester = (c.req.query('as') || (hasSessionAuth(c) ? 'gorn' : '')).toLowerCase();
-    if (!requester) return c.json({ error: 'Identity required' }, 400);
+    // T#788 — derive requester from auth-layer.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    const requester = caller;
 
     try {
       const data = await c.req.json();
@@ -226,8 +239,15 @@ export function registerRiskRoutes(app: OpenAPIHono, sqlite: Database, helpers: 
 
     try {
       const data = await c.req.json();
-      const author = (c.req.query('as') || data.author || (hasSessionAuth(c) ? 'gorn' : '')).toLowerCase();
-      if (!author) return c.json({ error: 'Identity required: pass ?as=beast or author in body' }, 400);
+      // T#788 — derive author from auth-layer, reject body-asserted mismatch.
+      const caller = requireBeastIdentity(c);
+      if (!caller) {
+        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      }
+      if (data.author && data.author.toLowerCase() !== caller) {
+        return c.json({ error: 'Sender impersonation blocked. body.author must match authenticated caller or be omitted.' }, 403);
+      }
+      const author = caller;
       if (!data.content?.trim()) return c.json({ error: 'content required' }, 400);
 
       const contentText = data.content.trim();

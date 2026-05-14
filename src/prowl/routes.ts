@@ -95,13 +95,20 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // POST /api/prowl — create task
   app.post('/api/prowl', async (c) => {
-    if (!hasSessionAuth(c) && !isTrustedRequest(c)) return c.json({ error: 'Authentication required' }, 403);
+    // T#788 — derive requester from auth-layer (T#718 pattern), reject body-asserted mismatch.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
     try {
       const data = await c.req.json();
       if (!data.title?.trim()) return c.json({ error: 'title required' }, 400);
 
-      const requester = (c.req.query('as') || data.created_by || (hasSessionAuth(c) ? 'gorn' : '')).toLowerCase();
-      if (!requester || !ALLOWED_PROWL_CREATORS.includes(requester)) {
+      if (data.created_by && data.created_by.toLowerCase() !== caller) {
+        return c.json({ error: 'Sender impersonation blocked. body.created_by must match authenticated caller or be omitted.' }, 403);
+      }
+      const requester = caller;
+      if (!ALLOWED_PROWL_CREATORS.includes(requester)) {
         return c.json({ error: `Only ${ALLOWED_PROWL_CREATORS.join(', ')} can create Prowl tasks` }, 403);
       }
 
@@ -138,8 +145,14 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // PATCH /api/prowl/:id — update task fields (T#619: Gorn, Sable, or Karo)
   app.patch('/api/prowl/:id', async (c) => {
-    const requester = c.req.query('as')?.toLowerCase();
-    if (!hasSessionAuth(c) && !(isTrustedRequest(c) && requester && ALLOWED_PROWL_MANAGERS.includes(requester))) return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can update Prowl tasks` }, 403);
+    // T#788 — derive caller from auth-layer.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
+      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can update Prowl tasks` }, 403);
+    }
     const id = parseInt(c.req.param('id'), 10);
     if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
     const existing = sqlite.prepare('SELECT * FROM prowl_tasks WHERE id = ?').get(id) as any;
@@ -175,8 +188,14 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // PATCH /api/prowl/:id/status — change status (T#619: Gorn, Sable, or Karo)
   app.patch('/api/prowl/:id/status', async (c) => {
-    const requester = c.req.query('as')?.toLowerCase();
-    if (!hasSessionAuth(c) && !(isTrustedRequest(c) && requester && ALLOWED_PROWL_MANAGERS.includes(requester))) return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can change Prowl task status` }, 403);
+    // T#788 — derive caller from auth-layer.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
+      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can change Prowl task status` }, 403);
+    }
     const id = parseInt(c.req.param('id'), 10);
     if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
     const existing = sqlite.prepare('SELECT * FROM prowl_tasks WHERE id = ?').get(id) as any;
@@ -202,8 +221,14 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // POST /api/prowl/:id/toggle — quick toggle pending ↔ done (T#619: Gorn, Sable, or Karo)
   app.post('/api/prowl/:id/toggle', async (c) => {
-    const requester = c.req.query('as')?.toLowerCase();
-    if (!hasSessionAuth(c) && !(isTrustedRequest(c) && requester && ALLOWED_PROWL_MANAGERS.includes(requester))) return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can toggle Prowl tasks` }, 403);
+    // T#788 — derive caller from auth-layer.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
+      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can toggle Prowl tasks` }, 403);
+    }
     const id = parseInt(c.req.param('id'), 10);
     if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
     const existing = sqlite.prepare('SELECT * FROM prowl_tasks WHERE id = ?').get(id) as any;
@@ -222,8 +247,12 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // DELETE /api/prowl/:id — delete task (T#619: Gorn, Sable, or Karo)
   app.delete('/api/prowl/:id', async (c) => {
-    const requester = (c.req.query('as') || (hasSessionAuth(c) ? 'gorn' : '')).toLowerCase();
-    if (!hasSessionAuth(c) && !(isTrustedRequest(c) && requester && ALLOWED_PROWL_MANAGERS.includes(requester))) {
+    // T#788 — derive caller from auth-layer.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
       return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can delete Prowl tasks` }, 403);
     }
     const id = parseInt(c.req.param('id'), 10);
@@ -260,8 +289,14 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // POST /api/prowl/:id/checklist — add checklist item
   app.post('/api/prowl/:id/checklist', async (c) => {
-    const requester = c.req.query('as')?.toLowerCase();
-    if (!hasSessionAuth(c) && !(isTrustedRequest(c) && requester && ALLOWED_PROWL_MANAGERS.includes(requester))) return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+    // T#788 — derive caller from auth-layer.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
+      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+    }
     const taskId = parseInt(c.req.param('id'), 10);
     if (isNaN(taskId)) return c.json({ error: 'Invalid ID' }, 400);
     const task = sqlite.prepare('SELECT id FROM prowl_tasks WHERE id = ?').get(taskId);
@@ -284,8 +319,14 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // PATCH /api/prowl/:id/checklist/:itemId — update checklist item (text, checked, sort_order)
   app.patch('/api/prowl/:id/checklist/:itemId', async (c) => {
-    const requester = c.req.query('as')?.toLowerCase();
-    if (!hasSessionAuth(c) && !(isTrustedRequest(c) && requester && ALLOWED_PROWL_MANAGERS.includes(requester))) return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+    // T#788 — derive caller from auth-layer.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
+      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+    }
     const taskId = parseInt(c.req.param('id'), 10);
     const itemId = parseInt(c.req.param('itemId'), 10);
     if (isNaN(taskId) || isNaN(itemId)) return c.json({ error: 'Invalid ID' }, 400);
@@ -317,8 +358,14 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // POST /api/prowl/:id/checklist/:itemId/toggle — quick toggle checked
   app.post('/api/prowl/:id/checklist/:itemId/toggle', (c) => {
-    const requester = c.req.query('as')?.toLowerCase();
-    if (!hasSessionAuth(c) && !(isTrustedRequest(c) && requester && ALLOWED_PROWL_MANAGERS.includes(requester))) return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+    // T#788 — derive caller from auth-layer.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
+      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+    }
     const taskId = parseInt(c.req.param('id'), 10);
     const itemId = parseInt(c.req.param('itemId'), 10);
     if (isNaN(taskId) || isNaN(itemId)) return c.json({ error: 'Invalid ID' }, 400);
@@ -334,8 +381,14 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // DELETE /api/prowl/:id/checklist/:itemId — delete checklist item
   app.delete('/api/prowl/:id/checklist/:itemId', (c) => {
-    const requester = (c.req.query('as') || (hasSessionAuth(c) ? 'gorn' : '')).toLowerCase();
-    if (!hasSessionAuth(c) && !(isTrustedRequest(c) && requester && ALLOWED_PROWL_MANAGERS.includes(requester))) return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+    // T#788 — derive caller from auth-layer.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
+      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+    }
     const taskId = parseInt(c.req.param('id'), 10);
     const itemId = parseInt(c.req.param('itemId'), 10);
     if (isNaN(taskId) || isNaN(itemId)) return c.json({ error: 'Invalid ID' }, 400);
