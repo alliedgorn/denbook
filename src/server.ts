@@ -94,6 +94,7 @@ import { registerGovernanceRoutes } from './governance/routes.ts';
 import { registerProwlRoutes } from './prowl/routes.ts';
 import { registerSettingsRoutes } from './settings/routes.ts';
 import { registerRemoteRoutes } from './remote/routes.ts';
+import { registerQueueRoutes } from './queue/routes.ts';
 import { registerLibraryRoutes } from './library/routes.ts';
 import { registerRiskRoutes } from './risk/routes.ts';
 import { registerTelegramRoutes } from './telegram/routes.ts';
@@ -2858,77 +2859,8 @@ try {
 // Mindlink removed — replaced by Prowl (T#279/T#280)
 // DB table 'mindlinks' preserved for data migration to Prowl
 
-// Legacy queue endpoints (backwards compat)
-// GET /api/queue/gorn — list queue items
-app.get('/api/queue/gorn', (c) => {
-  const status = c.req.query('status') || 'pending'; // pending, decided, deferred, withdrawn
-  const rows = sqlite.prepare(`
-    SELECT id, title, status, category, queue_status, queue_tagged_by, queue_tagged_at, queue_summary, created_at,
-      (SELECT COUNT(*) FROM forum_messages WHERE thread_id = forum_threads.id) as message_count
-    FROM forum_threads
-    WHERE category = 'gorn-queue' AND queue_status = ?
-    ORDER BY CASE WHEN queue_status = 'deferred' THEN 1 ELSE 0 END, queue_tagged_at ASC
-  `).all(status) as any[];
-
-  return c.json({
-    items: rows.map(r => ({
-      thread_id: r.id,
-      title: r.title,
-      thread_status: r.status,
-      queue_status: r.queue_status,
-      tagged_by: r.queue_tagged_by,
-      tagged_at: r.queue_tagged_at ? new Date(r.queue_tagged_at).toISOString() : null,
-      summary: r.queue_summary,
-      message_count: r.message_count,
-      created_at: new Date(r.created_at).toISOString(),
-    })),
-    total: rows.length,
-  });
-});
-
-// POST /api/queue/gorn — add thread to queue (any Beast can tag)
-app.post('/api/queue/gorn', async (c) => {
-  try {
-    const data = await c.req.json();
-    if (!data.thread_id) return c.json({ error: 'thread_id required' }, 400);
-
-    const now = Date.now();
-    sqlite.prepare(`
-      UPDATE forum_threads
-      SET category = 'gorn-queue', queue_status = 'pending', queue_tagged_by = ?, queue_tagged_at = ?, queue_summary = ?
-      WHERE id = ?
-    `).run(data.tagged_by || 'unknown', now, data.summary || null, data.thread_id);
-
-    return c.json({ success: true, thread_id: data.thread_id, queue_status: 'pending' });
-  } catch (e) {
-    return c.json({ error: 'Invalid JSON' }, 400);
-  }
-});
-
-// PATCH /api/queue/gorn/:threadId — update queue status (Decided/Defer/Withdraw — gorn only from browser)
-app.patch('/api/queue/gorn/:threadId', async (c) => {
-  const threadId = parseInt(c.req.param('threadId'), 10);
-  try {
-    const data = await c.req.json();
-    const allowed = ['decided', 'deferred', 'pending', 'withdrawn'];
-    if (!data.status || !allowed.includes(data.status)) {
-      return c.json({ error: `Invalid status. Allowed: ${allowed.join(', ')}` }, 400);
-    }
-
-    // Browser access restricted to gorn
-    if (!isTrustedRequest(c)) {
-      const as = data.as?.toLowerCase();
-      if (as !== 'gorn') return c.json({ error: 'Only Gorn can update queue items' }, 403);
-    }
-
-    sqlite.prepare('UPDATE forum_threads SET queue_status = ? WHERE id = ? AND category = ?')
-      .run(data.status, threadId, 'gorn-queue');
-
-    return c.json({ success: true, thread_id: threadId, queue_status: data.status });
-  } catch (e) {
-    return c.json({ error: 'Invalid JSON' }, 400);
-  }
-});
+// Queue routes extracted to src/queue/routes.ts (T#800 P3-F)
+registerQueueRoutes(app, sqlite, { isTrustedRequest });
 
 // Lock/unlock thread (prevents new messages)
 
