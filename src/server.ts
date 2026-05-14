@@ -100,7 +100,7 @@ import { registerAuditRoutes } from './audit/routes.ts';
 import { registerTeamsRoutes } from './teams/routes.ts';
 import { registerFilesRoutes } from './files/routes.ts';
 import { registerInboxRoutes } from './inbox/routes.ts';
-import { registerKnowledgeRoutes } from './knowledge/routes.ts';
+import { registerKnowledgeRoutes, HELP_ENDPOINTS } from './knowledge/routes.ts';
 import { registerGuestRoutes } from './guest/routes.ts';
 import { registerLibraryRoutes } from './library/routes.ts';
 import { registerRiskRoutes } from './risk/routes.ts';
@@ -227,7 +227,7 @@ const UPLOADS_DIR = path.join(ORACLE_DATA_DIR, 'uploads');
 const ARCHIVE_DIR = path.join(ORACLE_DATA_DIR, 'uploads', 'archive');
 
 // Custom 404 with did-you-mean hints for API routes
-// Uses HELP_ENDPOINTS (defined below with /api/help) for path matching
+// HELP_ENDPOINTS imported from ./knowledge/routes.ts (T#806 extraction; T#811 hotfix)
 function findSimilarPaths(requested: string): string[] {
   const reqParts = requested.toLowerCase().split('/').filter(Boolean);
   const paths = HELP_ENDPOINTS.map(e => e.path);
