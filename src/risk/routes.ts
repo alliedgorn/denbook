@@ -92,15 +92,16 @@ export function registerRiskRoutes(app: OpenAPIHono, sqlite: Database, helpers: 
 
   // POST /api/risks — create risk (Gorn, Bertus, Talon)
   app.post('/api/risks', async (c) => {
+    // T#814 — auth-first ordering: 401 fires before body-validation leaks endpoint shape.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
     try {
       const data = await c.req.json();
       if (!data.title?.trim()) return c.json({ error: 'title required' }, 400);
 
-      // T#788 — derive requester from auth-layer (T#718 pattern), reject body-asserted mismatch.
-      const caller = requireBeastIdentity(c);
-      if (!caller) {
-        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
-      }
+      // T#788 — reject body-asserted mismatch.
       if (data.created_by && data.created_by.toLowerCase() !== caller) {
         return c.json({ error: 'Sender impersonation blocked. body.created_by must match authenticated caller or be omitted.' }, 403);
       }
