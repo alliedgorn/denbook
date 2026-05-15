@@ -14,7 +14,7 @@ import { getVaultPsiRoot } from '../vault/handler.ts';
 import type { ToolContext } from '../tools/types.ts';
 
 // Endpoint catalog — shared by /api/help and 404 handler
-const HELP_ENDPOINTS = [
+export const HELP_ENDPOINTS = [
     // Auth
     { method: 'GET', path: '/api/auth/status', desc: 'Check if session is authenticated', params: null },
     { method: 'POST', path: '/api/auth/login', desc: 'Login with password', params: 'body: { password }' },
