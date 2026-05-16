@@ -137,9 +137,18 @@ export function registerBoardRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // POST /api/projects — create project
   app.post('/api/projects', async (c) => {
+    // T#819 — auth-derive (T#788 pattern), reject body-asserted mismatch.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
     const data = await c.req.json();
-    const { name, description, created_by } = data;
-    if (!name || !created_by) return c.json({ error: 'name and created_by required' }, 400);
+    const { name, description } = data;
+    if (!name) return c.json({ error: 'name required' }, 400);
+    if (data.created_by && data.created_by.toLowerCase() !== caller) {
+      return c.json({ error: 'Sender impersonation blocked. body.created_by must match authenticated caller or be omitted.' }, 403);
+    }
+    const created_by = caller;
     const now = new Date().toISOString();
     const result = sqlite.prepare(
       'INSERT INTO projects (name, description, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
@@ -162,6 +171,11 @@ export function registerBoardRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // PATCH /api/projects/:id — update project
   app.patch('/api/projects/:id', async (c) => {
+    // T#819 — auth-first.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
     const id = parseInt(c.req.param('id'), 10);
     const data = await c.req.json();
     const updates: string[] = [];
@@ -179,7 +193,11 @@ export function registerBoardRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // DELETE /api/projects/:id — delete project (Gorn or Pip)
   app.delete('/api/projects/:id', (c) => {
-    const requester = (c.req.query('as') || (hasSessionAuth(c) ? 'gorn' : '')).toLowerCase();
+    // T#819 — auth-derive (T#795 P1 pattern), close localhost-trust ?as= bypass class.
+    const requester = requireBeastIdentity(c);
+    if (!requester) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
     if (requester !== 'gorn' && requester !== 'pip') {
       return c.json({ error: 'Only Gorn or Pip can delete projects' }, 403);
     }
@@ -251,9 +269,18 @@ export function registerBoardRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // POST /api/tasks — create task
   app.post('/api/tasks', async (c) => {
+    // T#819 — auth-derive (T#788 pattern), reject body-asserted mismatch.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
     const data = await c.req.json();
-    const { title, description, project_id, status, priority, assigned_to, created_by, thread_id, due_date, type, reviewer, risk_level, parent_task_id } = data;
-    if (!title || !created_by) return c.json({ error: 'title and created_by required' }, 400);
+    const { title, description, project_id, status, priority, assigned_to, thread_id, due_date, type, reviewer, risk_level, parent_task_id } = data;
+    if (!title) return c.json({ error: 'title required' }, 400);
+    if (data.created_by && data.created_by.toLowerCase() !== caller) {
+      return c.json({ error: 'Sender impersonation blocked. body.created_by must match authenticated caller or be omitted.' }, 403);
+    }
+    const created_by = caller;
     if (!project_id) return c.json({ error: 'project_id required — every task must belong to a project' }, 400);
     if (!assigned_to) return c.json({ error: 'assigned_to required — every task must have an assignee' }, 400);
     if (!reviewer) return c.json({ error: 'reviewer required — every task must have a reviewer for the in_review workflow' }, 400);
@@ -329,6 +356,11 @@ export function registerBoardRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // PATCH /api/tasks/:id — update task
   app.patch('/api/tasks/:id', async (c) => {
+    // T#819 — auth-first.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
     const id = parseInt(c.req.param('id'), 10);
     const existing = sqlite.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as any;
     if (!existing) return c.json({ error: 'Task not found' }, 404);
@@ -409,6 +441,11 @@ export function registerBoardRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // DELETE /api/tasks/:id — soft delete (set status to 'deleted') + orphan subtasks (Bertus C4)
   app.delete('/api/tasks/:id', async (c) => {
+    // T#819 — auth-first. Closes anonymous soft-delete-any-task class (Bertus #12602 sharpest edge).
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
     const id = parseInt(c.req.param('id'), 10);
     const now = new Date().toISOString();
     sqlite.transaction(() => {
@@ -435,6 +472,11 @@ export function registerBoardRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // POST /api/tasks/bulk-status — bulk status update (for PM)
   app.post('/api/tasks/bulk-status', async (c) => {
+    // T#819 — auth-first. Closes anonymous mass-mutate class.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
     const data = await c.req.json();
     const { task_ids, status } = data;
     if (!Array.isArray(task_ids) || !status) return c.json({ error: 'task_ids and status required' }, 400);
@@ -475,10 +517,19 @@ export function registerBoardRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // POST /api/tasks/:id/comments
   app.post('/api/tasks/:id/comments', async (c) => {
+    // T#819 — auth-derive (T#788 pattern), reject body-asserted mismatch.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
     const taskId = parseInt(c.req.param('id'), 10);
     const data = await c.req.json();
-    const { author, content } = data;
-    if (!author || !content) return c.json({ error: 'author and content required' }, 400);
+    const { content } = data;
+    if (!content) return c.json({ error: 'content required' }, 400);
+    if (data.author && data.author.toLowerCase() !== caller) {
+      return c.json({ error: 'Sender impersonation blocked. body.author must match authenticated caller or be omitted.' }, 403);
+    }
+    const author = caller;
 
     const now = new Date().toISOString();
     const result = sqlite.prepare(
