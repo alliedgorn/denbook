@@ -309,23 +309,40 @@ export function initDaemons(sqliteDb: Database): void {
 // Routes — 5 daemon-management endpoints
 // ============================================================================
 
-export function registerDaemonRoutes(app: OpenAPIHono, sqliteDb: Database): void {
+interface DaemonHelpers {
+  hasSessionAuth: (c: Context) => boolean;
+  isTrustedRequest: (c: Context) => boolean;
+}
+
+export function registerDaemonRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: DaemonHelpers): void {
   // Shadow module-level sqlite (Database | null) with non-null local
   const sqlite: Database = sqliteDb;
+  const { hasSessionAuth, isTrustedRequest } = helpers;
+
+  // T#789 DAEMON-gate: shared owner-only guard for daemons-module mutations + reads.
+  // Closes DAEMON-1..4 — missing-auth or broken Gorn-only checks.
+  const requireOwner = (c: Context) => {
+    if (!hasSessionAuth(c) && !isTrustedRequest(c)) {
+      return c.json({ error: 'Gorn-only — session or trusted-request required', requiresAuth: true }, 403);
+    }
+    return null;
+  };
 
   // DB maintenance routes
   // POST /api/db/maintenance — manual trigger (Gorn-only)
   app.post('/api/db/maintenance', (c) => {
-    const requester = c.req.query('as');
-    if (requester) {
-      return c.json({ error: 'forbidden' }, 403);
-    }
+    // T#789 DAEMON-3 — replace broken ?as=-only check with proper session/trusted gate.
+    const gate = requireOwner(c);
+    if (gate) return gate;
     runDbMaintenance();
     return c.json({ status: 'ok', retention_days: DB_RETENTION_DAYS });
   });
 
   // GET /api/db/stats — table sizes and DB info
   app.get('/api/db/stats', (c) => {
+    // T#789 DAEMON-4 — owner-only read (table sizes are info-disclosure surface).
+    const gate = requireOwner(c);
+    if (gate) return gate;
     const tables = sqlite.prepare(
       `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`
     ).all() as { name: string }[];
@@ -354,6 +371,9 @@ export function registerDaemonRoutes(app: OpenAPIHono, sqliteDb: Database): void
   // File archive routes
   // GET /api/files/archive/stats — archive statistics
   app.get('/api/files/archive/stats', (c) => {
+    // T#789 DAEMON-4 — owner-only read (archive bundle filenames are info-disclosure surface).
+    const gate = requireOwner(c);
+    if (gate) return gate;
     const archived = sqlite.prepare(
       `SELECT COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as original_size FROM files WHERE archived_at IS NOT NULL`
     ).get() as any;
@@ -393,12 +413,18 @@ export function registerDaemonRoutes(app: OpenAPIHono, sqliteDb: Database): void
 
   // POST /api/files/archive/run — manual trigger
   app.post('/api/files/archive/run', (c) => {
+    // T#789 DAEMON-2 — owner-only trigger (idempotent but should not be public).
+    const gate = requireOwner(c);
+    if (gate) return gate;
     runFileArchive();
     return c.json({ status: 'ok', message: 'Archive cycle completed' });
   });
 
   // POST /api/files/:id/restore — restore an archived file
   app.post('/api/files/:id/restore', (c) => {
+    // T#789 DAEMON-1 — HIGH: file-restore is deletion-undo (Principle 1 gravity), owner-only.
+    const gate = requireOwner(c);
+    if (gate) return gate;
     const id = parseInt(c.req.param('id'), 10);
     const file = sqlite.prepare('SELECT * FROM files WHERE id = ?').get(id) as any;
     if (!file) return c.json({ error: 'File not found' }, 404);
