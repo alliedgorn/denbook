@@ -1345,7 +1345,7 @@ registerSchedulerRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity });
 
 // Daemons (notification drain + DB maintenance + file archive) — extracted to src/daemons/routes.ts (T#773)
 initDaemons(sqlite);
-registerDaemonRoutes(app, sqlite);
+registerDaemonRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest });
 
 
 
