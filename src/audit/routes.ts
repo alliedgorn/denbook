@@ -11,15 +11,20 @@ const SECURITY_READ_ALLOWLIST = ['bertus', 'talon'];
 interface AuditHelpers {
   hasSessionAuth: (c: Context) => boolean;
   isTrustedRequest: (c: Context) => boolean;
+  requireBeastIdentity: (c: Context) => string | null;
 }
 
 export function registerAuditRoutes(app: OpenAPIHono, sqlite: Database, helpers: AuditHelpers) {
-  const { hasSessionAuth, isTrustedRequest } = helpers;
+  const { hasSessionAuth, isTrustedRequest, requireBeastIdentity } = helpers;
 
   app.get('/api/audit', (c) => {
-    // T#727: bearer-derive + legacy ?as= for security team check
-    const requester = ((c.get as any)('actor') || c.req.query('as') || '').toLowerCase();
-    if (!hasSessionAuth(c) && !AUDIT_READ_ALLOWLIST.includes(requester)) {
+    // T#808 — requireBeastIdentity cascade replaces ?as= + isTrustedRequest read-bypass.
+    // Closes localhost-host attacker pretending bertus/talon via ?as= query param.
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (caller !== 'gorn' && !AUDIT_READ_ALLOWLIST.includes(caller)) {
       return c.json({ error: 'Audit logs are restricted to Gorn and security team' }, 403);
     }
 
