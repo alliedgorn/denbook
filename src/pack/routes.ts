@@ -245,6 +245,14 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
   });
 
   app.post('/api/beasts/seed-avatars', (c) => {
+    // T#793 PACK-1 — Gorn-only (mass-mutate across all profiles).
+    const caller = requireBeastIdentity(c);
+    if (!caller) {
+      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+    }
+    if (caller !== 'gorn') {
+      return c.json({ error: 'Gorn-only — mass profile mutation' }, 403);
+    }
     const profiles = getAllBeastProfiles();
     let updated = 0;
     for (const p of profiles) {
@@ -272,7 +280,15 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
 
   app.put('/api/beast/:name', async (c) => {
     try {
+      // T#793 PACK-1 — owner-or-Gorn-only profile create/replace.
+      const caller = requireBeastIdentity(c);
+      if (!caller) {
+        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      }
       const name = c.req.param('name');
+      if (caller !== name.toLowerCase() && caller !== 'gorn') {
+        return c.json({ error: 'Only the beast themselves or Gorn can modify this profile' }, 403);
+      }
       const body = await c.req.json();
 
       if (!body.displayName || !body.animal) {
@@ -299,7 +315,15 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
 
   app.patch('/api/beast/:name', async (c) => {
     try {
+      // T#793 PACK-1 — owner-or-Gorn-only profile update.
+      const caller = requireBeastIdentity(c);
+      if (!caller) {
+        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      }
       const name = c.req.param('name');
+      if (caller !== name.toLowerCase() && caller !== 'gorn') {
+        return c.json({ error: 'Only the beast themselves or Gorn can modify this profile' }, 403);
+      }
       const profile = getBeastProfile(name);
       if (!profile) {
         return c.json({ error: 'Beast not found' }, 404);
@@ -331,7 +355,15 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
 
   app.patch('/api/beast/:name/avatar', async (c) => {
     try {
+      // T#793 PACK-1 — owner-or-Gorn-only avatar update.
+      const caller = requireBeastIdentity(c);
+      if (!caller) {
+        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      }
       const name = c.req.param('name');
+      if (caller !== name.toLowerCase() && caller !== 'gorn') {
+        return c.json({ error: 'Only the beast themselves or Gorn can modify this profile' }, 403);
+      }
       const profile = getBeastProfile(name);
       if (!profile) {
         return c.json({ error: 'Beast not found. Create profile first with PUT /api/beast/:name' }, 404);
