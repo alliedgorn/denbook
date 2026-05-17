@@ -1327,7 +1327,7 @@ try {
 // ============================================================================
 
 // Audit + Security events routes extracted to src/audit/routes.ts (T#802 P3-G)
-registerAuditRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest });
+registerAuditRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, requireBeastIdentity });
 
 // ============================================================================
 // Teams API (Task #81 — Gnarl spec, thread #105)
