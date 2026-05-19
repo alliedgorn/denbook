@@ -389,6 +389,133 @@ export const queueUpdateRoute = createRoute({
   },
 });
 
+// ============================================================================
+// /api/supersede — supersede chain log (Spec #55 Phase 2 supersede domain)
+// ============================================================================
+
+export const supersedeListRoute = createRoute({
+  method: 'get',
+  path: '/api/supersede',
+  tags: ['supersede'],
+  summary: 'List supersede log entries',
+  request: {
+    query: z.object({
+      project: z.string().optional(),
+      limit: z.string().optional(),
+      offset: z.string().optional(),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            supersessions: z.array(z.object({
+              id: z.number(),
+              old_path: z.string(),
+              old_id: z.string().nullable(),
+              old_title: z.string().nullable(),
+              old_type: z.string().nullable(),
+              new_path: z.string().nullable(),
+              new_id: z.string().nullable(),
+              new_title: z.string().nullable(),
+              reason: z.string().nullable(),
+              superseded_at: z.string(),
+              superseded_by: z.string().nullable(),
+              project: z.string().nullable(),
+            })),
+            total: z.number(),
+            limit: z.number(),
+            offset: z.number(),
+          }),
+        },
+      },
+      description: 'Supersede log entries with paging metadata',
+    },
+  },
+});
+
+export const supersedeChainRoute = createRoute({
+  method: 'get',
+  path: '/api/supersede/chain/{path}',
+  tags: ['supersede'],
+  summary: 'Get supersede chain for a document path',
+  request: {
+    params: z.object({
+      path: z.string(),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            superseded_by: z.array(z.object({
+              new_path: z.string().nullable(),
+              reason: z.string().nullable(),
+              superseded_at: z.string(),
+            })),
+            supersedes: z.array(z.object({
+              old_path: z.string(),
+              reason: z.string().nullable(),
+              superseded_at: z.string(),
+            })),
+          }),
+        },
+      },
+      description: 'Chain of supersessions touching the given path',
+    },
+  },
+});
+
+export const supersedeCreateRoute = createRoute({
+  method: 'post',
+  path: '/api/supersede',
+  tags: ['supersede'],
+  summary: 'Log a new supersession',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            old_path: z.string(),
+            old_id: z.string().optional(),
+            old_title: z.string().optional(),
+            old_type: z.string().optional(),
+            new_path: z.string().optional(),
+            new_id: z.string().optional(),
+            new_title: z.string().optional(),
+            reason: z.string().optional(),
+            superseded_by: z.string().optional(),
+            project: z.string().optional(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            id: z.number(),
+            message: z.string(),
+          }),
+        },
+      },
+      description: 'Supersession logged',
+    },
+    400: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Missing required field',
+    },
+    500: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Insert failed',
+    },
+  },
+});
+
 
 export const OPENAPI_INFO = {
   openapi: '3.0.0' as const,
