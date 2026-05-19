@@ -2,9 +2,13 @@
 
 **Author**: @gnarl (architect-pen)
 **Task**: T#816 (parent), Prowl #125 Option B
-**Status**: v0.1 — ready for tier review
+**Status**: v0.2 — Bertus + Zaghnal Tier-2 sharpening folds landed, ready for re-review
 **Reviewer**: @zaghnal (PM), @bertus (security), @gorn (Tier-3)
-**Scope note**: per-route migration table is enumerated at file-level (296 routes / 29 files). Per-handler categorization (file × method × path × gate-class) completes in Phase 1 sub-task during Karo Phase 2 PR drafting. Spec-as-stub on the table is intentional — the architectural decisions land here, the mechanical enumeration lands at PR time when the cascade pattern applies per-handler anyway.
+**Scope note**: per-route migration table is enumerated at file-level (296 routes / 29 files). Per-handler categorization (file × method × path × gate-class) lands in Phase 1 sub-task as its own PR with security-tier CLEAR before Phase 2 starts (per Bertus P2 fold).
+
+**Revision log**:
+- v0.1 (2026-05-17): initial draft, ready for tier review
+- v0.2 (2026-05-19): Bertus security-tier review sharpenings folded — R1 (Phase 4 promoted REQUIRED, 7-day min dwell), R2 (allowlist file + Tier-3 gate on additions), R3 (auth-first deploy-guard), P1 (admin-tier parking item documented), P2 (per-handler categorization PR gates Phase 2), P3 (T#795 P3 handler defenses stay post-Phase-5)
 
 ## Problem
 
@@ -124,15 +128,17 @@ Per-file route counts:
 
 ## Migration plan
 
-### Phase 1 — Spec stamp + per-route table completion
+### Phase 1 — Spec stamp + per-route categorization PR
 - This spec lands with file-level reads
-- Per-route table completed during Phase 2 PR drafting (Karo lane)
-- Tier-3 stamp gates the start of Phase 2
+- **Per-route categorization (file × method × path × gate-class) lands as its own PR** with security-tier CLEAR AND QA-tier CLEAR before Phase 2 starts (per Bertus P2 + Pip Q1 dual-stamp folds). Categorization output is a CSV/table file checked into the repo + the `public-by-design` allowlist file (see Phase 2 / R2 fold). The CSV is also the substrate for Phase 2 QA runtime-smoke matrix — without enumerated targets, QA-pen has nothing to probe
+- Tier-3 stamp gates the start of Phase 1 categorization PR
+- Phase 1 PR security-tier + QA-tier CLEAR gates the start of Phase 2
 
-### Phase 2 — Middleware change + handler cascade
-- Single PR (or split if reviewers request): change middleware to drop default
+### Phase 2 — Middleware change + handler cascade + allowlist file
+- PR cascade (likely split into 5-8 PR-batches by route-file groups) — change middleware to drop default, apply handler cascade per-batch
 - All gated handlers add `requireBeastIdentity()` or `requireOwnerSession()` first-statement
-- Public-by-design handlers tagged with `// public-by-design` comment
+- **Public-by-design handlers**: route path added to an explicit allowlist file at `src/security/public-by-design.ts` (R2 fold). The `// public-by-design` code comment is a breadcrumb; the allowlist file is the contract. Every PR touching `src/security/public-by-design.ts` triggers Tier-3 routing through @sable Prowl-lane per the same gate as Decree #71 governance-class PRs
+- **Per-PR-batch runtime-smoke required (Q1 fold)**: each Phase 2 PR-batch ships a runtime-smoke matrix covering the handler-set it touches, gated as pre-merge QA-CLEAR — not just post-deploy patrol. Categorization CSV from Phase 1 is the enumerated target substrate. Norm #84 (runtime smoke on extraction-class PRs) elevates from preserved to required-at-PR-gate for this spec specifically
 - Net new code: ~3-5 lines per gated handler (~250-300 handlers × ~4 lines = ~1000-1200 lines added)
 
 ### Phase 3 — Beast-CLI migration
@@ -140,14 +146,18 @@ Per-file route counts:
 - Ideally zero `?as=` patterns survive; all Beast-CLI calls use `Authorization: Bearer $BEAST_TOKEN`
 - Phase 3 is unblocking — once shipped, `?as=` query parameter handling can be removed from server-side entirely
 
-### Phase 4 — Compatibility shim window (optional)
-- During Phase 2-3 transition, middleware could keep emitting a deprecation log for handlers that observe `c.var.role === 'owner'` but no auth context proves it
-- Helps catch unmigrated callers in dev/staging before hard-cutover
+### Phase 4 — Compatibility shim window — REQUIRED, 7-day minimum dwell (R1 fold)
+- **REQUIRED phase, not optional.** Middleware keeps the legacy code path active but with a deprecation log entry on every request where `c.var.role === 'owner'` is observed without a preceding auth context that proves it
+- Catches the **dynamic-miss class** that the static deploy-guard cannot reach: callers using paths the categorization PR didn't enumerate, third-party scripts, scheduled jobs, harness tools, anything not in the canonical call graph
+- **7-day minimum dwell** between Phase 4 deploy and Phase 5 cutover. PM-lane tracks the 7-day clock; cutover task cannot start before day 8
+- **Patrol-vantage overlay (Pip R1 sister-bank)**: QA Sched #2 daily external-HTTPS patrol folds a sampling-probe of migrated handlers into the patrol matrix during the dwell. Bear catches dynamic in-prod misses via deprecation logs (in-traffic vantage); QA-pen catches synthetic-coverage gaps via external-vantage probe. Both vantages active on the dwell window
+- During the dwell, every dev/staging deprecation log entry triggers an issue auto-filed against the owning Beast for handler/script remediation
+- Phase 4 close criteria: 7 consecutive days with (a) zero deprecation log entries in dev + staging + prod, AND (b) zero QA patrol-vantage probe failures, across one full pack-rest cycle
 
 ### Phase 5 — Hard cutover
 - Middleware default-grant code path removed
 - `?as=` query parameter removed from server
-- T#795 P3 handler-level `?as=` defenses become defense-in-depth (orthogonal to default-grant fix)
+- **T#795 P3 handler-level `?as=` defenses STAY post-Phase-5** (P3 fold). Upstream fix doesn't void the downstream gate — defense-in-depth pattern. The handler-level defenses are belt-and-suspenders against future regressions that re-introduce a similar default-grant path. Document explicitly in this spec rather than leave it as implicit "obviously they stay"
 
 ## Relationship to T#795 P3 + T#794
 
@@ -168,13 +178,19 @@ Reasoning: blast radius of Phase 2 is the whole `/api/*` surface. If anything re
 
 1. **Sub-roles on Beast actors**: do we need `actor=beast{name=X}` vs just `role=beast`? T#788 + T#819 already encode the Beast name via `requireBeastIdentity()` return value. Spec defers to existing pattern.
 
-2. **Owner-equivalent admin Beasts**: should Pip + Bertus get `role=owner-equivalent` for admin handlers (delete project, audit access)? Current handler code does `if requester !== 'gorn' && requester !== 'pip'`. Spec proposes keeping that handler-level allowlist rather than promoting a role tier.
+2. **Owner-equivalent admin Beasts (P1 parking item)**: should Pip + Bertus get `role=owner-equivalent` for admin handlers (delete project, audit access)? Current handler code does `if requester !== 'gorn' && requester !== 'pip'`. Spec proposes keeping that handler-level allowlist for now AND parking the structural fix as a separate spec. **Parking-item framing**: the hardcoded-Beast-name pattern IS localhost-trust in different shape — same anti-pattern at the handler-allowlist layer that this spec closes at the middleware layer. PM-lane carries the deferred-spec tracking once Spec #60 stamps. Both Pip and Bertus (current allowlist occupants) flagged the same self-acknowledgment — explicit `role=admin` bearer-claim tier is the cleaner shape but out-of-scope for this spec to avoid scope creep. New spec will follow Spec #60 stamp.
 
 3. **RBAC integration**: existing rbacMiddleware (Spec #32) runs after middleware. Should it stay as the canonical guest-allowlist gate, or fold into the per-handler explicit pattern? Spec proposes: keep RBAC for guests (it's a clean allowlist), drop the implicit "owner/beast: full access" pass-through.
 
 ## Deploy guardrail
 
-Sister to the `deploy.sh` grep guard for SPA-catchall ordering (introduced post-T#783): add a deploy-time check that no committed handler in `src/*/routes.ts` reads `c.var.role === 'owner'` without a preceding `requireBeastIdentity` or `requireOwnerSession` call. Mechanical static check. Norm #84 (runtime smoke on extraction-class PRs) is the runtime complement.
+Two-guard pair, sister to the `deploy.sh` grep guard for SPA-catchall ordering (introduced post-T#783):
+
+**Guard 1 — role-check-needs-auth-precedent**: deploy-time check that no committed handler in `src/*/routes.ts` reads `c.var.role === 'owner'` without a preceding `requireBeastIdentity` or `requireOwnerSession` call. Catches missing-auth class.
+
+**Guard 2 — auth-call-must-be-first-statement (R3 fold)**: deploy-time check that within any handler containing `requireBeastIdentity()` or `requireOwnerSession()`, the auth call is the first statement after handler entry — no `c.req.json()` or other body parsing before it. T#814 ordering bug class (auth-after-body-validate) is the cost-of-pattern-absence reference. Catches step-order class. Sister to Pip [[feedback_walk_step_order_not_just_presence]] banking pattern.
+
+Mechanical static checks. Norm #84 (runtime smoke on extraction-class PRs) is the runtime complement, elevated to required-at-PR-gate for Phase 2 per Pip Q1 fold.
 
 ## Norm #84 relationship
 
