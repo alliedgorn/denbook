@@ -28,13 +28,13 @@ export const authStatusRoute = createRoute({
             hasPassword: z.boolean().optional(),
             localBypass: z.boolean().optional(),
             isLocal: z.boolean().optional(),
-            role: z.string().optional(),
+            role: z.enum(['owner', 'guest']).optional(),
             guestName: z.string().optional(),
             guestUsername: z.string().optional(),
           }),
         },
       },
-      description: 'Auth status response',
+      description: 'Auth status response (owner branch carries hasPassword/localBypass/isLocal; guest branch carries guestName/guestUsername)',
     },
   },
 });
@@ -58,15 +58,27 @@ export const authLoginRoute = createRoute({
   },
   responses: {
     200: {
-      content: { 'application/json': { schema: z.object({ success: z.boolean() }) } },
+      content: {
+        'application/json': {
+          schema: z.object({
+            success: z.literal(true),
+            role: z.enum(['owner', 'guest']).optional(),
+            display_name: z.string().optional(),
+          }),
+        },
+      },
       description: 'Login successful',
     },
+    400: {
+      content: { 'application/json': { schema: z.object({ success: z.literal(false), error: z.string() }) } },
+      description: 'Missing password or no password configured',
+    },
     401: {
-      content: { 'application/json': { schema: z.object({ success: z.boolean(), error: z.string() }) } },
+      content: { 'application/json': { schema: z.object({ success: z.literal(false), error: z.string() }) } },
       description: 'Invalid credentials',
     },
     429: {
-      content: { 'application/json': { schema: z.object({ success: z.boolean(), error: z.string() }) } },
+      content: { 'application/json': { schema: z.object({ success: z.literal(false), error: z.string() }) } },
       description: 'Rate limited',
     },
   },

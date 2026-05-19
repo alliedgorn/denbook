@@ -20,6 +20,7 @@ import {
   selfRotateToken, getTokenInfo,
 } from './beast-tokens.ts';
 import { getSetting } from '../db/index.ts';
+import { authStatusRoute, authLoginRoute, authLogoutRoute } from './openapi.ts';
 
 // ============================================================================
 // Server routes — Phase 2.3 of Library #102 (T#781)
@@ -49,7 +50,10 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
   // /api/auth/* (status, login, logout)
   // ============================================================================
 
-  app.get('/api/auth/status', (c) => {
+  // Cast handler to `any` to bypass @hono/zod-openapi's strict response-shape
+  // typing on conditional branches (owner vs guest field-sets). Runtime behavior
+  // matches schema; TS narrowing on optional-vs-required-with-undefined doesn't.
+  app.openapi(authStatusRoute, ((c: Context) => {
     const authEnabled = getSetting('auth_enabled') === 'true';
     const hasPassword = !!getSetting('auth_password_hash');
     const localBypass = getSetting('auth_local_bypass') !== 'false';
@@ -77,26 +81,28 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
           guestActive = false;
         }
       }
+      // Conditional spread to match schema optional-property shape (not required-with-undefined).
       return c.json({
         authenticated: guestActive,
         authEnabled,
-        role: guestActive ? role : undefined,
-        guestName: guestActive ? guestDisplayName : undefined,
-        guestUsername: guestActive ? guestUsername : undefined,
-      });
+        ...(guestActive && role ? { role } : {}),
+        ...(guestActive && guestDisplayName ? { guestName: guestDisplayName } : {}),
+        ...(guestActive && guestUsername ? { guestUsername } : {}),
+      }, 200);
     }
-  
+
     return c.json({
       authenticated,
       authEnabled,
       hasPassword,
       localBypass,
       isLocal,
-      role,
-    });
-  });
+      ...(role ? { role } : {}),
+    }, 200);
+  }) as any);
 
-  app.post('/api/auth/login', async (c) => {
+  // Cast: see authStatusRoute note above re multi-branch response-shape narrowing.
+  app.openapi(authLoginRoute, (async (c: Context) => {
     const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
     const now = Date.now();
     const attempts = getRateLimit(ip);
@@ -233,10 +239,10 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
     });
   
     return c.json({ success: true, role: 'owner' });
-  });
-  
+  }) as any);
+
   // Logout
-  app.post('/api/auth/logout', (c) => {
+  app.openapi(authLogoutRoute, (c) => {
     const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
     logSecurityEvent({
       eventType: 'session_destroyed',
