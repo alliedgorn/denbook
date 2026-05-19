@@ -6,6 +6,7 @@ import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { Database } from 'bun:sqlite';
 import { db, beastProfiles, getBeastProfile, getAllBeastProfiles, upsertBeastProfile, updateBeastAvatar } from '../db/index.ts';
+import { packListRoute, packSpinnerVerbsRoute } from '../server/openapi.ts';
 
 // ============================================================================
 // Pack routes — Phase 2.5 of Library #102 (T#783)
@@ -26,7 +27,7 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
   const { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast, getTmuxStatus, normalizeAvatarUrl, webPresence, WEB_PRESENCE_TIMEOUT_MS } = helpers;
   const sqlite: Database = sqliteDb;
 
-  app.get('/api/pack', (c) => {
+  app.openapi(packListRoute, ((c: Context) => {
     const profiles = getAllBeastProfiles();
     const { tmuxStatus, contextPctMap } = getTmuxStatus();
 
@@ -54,10 +55,10 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       last_active_at: ownerPresence ? new Date(ownerPresence.lastSeen).toISOString() : null,
     };
 
-    return c.json({ beasts, owner });
-  });
+    return c.json({ beasts, owner }, 200);
+  }) as any);
 
-  app.get('/api/pack/spinner-verbs', (c) => {
+  app.openapi(packSpinnerVerbsRoute, ((c: Context) => {
     const workspaceDir = '/home/gorn/workspace';
     const beastVerbs: Record<string, string[]> = {};
     const allVerbs = new Set<string>();
@@ -87,8 +88,8 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       allVerbs: [...allVerbs].sort(),
       totalUnique: allVerbs.size,
       totalBeasts: Object.keys(beastVerbs).length,
-    });
-  });
+    }, 200);
+  }) as any);
 
   app.get('/api/beast/:name/terminal', (c) => {
     if (!hasSessionAuth(c)) return c.json({ error: 'forbidden' }, 403);
