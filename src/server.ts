@@ -219,7 +219,22 @@ registerSignalHandlers(async () => {
 
 // Create Hono app
 type AppEnv = { Variables: Record<string, any> };
-const app = new OpenAPIHono<AppEnv>();
+// defaultHook maps zod request-validation failures to a friendly response shape.
+// MUST drop input-echo: never include received values, parsed.error.format(), or
+// JSON.stringify(parsed.error) — only path + code from the first issue. Per Bertus
+// security condition on T#731 (password-echo isolation class on auth surfaces).
+const app = new OpenAPIHono<AppEnv>({
+  defaultHook: (result, c) => {
+    if (result.success) return;
+    const issue = result.error.issues[0];
+    const path = c.req.path;
+    const field = issue?.path?.[issue.path.length - 1];
+    if (path === '/api/auth/login' && (field === 'password' || !field)) {
+      return c.json({ success: false, error: 'Password required' }, 400);
+    }
+    return c.json({ success: false, error: 'Invalid request body' }, 400);
+  },
+});
 
 // Upload paths — defined early to avoid TDZ when referenced by guest/files module
 // registrations later in the file (T#807 hotfix).
