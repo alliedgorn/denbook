@@ -192,6 +192,83 @@ export const emojiRemoveRoute = createRoute({
   },
 });
 
+// ============================================================================
+// /api/settings — auth + vault settings (Spec #55 Phase 2 settings domain)
+// ============================================================================
+
+export const settingsGetRoute = createRoute({
+  method: 'get',
+  path: '/api/settings',
+  tags: ['settings'],
+  summary: 'Get current auth + vault settings (no password hash exposed)',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            authEnabled: z.boolean(),
+            localBypass: z.boolean(),
+            hasPassword: z.boolean(),
+            vaultRepo: z.string().nullable(),
+          }),
+        },
+      },
+      description: 'Current settings snapshot',
+    },
+  },
+});
+
+export const settingsUpdateRoute = createRoute({
+  method: 'post',
+  path: '/api/settings',
+  tags: ['settings'],
+  summary: 'Update auth settings (Gorn-only via UI — beast API calls rejected)',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            newPassword: z.string().optional(),
+            currentPassword: z.string().optional(),
+            removePassword: z.boolean().optional(),
+            authEnabled: z.boolean().optional(),
+            localBypass: z.boolean().optional(),
+            as: z.string().optional(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            success: z.literal(true),
+            authEnabled: z.boolean(),
+            localBypass: z.boolean(),
+            hasPassword: z.boolean(),
+          }),
+        },
+      },
+      description: 'Settings updated',
+    },
+    400: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Missing current password or cannot enable auth without password',
+    },
+    401: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Current password is incorrect',
+    },
+    403: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Beast API call blocked — settings can only be changed by Gorn via the UI',
+    },
+  },
+});
+
+
 export const OPENAPI_INFO = {
   openapi: '3.0.0' as const,
   info: {
