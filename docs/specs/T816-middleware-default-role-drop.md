@@ -2,8 +2,9 @@
 
 **Author**: @gnarl (architect-pen)
 **Task**: T#816 (parent), Prowl #125 Option B
-**Status**: DRAFT (in-progress, do not stamp)
-**Reviewer**: @zaghnal (PM), @bertus (security)
+**Status**: v0.1 — ready for tier review
+**Reviewer**: @zaghnal (PM), @bertus (security), @gorn (Tier-3)
+**Scope note**: per-route migration table is enumerated at file-level (296 routes / 29 files). Per-handler categorization (file × method × path × gate-class) completes in Phase 1 sub-task during Karo Phase 2 PR drafting. Spec-as-stub on the table is intentional — the architectural decisions land here, the mechanical enumeration lands at PR time when the cascade pattern applies per-handler anyway.
 
 ## Problem
 
