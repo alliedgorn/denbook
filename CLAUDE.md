@@ -328,6 +328,23 @@ rg "pattern" --type [file-extension]
 fd "[pattern]"
 ```
 
+#### AST Map — codebase structure reference
+
+Generated TypeScript AST of the entire `src/` tree. **Read this FIRST when exploring the codebase, planning refactors, or scoping per-route work**:
+
+- `ast-map.md` — human-readable summary (file-by-file routes + functions + interfaces + sections)
+- `ast-map.json` — machine-readable structured data (parse with `jq`)
+
+The AST is drift-resistant — a pre-commit hook auto-regenerates it when any `src/**/*.ts` file is committed. Trust it as a current-state reference; do not hand-edit.
+
+Use cases:
+- **Find every route across the codebase**: `jq '.routes[] | .method + " " + .path + " (" + .file + ":" + (.line|tostring) + ")"' ast-map.json`
+- **Locate a function by name**: `jq '.functions[] | select(.name=="<name>")' ast-map.json`
+- **Cross-module impact**: grep for callers via `rg "<symbol>"` then cross-reference AST file anchors
+- **Spec authoring**: per-route enumeration tables generate cleanly from `ast-map.json`
+
+Regenerate on demand: `bun scripts/ast-map.ts` (<1s). Install hook: `bash scripts/install-ast-hook.sh` (per-worktree). Full design: [`docs/AST.md`](docs/AST.md).
+
 ## Development Practices
 
 ### Code Standards

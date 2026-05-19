@@ -162,6 +162,21 @@ bun db:migrate    # Apply migrations
 bun db:studio     # Open Drizzle Studio GUI
 ```
 
+## AST Map
+
+Generated TypeScript AST map of the `src/` tree — routes, functions, interfaces, sections. Drift-resistant via pre-commit hook.
+
+- `scripts/ast-map.ts` walks the codebase using TypeScript's compiler API
+- `ast-map.json` (machine-readable, ~210KB) and `ast-map.md` (human-readable, ~86KB) committed at repo root
+- Pre-commit hook auto-regenerates outputs when any `src/**/*.ts` is staged — install per-worktree via `bash scripts/install-ast-hook.sh`
+
+Use it for codebase onboarding, refactor planning, cross-module impact analysis, or spec-authoring per-route enumeration. Full design in [`docs/AST.md`](docs/AST.md).
+
+```bash
+bun scripts/ast-map.ts            # Regenerate on demand (<1s)
+bash scripts/install-ast-hook.sh  # Install pre-commit auto-regenerate
+```
+
 ## Project Structure
 
 ```
