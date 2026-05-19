@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { Database } from 'bun:sqlite';
+import { queueListRoute, queueAddRoute, queueUpdateRoute } from '../server/openapi.ts';
 
 interface QueueHelpers {
   isTrustedRequest: (c: Context) => boolean;
@@ -11,7 +12,7 @@ export function registerQueueRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // Legacy queue endpoints (backwards compat)
   // GET /api/queue/gorn — list queue items
-  app.get('/api/queue/gorn', (c) => {
+  app.openapi(queueListRoute, ((c: Context) => {
     const status = c.req.query('status') || 'pending'; // pending, decided, deferred, withdrawn
     const rows = sqlite.prepare(`
       SELECT id, title, status, category, queue_status, queue_tagged_by, queue_tagged_at, queue_summary, created_at,
@@ -34,11 +35,15 @@ export function registerQueueRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         created_at: new Date(r.created_at).toISOString(),
       })),
       total: rows.length,
-    });
-  });
+    }, 200);
+  }) as any);
 
   // POST /api/queue/gorn — add thread to queue (any Beast can tag)
-  app.post('/api/queue/gorn', async (c) => {
+  // Cast handler: schema validates body shape, but the JSON-parse try/catch
+  // branch still emits a 400 from a non-schema-validation path. Runtime
+  // preserves the legacy invalid-JSON message. Auth-derivation migration
+  // (tagged_by → bearer-derived) scoped to Spec #60 cat-PR.
+  app.openapi(queueAddRoute, (async (c: Context) => {
     try {
       const data = await c.req.json();
       if (!data.thread_id) return c.json({ error: 'thread_id required' }, 400);
@@ -50,15 +55,15 @@ export function registerQueueRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         WHERE id = ?
       `).run(data.tagged_by || 'unknown', now, data.summary || null, data.thread_id);
 
-      return c.json({ success: true, thread_id: data.thread_id, queue_status: 'pending' });
+      return c.json({ success: true, thread_id: data.thread_id, queue_status: 'pending' }, 200);
     } catch (e) {
       return c.json({ error: 'Invalid JSON' }, 400);
     }
-  });
+  }) as any);
 
   // PATCH /api/queue/gorn/:threadId — update queue status (Decided/Defer/Withdraw — gorn only from browser)
-  app.patch('/api/queue/gorn/:threadId', async (c) => {
-    const threadId = parseInt(c.req.param('threadId'), 10);
+  app.openapi(queueUpdateRoute, (async (c: Context) => {
+    const threadId = parseInt(c.req.param('threadId') ?? '', 10);
     try {
       const data = await c.req.json();
       const allowed = ['decided', 'deferred', 'pending', 'withdrawn'];
@@ -75,9 +80,9 @@ export function registerQueueRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       sqlite.prepare('UPDATE forum_threads SET queue_status = ? WHERE id = ? AND category = ?')
         .run(data.status, threadId, 'gorn-queue');
 
-      return c.json({ success: true, thread_id: threadId, queue_status: data.status });
+      return c.json({ success: true, thread_id: threadId, queue_status: data.status }, 200);
     } catch (e) {
       return c.json({ error: 'Invalid JSON' }, 400);
     }
-  });
+  }) as any);
 }
