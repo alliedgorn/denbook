@@ -6,6 +6,7 @@ import { checkGuestPostRate, checkGuestContentLength, scanForInjection } from '.
 import { logSecurityEvent } from '../server/security-logger.ts';
 import { searchIndexUpsert } from '../search/routes.ts';
 import { handleThreadMessage, getFullThread, updateThreadStatus } from './handler.ts';
+import { emojiListRoute, emojiAddRoute, emojiRemoveRoute } from '../server/openapi.ts';
 
 // ============================================================================
 // Forum routes — Phase 2.1 of Library #102 (T#779)
@@ -686,12 +687,15 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     });
   });
 
-  app.get('/api/forum/emojis', (c) => {
+  app.openapi(emojiListRoute, (c) => {
     const rows = sqlite.prepare('SELECT emoji, added_by, created_at FROM emoji_whitelist ORDER BY created_at').all() as any[];
-    return c.json({ emoji: rows, total: rows.length });
+    return c.json({ emoji: rows, total: rows.length }, 200);
   });
 
-  app.post('/api/forum/emojis', async (c) => {
+  // Cast handler: schema-validated body shape conflicts with the legacy
+  // optional-beast-fallback derivation pattern. Runtime preserves current
+  // behavior; auth-derivation migration scoped to Spec #60 cat-PR.
+  app.openapi(emojiAddRoute, (async (c: Context) => {
     const data = await c.req.json();
     if (!data.emoji) return c.json({ error: 'emoji required' }, 400);
     const beast = data.beast || data.added_by || (hasSessionAuth(c) ? 'gorn' : '');
@@ -699,16 +703,16 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     const now = Date.now();
     sqlite.prepare('INSERT OR IGNORE INTO emoji_whitelist (emoji, added_by, created_at) VALUES (?, ?, ?)').run(data.emoji, beast, now);
     SUPPORTED_EMOJI = getSupportedEmoji();
-    return c.json({ added: data.emoji, by: beast, total: SUPPORTED_EMOJI.size });
-  });
+    return c.json({ added: data.emoji, by: beast, total: SUPPORTED_EMOJI.size }, 200);
+  }) as any);
 
-  app.delete('/api/forum/emojis/:emoji', (c) => {
+  app.openapi(emojiRemoveRoute, ((c: Context) => {
     if (!hasSessionAuth(c) && !isTrustedRequest(c)) return c.json({ error: 'Gorn-only' }, 403);
-    const emoji = decodeURIComponent(c.req.param('emoji'));
+    const emoji = decodeURIComponent(c.req.param('emoji') ?? '');
     sqlite.prepare('DELETE FROM emoji_whitelist WHERE emoji = ?').run(emoji);
     SUPPORTED_EMOJI = getSupportedEmoji();
-    return c.json({ removed: emoji, total: SUPPORTED_EMOJI.size });
-  });
+    return c.json({ removed: emoji, total: SUPPORTED_EMOJI.size }, 200);
+  }) as any);
 
   app.get('/api/reactions/supported', (c) => {
     return c.json({ emoji: [...SUPPORTED_EMOJI] });
