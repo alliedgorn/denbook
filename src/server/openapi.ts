@@ -97,6 +97,101 @@ export const authLogoutRoute = createRoute({
   },
 });
 
+// ============================================================================
+// /api/forum/emojis — emoji whitelist CRUD (Spec #55 Phase 2 emoji domain)
+// ============================================================================
+
+export const emojiListRoute = createRoute({
+  method: 'get',
+  path: '/api/forum/emojis',
+  tags: ['emoji'],
+  summary: 'List whitelisted forum emojis',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            emoji: z.array(z.object({
+              emoji: z.string(),
+              added_by: z.string().nullable(),
+              created_at: z.number(),
+            })),
+            total: z.number(),
+          }),
+        },
+      },
+      description: 'Whitelisted emoji list',
+    },
+  },
+});
+
+export const emojiAddRoute = createRoute({
+  method: 'post',
+  path: '/api/forum/emojis',
+  tags: ['emoji'],
+  summary: 'Add emoji to whitelist',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            emoji: z.string(),
+            beast: z.string().optional(),
+            added_by: z.string().optional(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            added: z.string(),
+            by: z.string(),
+            total: z.number(),
+          }),
+        },
+      },
+      description: 'Emoji added',
+    },
+    400: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Missing emoji or beast field',
+    },
+  },
+});
+
+export const emojiRemoveRoute = createRoute({
+  method: 'delete',
+  path: '/api/forum/emojis/{emoji}',
+  tags: ['emoji'],
+  summary: 'Remove emoji from whitelist (owner-only)',
+  request: {
+    params: z.object({
+      emoji: z.string(),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            removed: z.string(),
+            total: z.number(),
+          }),
+        },
+      },
+      description: 'Emoji removed',
+    },
+    403: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Owner-only — bearer or session required',
+    },
+  },
+});
+
 export const OPENAPI_INFO = {
   openapi: '3.0.0' as const,
   info: {
