@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
+import { settingsGetRoute, settingsUpdateRoute } from '../server/openapi.ts';
 
 interface SettingsHelpers {
   getSetting: (key: string) => string | null;
@@ -11,7 +12,7 @@ export function registerSettingsRoutes(app: OpenAPIHono, helpers: SettingsHelper
   const { getSetting, setSetting, logSecurityEvent } = helpers;
 
   // Get settings (no password hash exposed)
-  app.get('/api/settings', (c) => {
+  app.openapi(settingsGetRoute, (c) => {
     const authEnabled = getSetting('auth_enabled') === 'true';
     const localBypass = getSetting('auth_local_bypass') !== 'false';
     const hasPassword = !!getSetting('auth_password_hash');
@@ -22,11 +23,14 @@ export function registerSettingsRoutes(app: OpenAPIHono, helpers: SettingsHelper
       localBypass,
       hasPassword,
       vaultRepo
-    });
+    }, 200);
   });
 
   // Update settings (Gorn only — reject beast API calls)
-  app.post('/api/settings', async (c) => {
+  // Cast handler: multi-branch response-shape (200/400/401/403) vs strict
+  // zod-openapi handler typing. Runtime preserves current behavior; auth
+  // semantics retained verbatim (Spec #60 cat-PR scope).
+  app.openapi(settingsUpdateRoute, (async (c: Context) => {
     // Only allow from browser sessions (Gorn) or local requests, not beast API calls
     const asParam = c.req.query('as');
     if (asParam) {
@@ -119,6 +123,6 @@ export function registerSettingsRoutes(app: OpenAPIHono, helpers: SettingsHelper
       authEnabled: getSetting('auth_enabled') === 'true',
       localBypass: getSetting('auth_local_bypass') !== 'false',
       hasPassword: !!getSetting('auth_password_hash')
-    });
-  });
+    }, 200);
+  }) as any);
 }
