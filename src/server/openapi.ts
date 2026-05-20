@@ -268,6 +268,127 @@ export const settingsUpdateRoute = createRoute({
   },
 });
 
+// ============================================================================
+// /api/queue/gorn — Gorn queue CRUD (Spec #55 Phase 2 queue domain)
+// ============================================================================
+
+export const queueListRoute = createRoute({
+  method: 'get',
+  path: '/api/queue/gorn',
+  tags: ['queue'],
+  summary: 'List queued threads for Gorn',
+  request: {
+    query: z.object({
+      status: z.string().optional(),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            items: z.array(z.object({
+              thread_id: z.number(),
+              title: z.string(),
+              thread_status: z.string().nullable(),
+              queue_status: z.string().nullable(),
+              tagged_by: z.string().nullable(),
+              tagged_at: z.string().nullable(),
+              summary: z.string().nullable(),
+              message_count: z.number(),
+              created_at: z.string(),
+            })),
+            total: z.number(),
+          }),
+        },
+      },
+      description: 'Queue items filtered by queue_status (default: pending)',
+    },
+  },
+});
+
+export const queueAddRoute = createRoute({
+  method: 'post',
+  path: '/api/queue/gorn',
+  tags: ['queue'],
+  summary: 'Tag a thread into Gorn queue',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            thread_id: z.number(),
+            tagged_by: z.string().optional(),
+            summary: z.string().optional(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            success: z.literal(true),
+            thread_id: z.number(),
+            queue_status: z.literal('pending'),
+          }),
+        },
+      },
+      description: 'Thread tagged into queue',
+    },
+    400: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Missing thread_id or invalid JSON',
+    },
+  },
+});
+
+export const queueUpdateRoute = createRoute({
+  method: 'patch',
+  path: '/api/queue/gorn/{threadId}',
+  tags: ['queue'],
+  summary: 'Update queue status (Decided/Defer/Withdraw — Gorn-only from browser)',
+  request: {
+    params: z.object({
+      threadId: z.string(),
+    }),
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            status: z.string(),
+            as: z.string().optional(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            success: z.literal(true),
+            thread_id: z.number(),
+            queue_status: z.string(),
+          }),
+        },
+      },
+      description: 'Queue status updated',
+    },
+    400: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Missing/invalid status or invalid JSON',
+    },
+    403: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Browser callers must be Gorn',
+    },
+  },
+});
+
 
 export const OPENAPI_INFO = {
   openapi: '3.0.0' as const,
