@@ -1,10 +1,19 @@
+import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { eq, desc, sql } from 'drizzle-orm';
 import { db, supersedeLog } from '../db/index.ts';
+import {
+  supersedeListRoute,
+  supersedeChainRoute,
+  supersedeCreateRoute,
+} from '../server/openapi.ts';
 
 export function registerSupersedeRoutes(app: OpenAPIHono) {
   // List supersessions with optional filters
-  app.get('/api/supersede', (c) => {
+  // Cast handler: response includes a union of nullable-string fields
+  // (Drizzle row -> JSON) that TS narrows differently from the schema's
+  // structural union. Runtime preserves prior behavior.
+  app.openapi(supersedeListRoute, ((c: Context) => {
     const project = c.req.query('project');
     const limit = parseInt(c.req.query('limit') || '50');
     const offset = parseInt(c.req.query('offset') || '0');
@@ -46,12 +55,12 @@ export function registerSupersedeRoutes(app: OpenAPIHono) {
       total,
       limit,
       offset
-    });
-  });
+    }, 200);
+  }) as any);
 
   // Get supersede chain for a document (what superseded what)
-  app.get('/api/supersede/chain/:path', (c) => {
-    const docPath = decodeURIComponent(c.req.param('path'));
+  app.openapi(supersedeChainRoute, ((c: Context) => {
+    const docPath = decodeURIComponent(c.req.param('path') ?? '');
 
     // Find all supersessions where this doc was old or new using Drizzle
     const asOld = db.select()
@@ -77,11 +86,14 @@ export function registerSupersedeRoutes(app: OpenAPIHono) {
         reason: log.reason,
         superseded_at: new Date(log.supersededAt).toISOString()
       }))
-    });
-  });
+    }, 200);
+  }) as any);
 
   // Log a new supersession
-  app.post('/api/supersede', async (c) => {
+  // Cast handler: body validation now runs via schema (defaultHook handles
+  // malformed JSON); the inner try/catch preserves the prior 500-on-DB-error
+  // shape rather than letting Hono's default error path take over.
+  app.openapi(supersedeCreateRoute, (async (c: Context) => {
     try {
       const data = await c.req.json();
       if (!data.old_path) {
@@ -111,5 +123,5 @@ export function registerSupersedeRoutes(app: OpenAPIHono) {
         error: error instanceof Error ? error.message : 'Unknown error'
       }, 500);
     }
-  });
+  }) as any);
 }
