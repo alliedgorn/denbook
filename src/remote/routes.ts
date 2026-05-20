@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { execSync } from 'child_process';
+import { remoteStatusRoute, remoteAttachRoute, remoteDetachRoute } from '../server/openapi.ts';
 
 const REMOTE_SESSION = 'Mindlink';
 
@@ -17,7 +18,7 @@ export function registerRemoteRoutes(app: OpenAPIHono, helpers: RemoteHelpers) {
   let attachedBeastName: string | null = null;
 
   // GET /api/remote/status — which beast is currently attached
-  app.get('/api/remote/status', (c) => {
+  app.openapi(remoteStatusRoute, ((c: Context) => {
     // Verify the Remote session still exists and has a linked window
     if (attachedBeastName) {
       try {
@@ -35,11 +36,13 @@ export function registerRemoteRoutes(app: OpenAPIHono, helpers: RemoteHelpers) {
       }
     }
 
-    return c.json({ session_exists: !!attachedBeastName, attached_beast: attachedBeastName });
-  });
+    return c.json({ session_exists: !!attachedBeastName, attached_beast: attachedBeastName }, 200);
+  }) as any);
 
   // POST /api/remote/attach — attach a beast's claude window (local only — requires tmux)
-  app.post('/api/remote/attach', async (c) => {
+  // Cast handler: multi-branch response shape (200/400/403/404/500) conflicts with
+  // strict zod-openapi handler typing. Runtime preserves current behavior verbatim.
+  app.openapi(remoteAttachRoute, (async (c: Context) => {
     // Remote attach requires local tmux access — reject non-local requests cleanly
     if (!isLocalNetwork(c) && !hasSessionAuth(c)) {
       return c.json({ error: 'forbidden' }, 403);
@@ -94,18 +97,18 @@ export function registerRemoteRoutes(app: OpenAPIHono, helpers: RemoteHelpers) {
       execSync(`tmux select-window -t ${JSON.stringify(REMOTE_SESSION)}:1`, { timeout: 2000 });
 
       attachedBeastName = beastName;
-      return c.json({ attached: beastName, session: REMOTE_SESSION });
+      return c.json({ attached: beastName, session: REMOTE_SESSION }, 200);
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : 'Attach failed' }, 500);
     }
-  });
+  }) as any);
 
   // POST /api/remote/detach — detach current beast (local only — requires tmux)
-  app.post('/api/remote/detach', (_c) => {
+  app.openapi(remoteDetachRoute, ((c: Context) => {
     try {
       execSync(`tmux unlink-window -k -t ${JSON.stringify(REMOTE_SESSION)}:1`, { timeout: 2000 });
     } catch { /* already detached */ }
     attachedBeastName = null;
-    return _c.json({ detached: true });
-  });
+    return c.json({ detached: true as const }, 200);
+  }) as any);
 }

@@ -516,6 +516,96 @@ export const supersedeCreateRoute = createRoute({
   },
 });
 
+// ============================================================================
+// /api/remote/* — remote tmux attach/detach (Spec #55 Phase 2 remote domain)
+// ============================================================================
+
+export const remoteStatusRoute = createRoute({
+  method: 'get',
+  path: '/api/remote/status',
+  tags: ['remote'],
+  summary: 'Get remote session attach status',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            session_exists: z.boolean(),
+            attached_beast: z.string().nullable(),
+          }),
+        },
+      },
+      description: 'Whether a beast window is linked into the remote tmux session and which beast (if any)',
+    },
+  },
+});
+
+export const remoteAttachRoute = createRoute({
+  method: 'post',
+  path: '/api/remote/attach',
+  tags: ['remote'],
+  summary: 'Attach a beast claude window into the remote tmux session (local only)',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            beast: z.string(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            attached: z.string(),
+            session: z.string(),
+          }),
+        },
+      },
+      description: 'Beast window linked into remote session',
+    },
+    400: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Missing or invalid beast name',
+    },
+    403: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Forbidden — requires local network or session auth',
+    },
+    404: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'No tmux session for requested beast',
+    },
+    500: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Attach operation failed',
+    },
+  },
+});
+
+export const remoteDetachRoute = createRoute({
+  method: 'post',
+  path: '/api/remote/detach',
+  tags: ['remote'],
+  summary: 'Detach the currently-linked beast window from the remote tmux session',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            detached: z.literal(true),
+          }),
+        },
+      },
+      description: 'Remote session detached (idempotent — succeeds even when no window was linked)',
+    },
+  },
+});
+
 
 export const OPENAPI_INFO = {
   openapi: '3.0.0' as const,
