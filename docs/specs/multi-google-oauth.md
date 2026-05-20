@@ -7,7 +7,7 @@
 
 ## Problem
 
-The current Google OAuth integration in Den Book stores at most one Google account per server (`oauth_tokens WHERE provider='google' LIMIT 1`). Gorn has multiple Google accounts and needs the pack to collaborate on Lada's ERP project using his professional account (gorn.wutthikorn@gmail.com) — Drive, Sheets, Docs, Gmail, and Calendar.
+The current Google OAuth integration in Den Book stores at most one Google account per server (`oauth_tokens WHERE provider='google' LIMIT 1`). Gorn has multiple Google accounts and needs the pack to collaborate on Lada's ERP project using his professional account (gorn@example.com) — Drive, Sheets, Docs, Gmail, and Calendar.
 
 Three gaps:
 
@@ -24,7 +24,7 @@ Multi-account Google OAuth + per-beast per-service grants table.
 ### Architecture
 
 **Multi-account OAuth**:
-- `oauth_tokens` schema already includes a `user_id` column (unused today). Use it: `user_id` = the Google account's email (e.g. `gorn.wutthikorn@gmail.com`).
+- `oauth_tokens` schema already includes a `user_id` column (unused today). Use it: `user_id` = the Google account's email (e.g. `gorn@example.com`).
 - Add UNIQUE constraint on `(provider, user_id)` — re-authorizing the same account updates the existing row; authorizing a different account inserts a new row.
 - OAuth callback: on successful token exchange, fetch the Google userinfo `email`, upsert against `(provider='google', user_id=email)`.
 
@@ -167,7 +167,7 @@ Each Google service maps to a specific OAuth scope URL. Named explicitly so the 
 
 ## Scope
 
-**In scope**: all current and near-term Google integrations (Gmail, Drive, Sheets, Docs, Calendar). Multi-account for `gorn.wutthikorn@gmail.com` + any future personal/other accounts Gorn adds.
+**In scope**: all current and near-term Google integrations (Gmail, Drive, Sheets, Docs, Calendar). Multi-account for `gorn@example.com` + any future personal/other accounts Gorn adds.
 
 **Out of scope**: 
 - Third-party OAuth identity providers other than Google (Withings, future provider).

@@ -27,7 +27,7 @@ No DMs are created. Beasts see the message as a notification and reply through t
 **TELEGRAM_BOTS** — JSON array in oracle-v2 `.env`:
 ```
 TELEGRAM_BOTS=[{"token":"...","beast":"karo"},{"token":"...","beast":"sable"},{"token":"...","beast":"leonard"},{"token":"...","beast":"gnarl"}]
-TELEGRAM_CHAT_ID=1786526199
+TELEGRAM_CHAT_ID=1234567890
 ```
 
 Fallback: legacy single-bot vars (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_FORWARD_TO`) still supported.

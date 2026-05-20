@@ -45,7 +45,7 @@ Reuse existing `oauth_tokens` table and `encryptToken()`/`decryptToken()` functi
 -- No schema changes needed. Existing table supports multiple providers.
 INSERT INTO oauth_tokens (provider, user_id, access_token_enc, refresh_token_enc,
   access_iv, access_tag, refresh_iv, refresh_tag, expires_at, scopes, created_at, updated_at)
-VALUES ('google', 'gorn@gmail.com', ..., ..., ..., ..., ..., ..., ?,
+VALUES ('google', 'gorn@example.com', ..., ..., ..., ..., ..., ..., ?,
   'https://www.googleapis.com/auth/gmail.readonly', ?, ?)
 ```
 
@@ -151,7 +151,7 @@ Note (Talon): The `q` parameter is passed through to Gmail's own search API. Gma
   "threadId": "thread-id",
   "snippet": "Preview text...",
   "from": "sender@example.com",
-  "to": "gorn@gmail.com",
+  "to": "gorn@example.com",
   "subject": "Subject line",
   "date": "2026-03-30T12:00:00Z",
   "labels": ["INBOX", "UNREAD"],
