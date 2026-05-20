@@ -606,6 +606,75 @@ export const remoteDetachRoute = createRoute({
   },
 });
 
+// ============================================================================
+// /api/pack — pack roster + spinner verbs (Spec #55 Phase 2 pack domain)
+// ============================================================================
+
+export const packListRoute = createRoute({
+  method: 'get',
+  path: '/api/pack',
+  tags: ['pack'],
+  summary: 'List pack roster with online state + owner presence',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            beasts: z.array(z.object({
+              name: z.string(),
+              displayName: z.string(),
+              animal: z.string(),
+              avatarUrl: z.string().nullable(),
+              bio: z.string().nullable(),
+              interests: z.string().nullable(),
+              themeColor: z.string().nullable(),
+              role: z.string().nullable(),
+              birthdate: z.string().nullable(),
+              sex: z.string().nullable(),
+              restStatus: z.string().nullable(),
+              createdAt: z.number(),
+              updatedAt: z.number(),
+              online: z.boolean(),
+              status: z.string(),
+              contextPct: z.number().nullable(),
+              sessionName: z.string(),
+            })),
+            owner: z.object({
+              name: z.string(),
+              online: z.boolean(),
+              status: z.string(),
+              last_active_at: z.string().nullable(),
+            }),
+          }),
+        },
+      },
+      description: 'Pack roster (beasts) + Gorn presence (owner) with tmux + WS heartbeat state',
+    },
+  },
+});
+
+export const packSpinnerVerbsRoute = createRoute({
+  method: 'get',
+  path: '/api/pack/spinner-verbs',
+  tags: ['pack'],
+  summary: 'Aggregated spinnerVerbs config across per-Beast worktrees',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            beasts: z.record(z.string(), z.array(z.string())),
+            allVerbs: z.array(z.string()),
+            totalUnique: z.number(),
+            totalBeasts: z.number(),
+          }),
+        },
+      },
+      description: 'Spinner verbs aggregated from each beast worktree .claude/settings.local.json',
+    },
+  },
+});
+
 
 export const OPENAPI_INFO = {
   openapi: '3.0.0' as const,
