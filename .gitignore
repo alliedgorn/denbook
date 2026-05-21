@@ -44,3 +44,6 @@ test-results/
 vault-report.html
 vault-repos.html
 vault-data.json
+
+# Runtime state (per Decree #70 — belongs at ~/.oracle/, not source tree)
+data/
