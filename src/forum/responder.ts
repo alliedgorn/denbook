@@ -22,27 +22,50 @@ function getOracles(): Record<string, { workspace: string; memoryDir: string }> 
       const map: Record<string, { workspace: string; memoryDir: string }> = {};
       for (const b of beasts) {
         const name = b.name.toLowerCase();
-        const workspace = name === 'zaghnal'
-          ? '/home/gorn/workspace/gorn-oracle'
-          : `/home/gorn/workspace/${name}`;
-        const memoryDir = name === 'zaghnal'
-          ? '/home/gorn/.claude/projects/-home-gorn-workspace-gorn-oracle/memory'
-          : `/home/gorn/.claude/projects/-home-gorn-workspace-${name}/memory`;
+        const workspace =
+          name === 'zaghnal' ? '/home/gorn/workspace/gorn-oracle' : `/home/gorn/workspace/${name}`;
+        const memoryDir =
+          name === 'zaghnal'
+            ? '/home/gorn/.claude/projects/-home-gorn-workspace-gorn-oracle/memory'
+            : `/home/gorn/.claude/projects/-home-gorn-workspace-${name}/memory`;
         map[name] = { workspace, memoryDir };
       }
       return map;
     }
-  } catch { /* beast_profiles may not exist */ }
+  } catch {
+    /* beast_profiles may not exist */
+  }
 
   // Fallback
   return {
-    karo:    { workspace: '/home/gorn/workspace/karo',        memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-karo/memory' },
-    zaghnal: { workspace: '/home/gorn/workspace/gorn-oracle', memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-gorn-oracle/memory' },
-    gnarl:   { workspace: '/home/gorn/workspace/gnarl',       memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-gnarl/memory' },
-    bertus:  { workspace: '/home/gorn/workspace/bertus',      memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-bertus/memory' },
-    leonard: { workspace: '/home/gorn/workspace/leonard',     memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-leonard/memory' },
-    mara:    { workspace: '/home/gorn/workspace/mara',        memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-mara/memory' },
-    rax:     { workspace: '/home/gorn/workspace/rax',         memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-rax/memory' },
+    karo: {
+      workspace: '/home/gorn/workspace/karo',
+      memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-karo/memory',
+    },
+    zaghnal: {
+      workspace: '/home/gorn/workspace/gorn-oracle',
+      memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-gorn-oracle/memory',
+    },
+    gnarl: {
+      workspace: '/home/gorn/workspace/gnarl',
+      memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-gnarl/memory',
+    },
+    bertus: {
+      workspace: '/home/gorn/workspace/bertus',
+      memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-bertus/memory',
+    },
+    leonard: {
+      workspace: '/home/gorn/workspace/leonard',
+      memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-leonard/memory',
+    },
+    mara: {
+      workspace: '/home/gorn/workspace/mara',
+      memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-mara/memory',
+    },
+    rax: {
+      workspace: '/home/gorn/workspace/rax',
+      memoryDir: '/home/gorn/.claude/projects/-home-gorn-workspace-rax/memory',
+    },
   };
 }
 
@@ -65,7 +88,7 @@ function findTmuxPane(oracle: string): string | null {
     // List all tmux panes with their PID, command, and path
     const output = execSync(
       `tmux list-panes -a -F "#{session_name}:#{window_index}.#{pane_index} #{pane_pid} #{pane_current_command} #{pane_current_path}" 2>/dev/null || true`,
-      { encoding: 'utf-8', timeout: 5000 }
+      { encoding: 'utf-8', timeout: 5000 },
     ).trim();
 
     if (!output) return null;
@@ -85,14 +108,18 @@ function findTmuxPane(oracle: string): string | null {
 
       // Indirect match: pane is bash/zsh but has a claude child process
       try {
-        const children = execSync(
-          `pgrep -P ${panePid} -a 2>/dev/null || true`,
-          { encoding: 'utf-8', timeout: 3000 }
-        ).trim();
+        const children = execSync(`pgrep -P ${panePid} -a 2>/dev/null || true`, {
+          encoding: 'utf-8',
+          timeout: 3000,
+        }).trim();
         if (children.includes('claude')) return pane;
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
-  } catch { /* skip */ }
+  } catch {
+    /* skip */
+  }
 
   return null;
 }
@@ -101,7 +128,14 @@ function findTmuxPane(oracle: string): string | null {
  * Inject a message into a live Claude Code session via tmux send-keys.
  * The message becomes user input in the session.
  */
-function sendToLiveSession(pane: string, oracle: string, threadId: number, title: string, senderName: string, message: string): boolean {
+function sendToLiveSession(
+  pane: string,
+  oracle: string,
+  threadId: number,
+  title: string,
+  senderName: string,
+  message: string,
+): boolean {
   const preview = message.length > 300 ? message.slice(0, 300) + '...' : message;
 
   // Craft the injected prompt — the Oracle will process this as a user message
@@ -114,7 +148,10 @@ function sendToLiveSession(pane: string, oracle: string, threadId: number, title
     }
     return success;
   } catch (err) {
-    console.error(`[notify] Failed to queue for ${oracle}:`, err instanceof Error ? err.message : err);
+    console.error(
+      `[notify] Failed to queue for ${oracle}:`,
+      err instanceof Error ? err.message : err,
+    );
     return false;
   }
 }
@@ -156,18 +193,26 @@ function extractOracleFromAuthor(author: string): string | null {
 /**
  * Build prompt context from thread messages.
  */
-function buildPrompt(oracle: string, title: string, messages: ForumMessage[], turnNumber: number): string {
+function buildPrompt(
+  oracle: string,
+  title: string,
+  messages: ForumMessage[],
+  turnNumber: number,
+): string {
   const recentMessages = messages.slice(-15); // Last 15 messages for context
-  const context = recentMessages.map(m => {
-    const author = m.author || m.role;
-    return `[${author}]: ${m.content}`;
-  }).join('\n\n');
+  const context = recentMessages
+    .map((m) => {
+      const author = m.author || m.role;
+      return `[${author}]: ${m.content}`;
+    })
+    .join('\n\n');
 
-  const turnGuidance = turnNumber >= MAX_TURNS - 2
-    ? '\n\nThis conversation has been going for a while. Wrap up with a clear conclusion or action items.'
-    : turnNumber >= 3
-      ? '\n\nIf the conversation has reached a natural conclusion (agreement, action items decided, question answered), end with "[RESOLVED]" on its own line. Otherwise continue naturally.'
-      : '';
+  const turnGuidance =
+    turnNumber >= MAX_TURNS - 2
+      ? '\n\nThis conversation has been going for a while. Wrap up with a clear conclusion or action items.'
+      : turnNumber >= 3
+        ? '\n\nIf the conversation has reached a natural conclusion (agreement, action items decided, question answered), end with "[RESOLVED]" on its own line. Otherwise continue naturally.'
+        : '';
 
   return `You are responding to a message in the Oracle forum thread "${title}".
 
@@ -191,10 +236,12 @@ function invokeOracle(oracle: string, prompt: string): Promise<string> {
     const claudePath = '/home/gorn/.local/bin/claude';
     const args = [
       '-p',
-      '--model', 'sonnet',
+      '--model',
+      'sonnet',
       '--no-session-persistence',
-      '--max-budget-usd', '0.50',
-      prompt
+      '--max-budget-usd',
+      '0.50',
+      prompt,
     ];
 
     const child = spawn(claudePath, args, {
@@ -207,8 +254,12 @@ function invokeOracle(oracle: string, prompt: string): Promise<string> {
     let stdout = '';
     let stderr = '';
 
-    child.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
-    child.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+    child.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+    child.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
 
     child.on('close', (code) => {
       if (code === 0 && stdout.trim()) {
@@ -246,7 +297,7 @@ function cleanResponse(response: string): string {
 async function saveConversationMemory(
   threadId: number,
   title: string,
-  messages: ForumMessage[]
+  messages: ForumMessage[],
 ): Promise<void> {
   // Find all participating oracles
   const participants = new Set<string>();
@@ -259,13 +310,18 @@ async function saveConversationMemory(
 
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10);
-  const slug = title.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40);
+  const slug = title
+    .replace(/[^a-z0-9]+/gi, '-')
+    .toLowerCase()
+    .slice(0, 40);
 
   // Build conversation transcript
-  const transcript = messages.map(m => {
-    const author = m.author || m.role;
-    return `**${author}**: ${m.content}`;
-  }).join('\n\n---\n\n');
+  const transcript = messages
+    .map((m) => {
+      const author = m.author || m.role;
+      return `**${author}**: ${m.content}`;
+    })
+    .join('\n\n---\n\n');
 
   const participantNames = [...participants].join(', ');
 
@@ -302,10 +358,16 @@ Output ONLY the bullet point summary, nothing else.`;
     if (!existsSync(psiFilepath)) {
       mkdirSync(learningsDir, { recursive: true });
       try {
-        writeFileSync(psiFilepath, `---\ndate: ${dateStr}\nsource: forum-thread:${threadId}\ntitle: "${title}"\nparticipants: [${[...participants].map(p => `"${p}"`).join(', ')}]\ntags: [forum, auto-responder]\n---\n\n# Forum: ${title}\n\n## Summary\n\n${summary}\n\n## Full Conversation\n\n${transcript}\n`);
+        writeFileSync(
+          psiFilepath,
+          `---\ndate: ${dateStr}\nsource: forum-thread:${threadId}\ntitle: "${title}"\nparticipants: [${[...participants].map((p) => `"${p}"`).join(', ')}]\ntags: [forum, auto-responder]\n---\n\n# Forum: ${title}\n\n## Summary\n\n${summary}\n\n## Full Conversation\n\n${transcript}\n`,
+        );
         console.log(`[memory] Saved to ${oracle} ψ: ${psiFilename}`);
       } catch (err) {
-        console.error(`[memory] Failed ψ save for ${oracle}:`, err instanceof Error ? err.message : err);
+        console.error(
+          `[memory] Failed ψ save for ${oracle}:`,
+          err instanceof Error ? err.message : err,
+        );
       }
     }
 
@@ -350,7 +412,10 @@ ${summary}
 
       console.log(`[memory] Updated ${oracle} MEMORY.md index`);
     } catch (err) {
-      console.error(`[memory] Failed persistent save for ${oracle}:`, err instanceof Error ? err.message : err);
+      console.error(
+        `[memory] Failed persistent save for ${oracle}:`,
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 }
@@ -416,7 +481,9 @@ async function runConversation(threadId: number, title: string): Promise<void> {
         author: `${nextResponder}@auto-responder`,
       });
 
-      console.log(`${tag} Turn ${turn}: ${nextResponder} posted (${cleanedResponse.length} chars)${done ? ' [RESOLVED]' : ''}`);
+      console.log(
+        `${tag} Turn ${turn}: ${nextResponder} posted (${cleanedResponse.length} chars)${done ? ' [RESOLVED]' : ''}`,
+      );
 
       if (done) {
         updateThreadStatus(threadId, 'answered');
@@ -428,10 +495,12 @@ async function runConversation(threadId: number, title: string): Promise<void> {
       }
 
       // Brief pause between turns
-      await new Promise(r => setTimeout(r, TURN_DELAY_MS));
-
+      await new Promise((r) => setTimeout(r, TURN_DELAY_MS));
     } catch (err) {
-      console.error(`${tag} Turn ${turn}: ${nextResponder} failed:`, err instanceof Error ? err.message : err);
+      console.error(
+        `${tag} Turn ${turn}: ${nextResponder} failed:`,
+        err instanceof Error ? err.message : err,
+      );
       break;
     } finally {
       activeDispatch = null;
@@ -534,23 +603,36 @@ export function maybeAutoRespond(threadId: number, title: string): void {
     const senderName = lastMessage.author || lastMessage.role;
 
     // Inject directly into the live session — the real Oracle handles it
-    const sent = sendToLiveSession(pane, nextResponder, threadId, title, senderName, lastMessage.content);
+    const sent = sendToLiveSession(
+      pane,
+      nextResponder,
+      threadId,
+      title,
+      senderName,
+      lastMessage.content,
+    );
     if (sent) {
-      console.log(`[responder] Injected into ${nextResponder}'s live session (${pane}) — real Oracle will handle it`);
+      console.log(
+        `[responder] Injected into ${nextResponder}'s live session (${pane}) — real Oracle will handle it`,
+      );
       return;
     }
     // If tmux injection failed, fall through to auto-responder
-    console.log(`[responder] tmux injection failed for ${nextResponder} — falling back to auto-responder`);
+    console.log(
+      `[responder] tmux injection failed for ${nextResponder} — falling back to auto-responder`,
+    );
   }
 
   // No live session — auto-respond immediately
   activeConversations.add(threadId);
-  console.log(`[responder] No live session for ${nextResponder} — auto-responding in thread #${threadId} ("${title}")`);
+  console.log(
+    `[responder] No live session for ${nextResponder} — auto-responding in thread #${threadId} ("${title}")`,
+  );
   queue.push({ threadId, oracle: targetOracle, title });
 
   // Start processing if not already running
   if (!activeDispatch) {
-    processQueue().catch(err => {
+    processQueue().catch((err) => {
       console.error('[responder] Queue processing error:', err);
       activeConversations.delete(threadId);
     });

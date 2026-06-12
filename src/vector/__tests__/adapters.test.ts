@@ -111,7 +111,9 @@ describe('createVectorStore factory', () => {
     expect(store.name).toBe('sqlite-vec');
     expect(store).toBeInstanceOf(SqliteVecAdapter);
     // Cleanup
-    try { fs.unlinkSync(tmpDb); } catch {}
+    try {
+      fs.unlinkSync(tmpDb);
+    } catch {}
   });
 
   test('respects ORACLE_VECTOR_DB env', () => {
@@ -154,13 +156,18 @@ describe('SqliteVecAdapter + Ollama', () => {
   afterAll(async () => {
     if (store) await store.close();
     if (tmpDb) {
-      try { fs.unlinkSync(tmpDb); } catch {}
+      try {
+        fs.unlinkSync(tmpDb);
+      } catch {}
     }
   });
 
   test('connect + ensureCollection', async () => {
     await setup();
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     await store.connect();
     await store.ensureCollection();
@@ -171,7 +178,10 @@ describe('SqliteVecAdapter + Ollama', () => {
   });
 
   test('addDocuments', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     await store.addDocuments(TEST_DOCS);
 
@@ -180,7 +190,10 @@ describe('SqliteVecAdapter + Ollama', () => {
   });
 
   test('query: semantic search', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     const result = await store.query('git history preservation', 3);
 
@@ -196,7 +209,10 @@ describe('SqliteVecAdapter + Ollama', () => {
   });
 
   test('query: with where filter', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     const result = await store.query('search technology', 5, { type: 'learning' });
 
@@ -207,7 +223,10 @@ describe('SqliteVecAdapter + Ollama', () => {
   });
 
   test('queryById: nearest neighbors', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     const result = await store.queryById('test_1', 3);
 
@@ -218,7 +237,10 @@ describe('SqliteVecAdapter + Ollama', () => {
   });
 
   test('getAllEmbeddings', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     const all = await store.getAllEmbeddings!();
 
@@ -229,7 +251,10 @@ describe('SqliteVecAdapter + Ollama', () => {
   });
 
   test('deleteCollection + getStats returns 0', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     await store.deleteCollection();
     // Need to reconnect since tables were dropped
@@ -263,14 +288,19 @@ describe('ChromaMcpAdapter', () => {
 
   afterAll(async () => {
     if (store && chromaAvailable) {
-      try { await store.deleteCollection(); } catch {}
+      try {
+        await store.deleteCollection();
+      } catch {}
       await store.close();
     }
   });
 
   test('connect + ensureCollection', async () => {
     await setup();
-    if (!chromaAvailable) { console.log('  [SKIP] ChromaDB not available'); return; }
+    if (!chromaAvailable) {
+      console.log('  [SKIP] ChromaDB not available');
+      return;
+    }
 
     await store.ensureCollection();
     const info = await store.getCollectionInfo();
@@ -278,7 +308,10 @@ describe('ChromaMcpAdapter', () => {
   });
 
   test('addDocuments + query', async () => {
-    if (!chromaAvailable) { console.log('  [SKIP] ChromaDB not available'); return; }
+    if (!chromaAvailable) {
+      console.log('  [SKIP] ChromaDB not available');
+      return;
+    }
 
     await store.addDocuments(TEST_DOCS);
     const stats = await store.getStats();
@@ -290,7 +323,10 @@ describe('ChromaMcpAdapter', () => {
   });
 
   test.skip('queryById (pre-existing safeJsonParse single-quote bug)', async () => {
-    if (!chromaAvailable) { console.log('  [SKIP] ChromaDB not available'); return; }
+    if (!chromaAvailable) {
+      console.log('  [SKIP] ChromaDB not available');
+      return;
+    }
 
     const result = await store.queryById('test_1', 2);
     expect(result.ids.length).toBeGreaterThan(0);
@@ -323,13 +359,18 @@ describe('LanceDBAdapter + Ollama', () => {
   afterAll(async () => {
     if (store) await store.close();
     if (tmpDir) {
-      try { fs.rmSync(tmpDir, { recursive: true }); } catch {}
+      try {
+        fs.rmSync(tmpDir, { recursive: true });
+      } catch {}
     }
   });
 
   test('connect + ensureCollection', async () => {
     await setup();
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     await store.connect();
     await store.ensureCollection();
@@ -340,7 +381,10 @@ describe('LanceDBAdapter + Ollama', () => {
   });
 
   test('addDocuments', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     await store.addDocuments(TEST_DOCS);
 
@@ -349,7 +393,10 @@ describe('LanceDBAdapter + Ollama', () => {
   });
 
   test('query: semantic search', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     const result = await store.query('git history preservation', 3);
 
@@ -363,7 +410,10 @@ describe('LanceDBAdapter + Ollama', () => {
   });
 
   test('query: with where filter', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     const result = await store.query('search technology', 5, { type: 'learning' });
 
@@ -373,7 +423,10 @@ describe('LanceDBAdapter + Ollama', () => {
   });
 
   test('queryById: nearest neighbors', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     const result = await store.queryById('test_1', 3);
 
@@ -383,7 +436,10 @@ describe('LanceDBAdapter + Ollama', () => {
   });
 
   test('getAllEmbeddings', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     const all = await store.getAllEmbeddings!();
 
@@ -394,7 +450,10 @@ describe('LanceDBAdapter + Ollama', () => {
   });
 
   test('deleteCollection + getStats returns 0', async () => {
-    if (!available) { console.log('  [SKIP] Ollama not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama not available');
+      return;
+    }
 
     await store.deleteCollection();
     await store.ensureCollection();
@@ -434,14 +493,19 @@ describe('QdrantAdapter + Ollama', () => {
 
   afterAll(async () => {
     if (store && available) {
-      try { await store.deleteCollection(); } catch {}
+      try {
+        await store.deleteCollection();
+      } catch {}
       await store.close();
     }
   });
 
   test('connect + ensureCollection', async () => {
     await setup();
-    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama or Qdrant not available');
+      return;
+    }
 
     await store.connect();
     await store.ensureCollection();
@@ -451,19 +515,25 @@ describe('QdrantAdapter + Ollama', () => {
   });
 
   test('addDocuments', async () => {
-    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama or Qdrant not available');
+      return;
+    }
 
     await store.addDocuments(TEST_DOCS);
 
     // Qdrant is eventually consistent — wait briefly
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
 
     const stats = await store.getStats();
     expect(stats.count).toBe(5);
   });
 
   test('query: semantic search', async () => {
-    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama or Qdrant not available');
+      return;
+    }
 
     const result = await store.query('git history preservation', 3);
 
@@ -477,7 +547,10 @@ describe('QdrantAdapter + Ollama', () => {
   });
 
   test('query: with where filter', async () => {
-    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama or Qdrant not available');
+      return;
+    }
 
     const result = await store.query('search technology', 5, { type: 'learning' });
 
@@ -487,7 +560,10 @@ describe('QdrantAdapter + Ollama', () => {
   });
 
   test('queryById: nearest neighbors', async () => {
-    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama or Qdrant not available');
+      return;
+    }
 
     const result = await store.queryById('test_1', 3);
 
@@ -497,7 +573,10 @@ describe('QdrantAdapter + Ollama', () => {
   });
 
   test('deleteCollection + recreate', async () => {
-    if (!available) { console.log('  [SKIP] Ollama or Qdrant not available'); return; }
+    if (!available) {
+      console.log('  [SKIP] Ollama or Qdrant not available');
+      return;
+    }
 
     await store.deleteCollection();
     await store.ensureCollection();

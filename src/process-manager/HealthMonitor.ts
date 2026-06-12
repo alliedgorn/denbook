@@ -27,7 +27,7 @@ const defaultOptions: Required<HealthCheckOptions> = {
   baseUrl: 'http://127.0.0.1',
   healthPath: '/health',
   readinessPath: '/readiness',
-  shutdownPath: '/shutdown'
+  shutdownPath: '/shutdown',
 };
 
 /**
@@ -35,7 +35,7 @@ const defaultOptions: Required<HealthCheckOptions> = {
  */
 export async function isPortInUse(
   port: number,
-  options: HealthCheckOptions = {}
+  options: HealthCheckOptions = {},
 ): Promise<boolean> {
   const opts = { ...defaultOptions, ...options };
   try {
@@ -55,7 +55,7 @@ export async function isPortInUse(
 export async function waitForHealth(
   port: number,
   timeoutMs: number = 30000,
-  options: HealthCheckOptions = {}
+  options: HealthCheckOptions = {},
 ): Promise<boolean> {
   const opts = { ...defaultOptions, ...options };
   const start = Date.now();
@@ -67,7 +67,7 @@ export async function waitForHealth(
     } catch {
       logger.debug('SYSTEM', 'Service not ready yet, will retry', { port });
     }
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
   }
   return false;
 }
@@ -79,13 +79,13 @@ export async function waitForHealth(
 export async function waitForPortFree(
   port: number,
   timeoutMs: number = 10000,
-  options: HealthCheckOptions = {}
+  options: HealthCheckOptions = {},
 ): Promise<boolean> {
   const start = Date.now();
 
   while (Date.now() - start < timeoutMs) {
     if (!(await isPortInUse(port, options))) return true;
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
   }
   return false;
 }
@@ -97,13 +97,13 @@ export async function waitForPortFree(
  */
 export async function httpShutdown(
   port: number,
-  options: HealthCheckOptions = {}
+  options: HealthCheckOptions = {},
 ): Promise<boolean> {
   const opts = { ...defaultOptions, ...options };
 
   try {
     const response = await fetch(`${opts.baseUrl}:${port}${opts.shutdownPath}`, {
-      method: 'POST'
+      method: 'POST',
     });
     if (!response.ok) {
       logger.warn('SYSTEM', 'Shutdown request returned error', { port, status: response.status });
@@ -125,7 +125,7 @@ export async function httpShutdown(
  */
 export async function getWorkerStatus(
   port: number,
-  options: HealthCheckOptions = {}
+  options: HealthCheckOptions = {},
 ): Promise<{ running: boolean; healthy: boolean }> {
   const opts = { ...defaultOptions, ...options };
 
@@ -148,14 +148,14 @@ export async function getWorkerStatus(
 export async function getWorkerVersion(
   port: number,
   versionPath: string = '/version',
-  options: HealthCheckOptions = {}
+  options: HealthCheckOptions = {},
 ): Promise<string | null> {
   const opts = { ...defaultOptions, ...options };
 
   try {
     const response = await fetch(`${opts.baseUrl}:${port}${versionPath}`);
     if (!response.ok) return null;
-    const data = await response.json() as { version: string };
+    const data = (await response.json()) as { version: string };
     return data.version;
   } catch {
     return null;

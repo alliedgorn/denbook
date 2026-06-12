@@ -22,7 +22,10 @@ export function registerAuditRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // Closes localhost-host attacker pretending bertus/talon via ?as= query param.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (caller !== 'gorn' && !AUDIT_READ_ALLOWLIST.includes(caller)) {
       return c.json({ error: 'Audit logs are restricted to Gorn and security team' }, 403);
@@ -42,12 +45,42 @@ export function registerAuditRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const params: any[] = [];
     const countParams: any[] = [];
 
-    if (actor) { query += ' AND actor = ?'; countQuery += ' AND actor = ?'; params.push(actor); countParams.push(actor); }
-    if (resourceType) { query += ' AND resource_type = ?'; countQuery += ' AND resource_type = ?'; params.push(resourceType); countParams.push(resourceType); }
-    if (statusCode) { query += ' AND status_code = ?'; countQuery += ' AND status_code = ?'; params.push(parseInt(statusCode)); countParams.push(parseInt(statusCode)); }
-    if (method) { query += ' AND request_method = ?'; countQuery += ' AND request_method = ?'; params.push(method.toUpperCase()); countParams.push(method.toUpperCase()); }
-    if (requestId) { query += ' AND request_id = ?'; countQuery += ' AND request_id = ?'; params.push(requestId); countParams.push(requestId); }
-    if (since) { query += ' AND datetime(timestamp) >= datetime(?)'; countQuery += ' AND datetime(timestamp) >= datetime(?)'; params.push(since); countParams.push(since); }
+    if (actor) {
+      query += ' AND actor = ?';
+      countQuery += ' AND actor = ?';
+      params.push(actor);
+      countParams.push(actor);
+    }
+    if (resourceType) {
+      query += ' AND resource_type = ?';
+      countQuery += ' AND resource_type = ?';
+      params.push(resourceType);
+      countParams.push(resourceType);
+    }
+    if (statusCode) {
+      query += ' AND status_code = ?';
+      countQuery += ' AND status_code = ?';
+      params.push(parseInt(statusCode));
+      countParams.push(parseInt(statusCode));
+    }
+    if (method) {
+      query += ' AND request_method = ?';
+      countQuery += ' AND request_method = ?';
+      params.push(method.toUpperCase());
+      countParams.push(method.toUpperCase());
+    }
+    if (requestId) {
+      query += ' AND request_id = ?';
+      countQuery += ' AND request_id = ?';
+      params.push(requestId);
+      countParams.push(requestId);
+    }
+    if (since) {
+      query += ' AND datetime(timestamp) >= datetime(?)';
+      countQuery += ' AND datetime(timestamp) >= datetime(?)';
+      params.push(since);
+      countParams.push(since);
+    }
     query += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
 
@@ -61,19 +94,52 @@ export function registerAuditRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#808 — requireBeastIdentity cascade (replaces ?as= + isTrustedRequest read-bypass).
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (caller !== 'gorn' && !AUDIT_READ_ALLOWLIST.includes(caller)) {
       return c.json({ error: 'Audit stats are restricted to Gorn and security team' }, 403);
     }
 
-    const total = (sqlite.prepare('SELECT COUNT(*) as count FROM audit_log').get() as any)?.count || 0;
-    const denied = (sqlite.prepare("SELECT COUNT(*) as count FROM audit_log WHERE status_code = 403").get() as any)?.count || 0;
-    const errors = (sqlite.prepare("SELECT COUNT(*) as count FROM audit_log WHERE status_code >= 500").get() as any)?.count || 0;
-    const byActor = sqlite.prepare('SELECT actor, COUNT(*) as count FROM audit_log GROUP BY actor ORDER BY count DESC LIMIT 10').all();
-    const byResource = sqlite.prepare('SELECT resource_type, COUNT(*) as count FROM audit_log GROUP BY resource_type ORDER BY count DESC LIMIT 10').all();
-    const byMethod = sqlite.prepare('SELECT request_method, COUNT(*) as count FROM audit_log GROUP BY request_method ORDER BY count DESC').all();
-    return c.json({ total, denied, errors, by_actor: byActor, by_resource: byResource, by_method: byMethod });
+    const total =
+      (sqlite.prepare('SELECT COUNT(*) as count FROM audit_log').get() as any)?.count || 0;
+    const denied =
+      (
+        sqlite
+          .prepare('SELECT COUNT(*) as count FROM audit_log WHERE status_code = 403')
+          .get() as any
+      )?.count || 0;
+    const errors =
+      (
+        sqlite
+          .prepare('SELECT COUNT(*) as count FROM audit_log WHERE status_code >= 500')
+          .get() as any
+      )?.count || 0;
+    const byActor = sqlite
+      .prepare(
+        'SELECT actor, COUNT(*) as count FROM audit_log GROUP BY actor ORDER BY count DESC LIMIT 10',
+      )
+      .all();
+    const byResource = sqlite
+      .prepare(
+        'SELECT resource_type, COUNT(*) as count FROM audit_log GROUP BY resource_type ORDER BY count DESC LIMIT 10',
+      )
+      .all();
+    const byMethod = sqlite
+      .prepare(
+        'SELECT request_method, COUNT(*) as count FROM audit_log GROUP BY request_method ORDER BY count DESC',
+      )
+      .all();
+    return c.json({
+      total,
+      denied,
+      errors,
+      by_actor: byActor,
+      by_resource: byResource,
+      by_method: byMethod,
+    });
   });
 
   // GET /api/security/events — query security events
@@ -81,7 +147,10 @@ export function registerAuditRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#808 — requireBeastIdentity cascade (replaces ?as= + isTrustedRequest read-bypass).
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (caller !== 'gorn' && !SECURITY_READ_ALLOWLIST.includes(caller)) {
       return c.json({ error: 'Security events are restricted to Gorn and security team' }, 403);
@@ -99,13 +168,30 @@ export function registerAuditRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const params: any[] = [];
     const countParams: any[] = [];
 
-    if (eventType) { query += ' AND event_type = ?'; countQuery += ' AND event_type = ?'; params.push(eventType); countParams.push(eventType); }
-    if (severity) { query += ' AND severity = ?'; countQuery += ' AND severity = ?'; params.push(severity); countParams.push(severity); }
-    if (actor) { query += ' AND actor = ?'; countQuery += ' AND actor = ?'; params.push(actor); countParams.push(actor); }
+    if (eventType) {
+      query += ' AND event_type = ?';
+      countQuery += ' AND event_type = ?';
+      params.push(eventType);
+      countParams.push(eventType);
+    }
+    if (severity) {
+      query += ' AND severity = ?';
+      countQuery += ' AND severity = ?';
+      params.push(severity);
+      countParams.push(severity);
+    }
+    if (actor) {
+      query += ' AND actor = ?';
+      countQuery += ' AND actor = ?';
+      params.push(actor);
+      countParams.push(actor);
+    }
     if (since) {
       const sinceEpoch = Math.floor(new Date(since).getTime() / 1000);
-      query += ' AND timestamp >= ?'; countQuery += ' AND timestamp >= ?';
-      params.push(sinceEpoch); countParams.push(sinceEpoch);
+      query += ' AND timestamp >= ?';
+      countQuery += ' AND timestamp >= ?';
+      params.push(sinceEpoch);
+      countParams.push(sinceEpoch);
     }
     query += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
@@ -114,7 +200,7 @@ export function registerAuditRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const rows = sqlite.prepare(query).all(...params) as any[];
 
     // Parse details JSON for convenience
-    const events = rows.map(r => ({
+    const events = rows.map((r) => ({
       ...r,
       details: r.details ? JSON.parse(r.details) : null,
       timestamp_iso: new Date(r.timestamp * 1000).toISOString(),
@@ -128,19 +214,53 @@ export function registerAuditRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#808 — requireBeastIdentity cascade (replaces ?as= + isTrustedRequest read-bypass).
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (caller !== 'gorn' && !SECURITY_READ_ALLOWLIST.includes(caller)) {
-      return c.json({ error: 'Security event stats are restricted to Gorn and security team' }, 403);
+      return c.json(
+        { error: 'Security event stats are restricted to Gorn and security team' },
+        403,
+      );
     }
 
-    const total = (sqlite.prepare('SELECT COUNT(*) as count FROM security_events').get() as any)?.count || 0;
-    const bySeverity = sqlite.prepare('SELECT severity, COUNT(*) as count FROM security_events GROUP BY severity ORDER BY count DESC').all();
-    const byType = sqlite.prepare('SELECT event_type, COUNT(*) as count FROM security_events GROUP BY event_type ORDER BY count DESC').all();
-    const byActor = sqlite.prepare('SELECT actor, COUNT(*) as count FROM security_events WHERE actor IS NOT NULL GROUP BY actor ORDER BY count DESC LIMIT 10').all();
-    const last24h = (sqlite.prepare('SELECT COUNT(*) as count FROM security_events WHERE timestamp > ?').get(Math.floor(Date.now() / 1000) - 86400) as any)?.count || 0;
-    const criticalCount = (sqlite.prepare("SELECT COUNT(*) as count FROM security_events WHERE severity = 'critical'").get() as any)?.count || 0;
-    const warningCount = (sqlite.prepare("SELECT COUNT(*) as count FROM security_events WHERE severity = 'warning'").get() as any)?.count || 0;
+    const total =
+      (sqlite.prepare('SELECT COUNT(*) as count FROM security_events').get() as any)?.count || 0;
+    const bySeverity = sqlite
+      .prepare(
+        'SELECT severity, COUNT(*) as count FROM security_events GROUP BY severity ORDER BY count DESC',
+      )
+      .all();
+    const byType = sqlite
+      .prepare(
+        'SELECT event_type, COUNT(*) as count FROM security_events GROUP BY event_type ORDER BY count DESC',
+      )
+      .all();
+    const byActor = sqlite
+      .prepare(
+        'SELECT actor, COUNT(*) as count FROM security_events WHERE actor IS NOT NULL GROUP BY actor ORDER BY count DESC LIMIT 10',
+      )
+      .all();
+    const last24h =
+      (
+        sqlite
+          .prepare('SELECT COUNT(*) as count FROM security_events WHERE timestamp > ?')
+          .get(Math.floor(Date.now() / 1000) - 86400) as any
+      )?.count || 0;
+    const criticalCount =
+      (
+        sqlite
+          .prepare("SELECT COUNT(*) as count FROM security_events WHERE severity = 'critical'")
+          .get() as any
+      )?.count || 0;
+    const warningCount =
+      (
+        sqlite
+          .prepare("SELECT COUNT(*) as count FROM security_events WHERE severity = 'warning'")
+          .get() as any
+      )?.count || 0;
 
     return c.json({
       total,

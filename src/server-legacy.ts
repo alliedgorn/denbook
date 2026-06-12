@@ -27,14 +27,7 @@ import {
 } from './process-manager/index.ts';
 
 // Config constants (no DB dependency)
-import {
-  PORT,
-  REPO_ROOT,
-  DB_PATH,
-  UI_PATH,
-  ARTHUR_UI_PATH,
-  DASHBOARD_PATH,
-} from './config.ts';
+import { PORT, REPO_ROOT, DB_PATH, UI_PATH, ARTHUR_UI_PATH, DASHBOARD_PATH } from './config.ts';
 import { sqlite as db, closeDb } from './db/index.ts';
 
 import {
@@ -43,13 +36,13 @@ import {
   handleList,
   handleStats,
   handleGraph,
-  handleLearn
+  handleLearn,
 } from './server/handlers.ts';
 
 import {
   handleDashboardSummary,
   handleDashboardActivity,
-  handleDashboardGrowth
+  handleDashboardGrowth,
 } from './server/dashboard.ts';
 
 import { handleContext } from './server/context.ts';
@@ -59,7 +52,7 @@ import {
   listThreads,
   getFullThread,
   getMessages,
-  updateThreadStatus
+  updateThreadStatus,
 } from './forum/handler.ts';
 
 import path from 'path';
@@ -113,15 +106,25 @@ const dataDir = path.join(import.meta.dirname || __dirname, '..');
 configure({ dataDir });
 
 // Write PID file for process tracking
-writePidFile({ pid: process.pid, port: Number(PORT), startedAt: new Date().toISOString(), name: 'oracle-http' });
+writePidFile({
+  pid: process.pid,
+  port: Number(PORT),
+  startedAt: new Date().toISOString(),
+  name: 'oracle-http',
+});
 
 // Register graceful shutdown handlers
 registerSignalHandlers(async () => {
   console.log('\n🔮 Shutting down gracefully...');
   await performGracefulShutdown({
     resources: [
-      { close: () => { closeDb(); return Promise.resolve(); } }
-    ]
+      {
+        close: () => {
+          closeDb();
+          return Promise.resolve();
+        },
+      },
+    ],
   });
   removePidFile();
   console.log('👋 Oracle v2 HTTP Server stopped.');
@@ -154,7 +157,9 @@ const server = http.createServer(async (req, res) => {
     // POST /api/thread - Send message to thread
     if (pathname === '/api/thread' && req.method === 'POST') {
       let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('data', (chunk) => {
+        body += chunk.toString();
+      });
       req.on('end', async () => {
         try {
           const data = JSON.parse(body);
@@ -167,20 +172,28 @@ const server = http.createServer(async (req, res) => {
             message: data.message,
             threadId: data.thread_id,
             title: data.title,
-            role: data.role || 'human'
+            role: data.role || 'human',
           });
-          res.end(JSON.stringify({
-            thread_id: result.threadId,
-            message_id: result.messageId,
-            status: result.status,
-            oracle_response: result.oracleResponse,
-            issue_url: result.issueUrl
-          }, null, 2));
+          res.end(
+            JSON.stringify(
+              {
+                thread_id: result.threadId,
+                message_id: result.messageId,
+                status: result.status,
+                oracle_response: result.oracleResponse,
+                issue_url: result.issueUrl,
+              },
+              null,
+              2,
+            ),
+          );
         } catch (error) {
           res.statusCode = 500;
-          res.end(JSON.stringify({
-            error: error instanceof Error ? error.message : 'Unknown error'
-          }));
+          res.end(
+            JSON.stringify({
+              error: error instanceof Error ? error.message : 'Unknown error',
+            }),
+          );
         }
       });
       return;
@@ -200,24 +213,30 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: 'Thread not found' }));
         return;
       }
-      res.end(JSON.stringify({
-        thread: {
-          id: threadData.thread.id,
-          title: threadData.thread.title,
-          status: threadData.thread.status,
-          created_at: new Date(threadData.thread.createdAt).toISOString(),
-          issue_url: threadData.thread.issueUrl
-        },
-        messages: threadData.messages.map(m => ({
-          id: m.id,
-          role: m.role,
-          content: m.content,
-          author: m.author,
-          principles_found: m.principlesFound,
-          patterns_found: m.patternsFound,
-          created_at: new Date(m.createdAt).toISOString()
-        }))
-      }, null, 2));
+      res.end(
+        JSON.stringify(
+          {
+            thread: {
+              id: threadData.thread.id,
+              title: threadData.thread.title,
+              status: threadData.thread.status,
+              created_at: new Date(threadData.thread.createdAt).toISOString(),
+              issue_url: threadData.thread.issueUrl,
+            },
+            messages: threadData.messages.map((m) => ({
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              author: m.author,
+              principles_found: m.principlesFound,
+              patterns_found: m.patternsFound,
+              created_at: new Date(m.createdAt).toISOString(),
+            })),
+          },
+          null,
+          2,
+        ),
+      );
       return;
     }
 
@@ -225,7 +244,9 @@ const server = http.createServer(async (req, res) => {
     if (pathname?.match(/^\/api\/thread\/\d+\/status$/) && req.method === 'PATCH') {
       const threadId = parseInt(pathname.split('/')[3], 10);
       let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('data', (chunk) => {
+        body += chunk.toString();
+      });
       req.on('end', () => {
         try {
           const data = JSON.parse(body);
@@ -247,7 +268,9 @@ const server = http.createServer(async (req, res) => {
     // POST /learn
     if (pathname === '/api/learn' && req.method === 'POST') {
       let body = '';
-      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('data', (chunk) => {
+        body += chunk.toString();
+      });
       req.on('end', () => {
         try {
           const data = JSON.parse(body);
@@ -260,9 +283,11 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify(result, null, 2));
         } catch (error) {
           res.statusCode = 500;
-          res.end(JSON.stringify({
-            error: error instanceof Error ? error.message : 'Unknown error'
-          }));
+          res.end(
+            JSON.stringify({
+              error: error instanceof Error ? error.message : 'Unknown error',
+            }),
+          );
         }
       });
       return;
@@ -310,11 +335,11 @@ const server = http.createServer(async (req, res) => {
             query.q as string,
             (query.type as string) || 'all',
             parseInt(query.limit as string) || 10,
-            parseInt(query.offset as string) || 0
+            parseInt(query.offset as string) || 0,
           );
           result = {
             ...searchResult,
-            query: query.q
+            query: query.q,
           };
         }
         break;
@@ -330,12 +355,14 @@ const server = http.createServer(async (req, res) => {
       case '/api/logs':
         // Return recent search logs for debugging
         try {
-          const logs = db.prepare(`
+          const logs = db
+            .prepare(`
             SELECT query, type, mode, results_count, search_time_ms, created_at, project
             FROM search_log
             ORDER BY created_at DESC
             LIMIT ?
-          `).all(parseInt(query.limit as string) || 20);
+          `)
+            .all(parseInt(query.limit as string) || 20);
           result = { logs, total: logs.length };
         } catch (e) {
           result = { logs: [], error: 'Log table not found' };
@@ -347,7 +374,7 @@ const server = http.createServer(async (req, res) => {
           (query.type as string) || 'all',
           parseInt(query.limit as string) || 10,
           parseInt(query.offset as string) || 0,
-          query.group !== 'false'  // default true, pass group=false to disable
+          query.group !== 'false', // default true, pass group=false to disable
         );
         break;
 
@@ -362,15 +389,11 @@ const server = http.createServer(async (req, res) => {
         break;
 
       case '/api/dashboard/activity':
-        result = handleDashboardActivity(
-          parseInt(query.days as string) || 7
-        );
+        result = handleDashboardActivity(parseInt(query.days as string) || 7);
         break;
 
       case '/api/dashboard/growth':
-        result = handleDashboardGrowth(
-          (query.period as string) || 'week'
-        );
+        result = handleDashboardGrowth((query.period as string) || 'week');
         break;
 
       case '/api/context':
@@ -419,18 +442,18 @@ const server = http.createServer(async (req, res) => {
         const threadList = listThreads({
           status: query.status as any,
           limit: parseInt(query.limit as string) || 20,
-          offset: parseInt(query.offset as string) || 0
+          offset: parseInt(query.offset as string) || 0,
         });
         result = {
-          threads: threadList.threads.map(t => ({
+          threads: threadList.threads.map((t) => ({
             id: t.id,
             title: t.title,
             status: t.status,
             message_count: getMessages(t.id).total,
             created_at: new Date(t.createdAt).toISOString(),
-            issue_url: t.issueUrl
+            issue_url: t.issueUrl,
           })),
-          total: threadList.total
+          total: threadList.total,
         };
         break;
 
@@ -466,17 +489,19 @@ const server = http.createServer(async (req, res) => {
             'GET /dashboard/growth?period=week - Growth over time',
             'GET /threads - List discussion threads',
             'GET /thread/:id - Get thread with messages',
-            'POST /thread - Send message to thread (Oracle auto-responds)'
-          ]
+            'POST /thread - Send message to thread (Oracle auto-responds)',
+          ],
         };
     }
 
     res.end(JSON.stringify(result, null, 2));
   } catch (error) {
     res.statusCode = 500;
-    res.end(JSON.stringify({
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }));
+    res.end(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }),
+    );
   }
 });
 

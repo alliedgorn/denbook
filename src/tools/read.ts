@@ -12,13 +12,15 @@ import type { ToolContext, ToolResponse, OracleReadInput } from './types.ts';
 
 export const readToolDef = {
   name: 'oracle_read',
-  description: 'Read full content of an Oracle document by file path or document ID. Use after oracle_search to retrieve complete file contents. Resolves vault paths, ghq paths, and symlinks server-side.',
+  description:
+    'Read full content of an Oracle document by file path or document ID. Use after oracle_search to retrieve complete file contents. Resolves vault paths, ghq paths, and symlinks server-side.',
   inputSchema: {
     type: 'object',
     properties: {
       file: {
         type: 'string',
-        description: 'Source file path from search results (e.g., "ψ/memory/learnings/file.md" or "github.com/org/repo/ψ/...")',
+        description:
+          'Source file path from search results (e.g., "ψ/memory/learnings/file.md" or "github.com/org/repo/ψ/...")',
       },
       id: {
         type: 'string',
@@ -54,11 +56,7 @@ function extractProject(filePath: string): { project: string; remainder: string 
  * Try to resolve a source_file path to a readable absolute path.
  * Returns the absolute path if found, null otherwise.
  */
-function resolveFilePath(
-  sourceFile: string,
-  repoRoot: string,
-  ghqRoot: string,
-): string | null {
+function resolveFilePath(sourceFile: string, repoRoot: string, ghqRoot: string): string | null {
   // 1. Try direct from repoRoot (handles "ψ/memory/..." paths)
   const directPath = path.join(repoRoot, sourceFile);
   if (fs.existsSync(directPath)) return fs.realpathSync(directPath);
@@ -85,12 +83,16 @@ function isPathAllowed(resolvedPath: string, repoRoot: string, ghqRoot: string):
   try {
     const realGhq = fs.realpathSync(ghqRoot);
     if (resolvedPath.startsWith(realGhq)) return true;
-  } catch { /* ghq root may not exist */ }
+  } catch {
+    /* ghq root may not exist */
+  }
 
   try {
     const realRepo = fs.realpathSync(repoRoot);
     if (resolvedPath.startsWith(realRepo)) return true;
-  } catch { /* unlikely */ }
+  } catch {
+    /* unlikely */
+  }
 
   return false;
 }
@@ -110,9 +112,9 @@ export async function handleRead(ctx: ToolContext, input: OracleReadInput): Prom
 
   // ID lookup: resolve source_file from DB
   if (id) {
-    const row = ctx.sqlite.prepare(
-      'SELECT source_file, project FROM oracle_documents WHERE id = ?'
-    ).get(id) as { source_file: string; project: string | null } | null;
+    const row = ctx.sqlite
+      .prepare('SELECT source_file, project FROM oracle_documents WHERE id = ?')
+      .get(id) as { source_file: string; project: string | null } | null;
 
     if (!row) {
       return {
@@ -131,50 +133,56 @@ export async function handleRead(ctx: ToolContext, input: OracleReadInput): Prom
   if (resolvedPath && isPathAllowed(resolvedPath, ctx.repoRoot, ghqRoot)) {
     const content = fs.readFileSync(resolvedPath, 'utf-8');
     return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          content,
-          source_file: sourceFile,
-          resolved_path: resolvedPath,
-          source: 'file',
-          ...(project ? { project } : {}),
-        }),
-      }],
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            content,
+            source_file: sourceFile,
+            resolved_path: resolvedPath,
+            source: 'file',
+            ...(project ? { project } : {}),
+          }),
+        },
+      ],
     };
   }
 
   // Fallback: try FTS indexed content (if we have an id)
   if (id) {
-    const ftsRow = ctx.sqlite.prepare(
-      'SELECT content FROM oracle_fts WHERE id = ?'
-    ).get(id) as { content: string } | null;
+    const ftsRow = ctx.sqlite.prepare('SELECT content FROM oracle_fts WHERE id = ?').get(id) as {
+      content: string;
+    } | null;
 
     if (ftsRow) {
       return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            content: ftsRow.content,
-            source_file: sourceFile,
-            resolved_path: null,
-            source: 'fts_cache',
-            ...(project ? { project } : {}),
-          }),
-        }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              content: ftsRow.content,
+              source_file: sourceFile,
+              resolved_path: null,
+              source: 'fts_cache',
+              ...(project ? { project } : {}),
+            }),
+          },
+        ],
       };
     }
   }
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        error: `File not found: ${sourceFile}`,
-        source_file: sourceFile,
-        ...(project ? { project } : {}),
-      }),
-    }],
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({
+          error: `File not found: ${sourceFile}`,
+          source_file: sourceFile,
+          ...(project ? { project } : {}),
+        }),
+      },
+    ],
     isError: true,
   };
 }

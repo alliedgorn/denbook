@@ -10,13 +10,13 @@ export type OracleDocumentType = 'principle' | 'pattern' | 'learning' | 'retro';
  * Following claude-mem's pattern of splitting large documents into smaller chunks
  */
 export interface OracleDocument {
-  id: string;           // e.g., "resonance_oracle_principle_1"
+  id: string; // e.g., "resonance_oracle_principle_1"
   type: OracleDocumentType;
-  source_file: string;  // Relative path from repo root
-  content: string;      // The actual text to embed
-  concepts: string[];   // Tags for filtering: ['trust', 'patterns', 'mirror']
-  created_at: number;   // Unix timestamp
-  updated_at: number;   // Unix timestamp
+  source_file: string; // Relative path from repo root
+  content: string; // The actual text to embed
+  concepts: string[]; // Tags for filtering: ['trust', 'patterns', 'mirror']
+  created_at: number; // Unix timestamp
+  updated_at: number; // Unix timestamp
   project?: string | null; // Source project (null = universal, undefined = inherit)
 }
 
@@ -27,10 +27,10 @@ export interface OracleMetadata {
   id: string;
   type: OracleDocumentType;
   source_file: string;
-  concepts: string;     // JSON array as string
+  concepts: string; // JSON array as string
   created_at: number;
   updated_at: number;
-  indexed_at: number;   // When this was indexed
+  indexed_at: number; // When this was indexed
 }
 
 /**
@@ -38,7 +38,7 @@ export interface OracleMetadata {
  */
 export interface SearchResult {
   document: OracleDocument;
-  score: number;        // Relevance score from vector search
+  score: number; // Relevance score from vector search
   source: 'vector' | 'fts' | 'hybrid';
 }
 
@@ -110,8 +110,8 @@ export interface OracleListOutput {
  * Hybrid search options for combining FTS and vector results
  */
 export interface HybridSearchOptions {
-  ftsWeight?: number;     // Weight for FTS results (default 0.5)
-  vectorWeight?: number;  // Weight for vector results (default 0.5)
+  ftsWeight?: number; // Weight for FTS results (default 0.5)
+  vectorWeight?: number; // Weight for vector results (default 0.5)
 }
 
 /**

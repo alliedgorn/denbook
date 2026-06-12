@@ -11,36 +11,42 @@ import type { ToolContext, ToolResponse, OracleSupersededInput } from './types.t
 
 export const supersedeToolDef = {
   name: 'oracle_supersede',
-  description: 'Mark an old learning/document as superseded by a newer one. Aligns with "Nothing is Deleted" - old doc preserved but marked outdated.',
+  description:
+    'Mark an old learning/document as superseded by a newer one. Aligns with "Nothing is Deleted" - old doc preserved but marked outdated.',
   inputSchema: {
     type: 'object',
     properties: {
       oldId: {
         type: 'string',
-        description: 'ID of the document being superseded (the outdated one)'
+        description: 'ID of the document being superseded (the outdated one)',
       },
       newId: {
         type: 'string',
-        description: 'ID of the document that supersedes it (the current one)'
+        description: 'ID of the document that supersedes it (the current one)',
       },
       reason: {
         type: 'string',
-        description: 'Why the old document is outdated (optional)'
-      }
+        description: 'Why the old document is outdated (optional)',
+      },
     },
-    required: ['oldId', 'newId']
-  }
+    required: ['oldId', 'newId'],
+  },
 };
 
-export async function handleSupersede(ctx: ToolContext, input: OracleSupersededInput): Promise<ToolResponse> {
+export async function handleSupersede(
+  ctx: ToolContext,
+  input: OracleSupersededInput,
+): Promise<ToolResponse> {
   const { oldId, newId, reason } = input;
   const now = Date.now();
 
-  const oldDoc = ctx.db.select({ id: oracleDocuments.id, type: oracleDocuments.type })
+  const oldDoc = ctx.db
+    .select({ id: oracleDocuments.id, type: oracleDocuments.type })
     .from(oracleDocuments)
     .where(eq(oracleDocuments.id, oldId))
     .get();
-  const newDoc = ctx.db.select({ id: oracleDocuments.id, type: oracleDocuments.type })
+  const newDoc = ctx.db
+    .select({ id: oracleDocuments.id, type: oracleDocuments.type })
     .from(oracleDocuments)
     .where(eq(oracleDocuments.id, newId))
     .get();
@@ -48,7 +54,8 @@ export async function handleSupersede(ctx: ToolContext, input: OracleSupersededI
   if (!oldDoc) throw new Error(`Old document not found: ${oldId}`);
   if (!newDoc) throw new Error(`New document not found: ${newId}`);
 
-  ctx.db.update(oracleDocuments)
+  ctx.db
+    .update(oracleDocuments)
     .set({
       supersededBy: newId,
       supersededAt: now,
@@ -60,18 +67,24 @@ export async function handleSupersede(ctx: ToolContext, input: OracleSupersededI
   console.error(`[MCP:SUPERSEDE] ${oldId} → superseded by → ${newId}`);
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        success: true,
-        old_id: oldId,
-        old_type: oldDoc.type,
-        new_id: newId,
-        new_type: newDoc.type,
-        reason: reason || null,
-        superseded_at: new Date(now).toISOString(),
-        message: `"${oldId}" is now marked as superseded by "${newId}". It will still appear in searches with a warning.`
-      }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            success: true,
+            old_id: oldId,
+            old_type: oldDoc.type,
+            new_id: newId,
+            new_type: newDoc.type,
+            reason: reason || null,
+            superseded_at: new Date(now).toISOString(),
+            message: `"${oldId}" is now marked as superseded by "${newId}". It will still appear in searches with a warning.`,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
   };
 }

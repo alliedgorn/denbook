@@ -18,12 +18,15 @@ export function registerSettingsRoutes(app: OpenAPIHono, helpers: SettingsHelper
     const hasPassword = !!getSetting('auth_password_hash');
     const vaultRepo = getSetting('vault_repo');
 
-    return c.json({
-      authEnabled,
-      localBypass,
-      hasPassword,
-      vaultRepo
-    }, 200);
+    return c.json(
+      {
+        authEnabled,
+        localBypass,
+        hasPassword,
+        vaultRepo,
+      },
+      200,
+    );
   });
 
   // Update settings (Gorn only — reject beast API calls)
@@ -34,7 +37,10 @@ export function registerSettingsRoutes(app: OpenAPIHono, helpers: SettingsHelper
     // Only allow from browser sessions (Gorn) or local requests, not beast API calls
     const asParam = c.req.query('as');
     if (asParam) {
-      const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+      const ip =
+        c.req.header('x-real-ip') ||
+        c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+        'local';
       logSecurityEvent({
         eventType: 'impersonation_blocked',
         severity: 'warning',
@@ -102,10 +108,15 @@ export function registerSettingsRoutes(app: OpenAPIHono, helpers: SettingsHelper
     const changes: string[] = [];
     if (body.newPassword) changes.push('password_changed');
     if (body.removePassword) changes.push('password_removed');
-    if (typeof body.authEnabled === 'boolean') changes.push(`auth_${body.authEnabled ? 'enabled' : 'disabled'}`);
-    if (typeof body.localBypass === 'boolean') changes.push(`local_bypass_${body.localBypass ? 'enabled' : 'disabled'}`);
+    if (typeof body.authEnabled === 'boolean')
+      changes.push(`auth_${body.authEnabled ? 'enabled' : 'disabled'}`);
+    if (typeof body.localBypass === 'boolean')
+      changes.push(`local_bypass_${body.localBypass ? 'enabled' : 'disabled'}`);
     if (changes.length > 0) {
-      const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+      const ip =
+        c.req.header('x-real-ip') ||
+        c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+        'local';
       logSecurityEvent({
         eventType: 'settings_changed',
         severity: 'warning',
@@ -118,11 +129,14 @@ export function registerSettingsRoutes(app: OpenAPIHono, helpers: SettingsHelper
       });
     }
 
-    return c.json({
-      success: true,
-      authEnabled: getSetting('auth_enabled') === 'true',
-      localBypass: getSetting('auth_local_bypass') !== 'false',
-      hasPassword: !!getSetting('auth_password_hash')
-    }, 200);
+    return c.json(
+      {
+        success: true,
+        authEnabled: getSetting('auth_enabled') === 'true',
+        localBypass: getSetting('auth_local_bypass') !== 'false',
+        hasPassword: !!getSetting('auth_password_hash'),
+      },
+      200,
+    );
   }) as any);
 }

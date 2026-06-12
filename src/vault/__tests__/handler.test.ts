@@ -74,33 +74,37 @@ describe('mapToVaultPath', () => {
   const project = 'github.com/soul-brews-studio/oracle-v2';
 
   it('prefixes learnings with project', () => {
-    expect(mapToVaultPath('ψ/memory/learnings/file.md', project))
-      .toBe('github.com/soul-brews-studio/oracle-v2/ψ/memory/learnings/file.md');
+    expect(mapToVaultPath('ψ/memory/learnings/file.md', project)).toBe(
+      'github.com/soul-brews-studio/oracle-v2/ψ/memory/learnings/file.md',
+    );
   });
 
   it('prefixes retrospectives with project', () => {
-    expect(mapToVaultPath('ψ/memory/retrospectives/2026-01/15/session.md', project))
-      .toBe('github.com/soul-brews-studio/oracle-v2/ψ/memory/retrospectives/2026-01/15/session.md');
+    expect(mapToVaultPath('ψ/memory/retrospectives/2026-01/15/session.md', project)).toBe(
+      'github.com/soul-brews-studio/oracle-v2/ψ/memory/retrospectives/2026-01/15/session.md',
+    );
   });
 
   it('prefixes inbox/handoff with project', () => {
-    expect(mapToVaultPath('ψ/inbox/handoff/context.md', project))
-      .toBe('github.com/soul-brews-studio/oracle-v2/ψ/inbox/handoff/context.md');
+    expect(mapToVaultPath('ψ/inbox/handoff/context.md', project)).toBe(
+      'github.com/soul-brews-studio/oracle-v2/ψ/inbox/handoff/context.md',
+    );
   });
 
   it('keeps resonance universal (no project prefix)', () => {
-    expect(mapToVaultPath('ψ/memory/resonance/philosophy.md', project))
-      .toBe('ψ/memory/resonance/philosophy.md');
+    expect(mapToVaultPath('ψ/memory/resonance/philosophy.md', project)).toBe(
+      'ψ/memory/resonance/philosophy.md',
+    );
   });
 
   it('returns path unchanged when project is null', () => {
-    expect(mapToVaultPath('ψ/memory/learnings/file.md', null))
-      .toBe('ψ/memory/learnings/file.md');
+    expect(mapToVaultPath('ψ/memory/learnings/file.md', null)).toBe('ψ/memory/learnings/file.md');
   });
 
   it('handles nested learning files', () => {
-    expect(mapToVaultPath('ψ/memory/learnings/deep/nested/file.md', project))
-      .toBe('github.com/soul-brews-studio/oracle-v2/ψ/memory/learnings/deep/nested/file.md');
+    expect(mapToVaultPath('ψ/memory/learnings/deep/nested/file.md', project)).toBe(
+      'github.com/soul-brews-studio/oracle-v2/ψ/memory/learnings/deep/nested/file.md',
+    );
   });
 });
 
@@ -112,22 +116,27 @@ describe('mapFromVaultPath', () => {
   const project = 'github.com/soul-brews-studio/oracle-v2';
 
   it('strips project prefix from learnings path', () => {
-    expect(mapFromVaultPath(
-      'github.com/soul-brews-studio/oracle-v2/ψ/memory/learnings/file.md',
-      project
-    )).toBe('ψ/memory/learnings/file.md');
+    expect(
+      mapFromVaultPath(
+        'github.com/soul-brews-studio/oracle-v2/ψ/memory/learnings/file.md',
+        project,
+      ),
+    ).toBe('ψ/memory/learnings/file.md');
   });
 
   it('strips project prefix from retrospectives path', () => {
-    expect(mapFromVaultPath(
-      'github.com/soul-brews-studio/oracle-v2/ψ/memory/retrospectives/2026-01/15/session.md',
-      project
-    )).toBe('ψ/memory/retrospectives/2026-01/15/session.md');
+    expect(
+      mapFromVaultPath(
+        'github.com/soul-brews-studio/oracle-v2/ψ/memory/retrospectives/2026-01/15/session.md',
+        project,
+      ),
+    ).toBe('ψ/memory/retrospectives/2026-01/15/session.md');
   });
 
   it('keeps resonance path as-is', () => {
-    expect(mapFromVaultPath('ψ/memory/resonance/philosophy.md', project))
-      .toBe('ψ/memory/resonance/philosophy.md');
+    expect(mapFromVaultPath('ψ/memory/resonance/philosophy.md', project)).toBe(
+      'ψ/memory/resonance/philosophy.md',
+    );
   });
 
   it('returns null for unrecognized paths', () => {
@@ -135,10 +144,9 @@ describe('mapFromVaultPath', () => {
   });
 
   it('returns null for different project paths', () => {
-    expect(mapFromVaultPath(
-      'github.com/other-org/other-repo/ψ/memory/learnings/file.md',
-      project
-    )).toBeNull();
+    expect(
+      mapFromVaultPath('github.com/other-org/other-repo/ψ/memory/learnings/file.md', project),
+    ).toBeNull();
   });
 });
 
@@ -152,9 +160,7 @@ describe('ensureFrontmatterProject', () => {
   it('adds frontmatter when none exists', () => {
     const content = '# My Learning\n\nSome content here.';
     const result = ensureFrontmatterProject(content, project);
-    expect(result).toBe(
-      `---\nproject: ${project}\n---\n\n# My Learning\n\nSome content here.`
-    );
+    expect(result).toBe(`---\nproject: ${project}\n---\n\n# My Learning\n\nSome content here.`);
   });
 
   it('injects project into existing frontmatter', () => {

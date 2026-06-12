@@ -132,11 +132,11 @@ export async function getChildProcesses(parentPid: number): Promise<number[]> {
     return stdout
       .trim()
       .split('\n')
-      .map(line => {
+      .map((line) => {
         const match = line.match(/ProcessId=(\d+)/i);
         return match ? parseInt(match[1], 10) : NaN;
       })
-      .filter(n => !isNaN(n) && Number.isInteger(n) && n > 0);
+      .filter((n) => !isNaN(n) && Number.isInteger(n) && n > 0);
   } catch (error) {
     logger.warn('SYSTEM', 'Failed to enumerate child processes', { parentPid }, error as Error);
     return [];
@@ -175,7 +175,7 @@ export async function waitForProcessesExit(pids: number[], timeoutMs: number): P
   const start = Date.now();
 
   while (Date.now() - start < timeoutMs) {
-    const stillAlive = pids.filter(pid => isProcessAlive(pid));
+    const stillAlive = pids.filter((pid) => isProcessAlive(pid));
 
     if (stillAlive.length === 0) {
       logger.info('SYSTEM', 'All processes exited');
@@ -183,7 +183,7 @@ export async function waitForProcessesExit(pids: number[], timeoutMs: number): P
     }
 
     logger.debug('SYSTEM', 'Waiting for processes to exit', { stillAlive });
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 100));
   }
 
   logger.warn('SYSTEM', 'Timeout waiting for processes to exit');
@@ -294,7 +294,7 @@ export function spawnDaemon(options: SpawnDaemonOptions): number | undefined {
     portEnvVar = 'WORKER_PORT',
     env = {},
     args = ['--daemon'],
-    spawnOptions = {}
+    spawnOptions = {},
   } = options;
 
   const envVars: Record<string, string | undefined> = { ...process.env, ...env };
@@ -307,7 +307,7 @@ export function spawnDaemon(options: SpawnDaemonOptions): number | undefined {
     stdio: 'ignore',
     windowsHide: true,
     env: envVars,
-    ...spawnOptions
+    ...spawnOptions,
   });
 
   if (child.pid === undefined) {
@@ -324,7 +324,7 @@ export function spawnDaemon(options: SpawnDaemonOptions): number | undefined {
  */
 export function createSignalHandler(
   shutdownFn: () => Promise<void>,
-  isShuttingDownRef: { value: boolean }
+  isShuttingDownRef: { value: boolean },
 ): (signal: string) => Promise<void> {
   return async (signal: string) => {
     if (isShuttingDownRef.value) {
@@ -347,9 +347,9 @@ export function createSignalHandler(
 /**
  * Register common signal handlers
  */
-export function registerSignalHandlers(
-  shutdownFn: () => Promise<void>
-): { isShuttingDown: { value: boolean } } {
+export function registerSignalHandlers(shutdownFn: () => Promise<void>): {
+  isShuttingDown: { value: boolean };
+} {
   const isShuttingDown = { value: false };
   const handler = createSignalHandler(shutdownFn, isShuttingDown);
 

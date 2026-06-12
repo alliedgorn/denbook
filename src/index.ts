@@ -7,10 +7,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { type BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Database } from 'bun:sqlite';
 import * as schema from './db/schema.ts';
@@ -24,23 +21,44 @@ import { logMcpToolCall } from './mcp-audit.ts';
 // Tool handlers (all extracted to src/tools/)
 import type { ToolContext } from './tools/types.ts';
 import {
-  searchToolDef, handleSearch,
-  learnToolDef, handleLearn,
-  reflectToolDef, handleReflect,
-  listToolDef, handleList,
-  statsToolDef, handleStats,
-  conceptsToolDef, handleConcepts,
-  supersedeToolDef, handleSupersede,
-  handoffToolDef, handleHandoff,
-  inboxToolDef, handleInbox,
-  verifyToolDef, handleVerify,
-  scheduleAddToolDef, handleScheduleAdd,
-  scheduleListToolDef, handleScheduleList,
-  readToolDef, handleRead,
+  searchToolDef,
+  handleSearch,
+  learnToolDef,
+  handleLearn,
+  reflectToolDef,
+  handleReflect,
+  listToolDef,
+  handleList,
+  statsToolDef,
+  handleStats,
+  conceptsToolDef,
+  handleConcepts,
+  supersedeToolDef,
+  handleSupersede,
+  handoffToolDef,
+  handleHandoff,
+  inboxToolDef,
+  handleInbox,
+  verifyToolDef,
+  handleVerify,
+  scheduleAddToolDef,
+  handleScheduleAdd,
+  scheduleListToolDef,
+  handleScheduleList,
+  readToolDef,
+  handleRead,
   forumToolDefs,
-  handleThread, handleThreads, handleThreadRead, handleThreadUpdate,
+  handleThread,
+  handleThreads,
+  handleThreadRead,
+  handleThreadUpdate,
   traceToolDefs,
-  handleTrace, handleTraceList, handleTraceGet, handleTraceLink, handleTraceUnlink, handleTraceChain,
+  handleTrace,
+  handleTraceList,
+  handleTraceGet,
+  handleTraceLink,
+  handleTraceUnlink,
+  handleTraceChain,
 } from './tools/index.ts';
 
 import type {
@@ -63,11 +81,7 @@ import type {
   OracleThreadUpdateInput,
 } from './tools/index.ts';
 
-import type {
-  CreateTraceInput,
-  ListTracesInput,
-  GetTraceInput,
-} from './trace/types.ts';
+import type { CreateTraceInput, ListTracesInput, GetTraceInput } from './trace/types.ts';
 
 // Write tools that should be disabled in read-only mode
 const WRITE_TOOLS = [
@@ -103,11 +117,13 @@ class OracleMCPServer {
       dataPath: path.join(homeDir, '.chromadb'),
     });
 
-    const pkg = JSON.parse(fs.readFileSync(path.join(import.meta.dirname || __dirname, '..', 'package.json'), 'utf-8'));
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(import.meta.dirname || __dirname, '..', 'package.json'), 'utf-8'),
+    );
     this.version = pkg.version;
     this.server = new Server(
       { name: 'oracle-nightly', version: this.version },
-      { capabilities: { tools: {} } }
+      { capabilities: { tools: {} } },
     );
 
     const oracleDataDir = process.env.ORACLE_DATA_DIR || path.join(homeDir, '.oracle');
@@ -138,14 +154,19 @@ class OracleMCPServer {
       const stats = await this.vectorStore.getStats();
       if (stats.count > 0) {
         this.vectorStatus = 'connected';
-        console.error(`[VectorDB:${this.vectorStore.name}] ✓ oracle_knowledge: ${stats.count} documents`);
+        console.error(
+          `[VectorDB:${this.vectorStore.name}] ✓ oracle_knowledge: ${stats.count} documents`,
+        );
       } else {
         this.vectorStatus = 'connected';
         console.error(`[VectorDB:${this.vectorStore.name}] ✓ Connected but collection empty`);
       }
     } catch (e) {
       this.vectorStatus = 'unavailable';
-      console.error(`[VectorDB:${this.vectorStore.name}] ✗ Cannot connect:`, e instanceof Error ? e.message : String(e));
+      console.error(
+        `[VectorDB:${this.vectorStore.name}] ✗ Cannot connect:`,
+        e instanceof Error ? e.message : String(e),
+      );
     }
   }
 
@@ -175,7 +196,7 @@ class OracleMCPServer {
         {
           name: '____IMPORTANT',
           description: `ORACLE WORKFLOW GUIDE (v${this.version}):\n\n1. SEARCH & DISCOVER\n   oracle_search(query) → Find knowledge by keywords/vectors\n   oracle_read(file/id) → Read full document content\n   oracle_list() → Browse all documents\n   oracle_concepts() → See topic coverage\n\n2. REFLECT\n   oracle_reflect() → Random wisdom for alignment\n\n3. LEARN & REMEMBER\n   oracle_learn(pattern) → Add new patterns/learnings\n   oracle_thread(message) → Multi-turn discussions\n   ⚠️ BEFORE adding: search for similar topics first!\n   If updating old info → use oracle_supersede(oldId, newId)\n\n4. TRACE & DISTILL\n   oracle_trace(query) → Log discovery sessions with dig points\n   oracle_trace_list() → Find past traces\n   oracle_trace_get(id) → Explore dig points (files, commits, issues)\n   oracle_trace_link(prevId, nextId) → Chain related traces together\n   oracle_trace_chain(id) → View the full linked chain\n\n5. HANDOFF & INBOX\n   oracle_handoff(content) → Save session context for next session\n   oracle_inbox() → List pending handoffs\n\n6. SCHEDULE (shared across all Oracles)\n   oracle_schedule_add(date, event) → Add appointment to shared schedule\n   oracle_schedule_list(filter?) → View upcoming events\n   Schedule lives at ~/.oracle/ψ/inbox/schedule.md (per-human, not per-project)\n\n7. SUPERSEDE (when info changes)\n   oracle_supersede(oldId, newId, reason) → Mark old doc as outdated\n   "Nothing is Deleted" — old preserved, just marked superseded\n\n7. VERIFY (health check)\n   oracle_verify(check?) → Compare ψ/ files vs DB index\n   check=true (default): read-only report\n   check=false: also flag orphaned entries\n\nPhilosophy: "Nothing is Deleted" — All interactions logged.`,
-          inputSchema: { type: 'object', properties: {} }
+          inputSchema: { type: 'object', properties: {} },
         },
         // Core tools (from src/tools/)
         searchToolDef,
@@ -199,7 +220,7 @@ class OracleMCPServer {
       ];
 
       const tools = this.readOnly
-        ? allTools.filter(t => !WRITE_TOOLS.includes(t.name))
+        ? allTools.filter((t) => !WRITE_TOOLS.includes(t.name))
         : allTools;
 
       return { tools };
@@ -212,13 +233,21 @@ class OracleMCPServer {
       const startTime = Date.now();
 
       if (this.readOnly && WRITE_TOOLS.includes(request.params.name)) {
-        logMcpToolCall(this.repoRoot, request.params.name, request.params.arguments as Record<string, unknown>, 'read_only_blocked', Date.now() - startTime);
+        logMcpToolCall(
+          this.repoRoot,
+          request.params.name,
+          request.params.arguments as Record<string, unknown>,
+          'read_only_blocked',
+          Date.now() - startTime,
+        );
         return {
-          content: [{
-            type: 'text',
-            text: `Error: Tool "${request.params.name}" is disabled in read-only mode. This Oracle instance is configured for read-only access.`
-          }],
-          isError: true
+          content: [
+            {
+              type: 'text',
+              text: `Error: Tool "${request.params.name}" is disabled in read-only mode. This Oracle instance is configured for read-only access.`,
+            },
+          ],
+          isError: true,
         };
       }
 
@@ -229,70 +258,154 @@ class OracleMCPServer {
         switch (request.params.name) {
           // Core tools (delegated to src/tools/)
           case 'oracle_search':
-            result = await handleSearch(ctx, request.params.arguments as unknown as OracleSearchInput); break;
+            result = await handleSearch(
+              ctx,
+              request.params.arguments as unknown as OracleSearchInput,
+            );
+            break;
           case 'oracle_read':
-            result = await handleRead(ctx, request.params.arguments as unknown as OracleReadInput); break;
+            result = await handleRead(ctx, request.params.arguments as unknown as OracleReadInput);
+            break;
           case 'oracle_reflect':
-            result = await handleReflect(ctx, request.params.arguments as unknown as OracleReflectInput); break;
+            result = await handleReflect(
+              ctx,
+              request.params.arguments as unknown as OracleReflectInput,
+            );
+            break;
           case 'oracle_learn':
-            result = await handleLearn(ctx, request.params.arguments as unknown as OracleLearnInput); break;
+            result = await handleLearn(
+              ctx,
+              request.params.arguments as unknown as OracleLearnInput,
+            );
+            break;
           case 'oracle_list':
-            result = await handleList(ctx, request.params.arguments as unknown as OracleListInput); break;
+            result = await handleList(ctx, request.params.arguments as unknown as OracleListInput);
+            break;
           case 'oracle_stats':
-            result = await handleStats(ctx, request.params.arguments as unknown as OracleStatsInput); break;
+            result = await handleStats(
+              ctx,
+              request.params.arguments as unknown as OracleStatsInput,
+            );
+            break;
           case 'oracle_concepts':
-            result = await handleConcepts(ctx, request.params.arguments as unknown as OracleConceptsInput); break;
+            result = await handleConcepts(
+              ctx,
+              request.params.arguments as unknown as OracleConceptsInput,
+            );
+            break;
           case 'oracle_supersede':
-            result = await handleSupersede(ctx, request.params.arguments as unknown as OracleSupersededInput); break;
+            result = await handleSupersede(
+              ctx,
+              request.params.arguments as unknown as OracleSupersededInput,
+            );
+            break;
           case 'oracle_handoff':
-            result = await handleHandoff(ctx, request.params.arguments as unknown as OracleHandoffInput); break;
+            result = await handleHandoff(
+              ctx,
+              request.params.arguments as unknown as OracleHandoffInput,
+            );
+            break;
           case 'oracle_inbox':
-            result = await handleInbox(ctx, request.params.arguments as unknown as OracleInboxInput); break;
+            result = await handleInbox(
+              ctx,
+              request.params.arguments as unknown as OracleInboxInput,
+            );
+            break;
           case 'oracle_verify':
-            result = await handleVerify(ctx, request.params.arguments as unknown as OracleVerifyInput); break;
+            result = await handleVerify(
+              ctx,
+              request.params.arguments as unknown as OracleVerifyInput,
+            );
+            break;
           case 'oracle_schedule_add':
-            result = await handleScheduleAdd(ctx, request.params.arguments as unknown as OracleScheduleAddInput); break;
+            result = await handleScheduleAdd(
+              ctx,
+              request.params.arguments as unknown as OracleScheduleAddInput,
+            );
+            break;
           case 'oracle_schedule_list':
-            result = await handleScheduleList(ctx, request.params.arguments as unknown as OracleScheduleListInput); break;
+            result = await handleScheduleList(
+              ctx,
+              request.params.arguments as unknown as OracleScheduleListInput,
+            );
+            break;
 
           // Forum tools (delegated to src/tools/forum.ts)
           case 'oracle_thread':
-            result = await handleThread(request.params.arguments as unknown as OracleThreadInput); break;
+            result = await handleThread(request.params.arguments as unknown as OracleThreadInput);
+            break;
           case 'oracle_threads':
-            result = await handleThreads(request.params.arguments as unknown as OracleThreadsInput); break;
+            result = await handleThreads(request.params.arguments as unknown as OracleThreadsInput);
+            break;
           case 'oracle_thread_read':
-            result = await handleThreadRead(request.params.arguments as unknown as OracleThreadReadInput); break;
+            result = await handleThreadRead(
+              request.params.arguments as unknown as OracleThreadReadInput,
+            );
+            break;
           case 'oracle_thread_update':
-            result = await handleThreadUpdate(request.params.arguments as unknown as OracleThreadUpdateInput); break;
+            result = await handleThreadUpdate(
+              request.params.arguments as unknown as OracleThreadUpdateInput,
+            );
+            break;
 
           // Trace tools (delegated to src/tools/trace.ts)
           case 'oracle_trace':
-            result = await handleTrace(request.params.arguments as unknown as CreateTraceInput); break;
+            result = await handleTrace(request.params.arguments as unknown as CreateTraceInput);
+            break;
           case 'oracle_trace_list':
-            result = await handleTraceList(request.params.arguments as unknown as ListTracesInput); break;
+            result = await handleTraceList(request.params.arguments as unknown as ListTracesInput);
+            break;
           case 'oracle_trace_get':
-            result = await handleTraceGet(request.params.arguments as unknown as GetTraceInput); break;
+            result = await handleTraceGet(request.params.arguments as unknown as GetTraceInput);
+            break;
           case 'oracle_trace_link':
-            result = await handleTraceLink(request.params.arguments as unknown as { prevTraceId: string; nextTraceId: string }); break;
+            result = await handleTraceLink(
+              request.params.arguments as unknown as { prevTraceId: string; nextTraceId: string },
+            );
+            break;
           case 'oracle_trace_unlink':
-            result = await handleTraceUnlink(request.params.arguments as unknown as { traceId: string; direction: 'prev' | 'next' }); break;
+            result = await handleTraceUnlink(
+              request.params.arguments as unknown as {
+                traceId: string;
+                direction: 'prev' | 'next';
+              },
+            );
+            break;
           case 'oracle_trace_chain':
-            result = await handleTraceChain(request.params.arguments as unknown as { traceId: string }); break;
+            result = await handleTraceChain(
+              request.params.arguments as unknown as { traceId: string },
+            );
+            break;
 
           default:
             throw new Error(`Unknown tool: ${request.params.name}`);
         }
-        logMcpToolCall(this.repoRoot, request.params.name, request.params.arguments as Record<string, unknown>, 'success', Date.now() - startTime);
+        logMcpToolCall(
+          this.repoRoot,
+          request.params.name,
+          request.params.arguments as Record<string, unknown>,
+          'success',
+          Date.now() - startTime,
+        );
         return result;
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : String(error);
-        logMcpToolCall(this.repoRoot, request.params.name, request.params.arguments as Record<string, unknown>, 'error', Date.now() - startTime, errMsg);
+        logMcpToolCall(
+          this.repoRoot,
+          request.params.name,
+          request.params.arguments as Record<string, unknown>,
+          'error',
+          Date.now() - startTime,
+          errMsg,
+        );
         return {
-          content: [{
-            type: 'text',
-            text: `Error: ${errMsg}`
-          }],
-          isError: true
+          content: [
+            {
+              type: 'text',
+              text: `Error: ${errMsg}`,
+            },
+          ],
+          isError: true,
         };
       }
     });

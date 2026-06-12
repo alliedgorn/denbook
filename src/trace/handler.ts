@@ -33,11 +33,7 @@ function isLearningFilePath(learning: string): boolean {
  * Create a learning file from a text snippet
  * Returns the file path
  */
-function createLearningFile(
-  text: string,
-  project: string | null,
-  traceQuery: string
-): string {
+function createLearningFile(text: string, project: string | null, traceQuery: string): string {
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
 
@@ -87,11 +83,11 @@ ${project ? `*Source project: ${project}*` : ''}
 function processLearnings(
   learnings: string[] | undefined,
   project: string | null,
-  traceQuery: string
+  traceQuery: string,
 ): string[] {
   if (!learnings || learnings.length === 0) return [];
 
-  return learnings.map(learning => {
+  return learnings.map((learning) => {
     if (isLearningFilePath(learning)) {
       // Already a file path, keep as-is
       return learning;
@@ -112,7 +108,7 @@ export function createTrace(input: CreateTraceInput): CreateTraceResult {
   const processedLearnings = processLearnings(
     input.foundLearnings,
     input.project || null,
-    input.query
+    input.query,
   );
 
   // Calculate counts
@@ -136,31 +132,33 @@ export function createTrace(input: CreateTraceInput): CreateTraceResult {
   }
 
   // Insert trace
-  db.insert(traceLog).values({
-    traceId,
-    query: input.query,
-    queryType: input.queryType || 'general',
-    foundFiles: JSON.stringify(input.foundFiles || []),
-    foundCommits: JSON.stringify(input.foundCommits || []),
-    foundIssues: JSON.stringify(input.foundIssues || []),
-    foundRetrospectives: JSON.stringify(input.foundRetrospectives || []),
-    foundLearnings: JSON.stringify(processedLearnings),
-    foundResonance: JSON.stringify(input.foundResonance || []),
-    fileCount,
-    commitCount,
-    issueCount,
-    depth,
-    parentTraceId: input.parentTraceId || null,
-    childTraceIds: '[]',
-    scope: input.scope || 'project',
-    project: input.project || null,
-    sessionId: input.sessionId || null,
-    agentCount: input.agentCount || 1,
-    durationMs: input.durationMs || null,
-    status: 'raw',
-    createdAt: now,
-    updatedAt: now,
-  }).run();
+  db.insert(traceLog)
+    .values({
+      traceId,
+      query: input.query,
+      queryType: input.queryType || 'general',
+      foundFiles: JSON.stringify(input.foundFiles || []),
+      foundCommits: JSON.stringify(input.foundCommits || []),
+      foundIssues: JSON.stringify(input.foundIssues || []),
+      foundRetrospectives: JSON.stringify(input.foundRetrospectives || []),
+      foundLearnings: JSON.stringify(processedLearnings),
+      foundResonance: JSON.stringify(input.foundResonance || []),
+      fileCount,
+      commitCount,
+      issueCount,
+      depth,
+      parentTraceId: input.parentTraceId || null,
+      childTraceIds: '[]',
+      scope: input.scope || 'project',
+      project: input.project || null,
+      sessionId: input.sessionId || null,
+      agentCount: input.agentCount || 1,
+      durationMs: input.durationMs || null,
+      status: 'raw',
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
 
   // Update parent's child_trace_ids
   if (input.parentTraceId) {
@@ -184,11 +182,7 @@ export function createTrace(input: CreateTraceInput): CreateTraceResult {
  * Get a trace by ID
  */
 export function getTrace(traceId: string): TraceRecord | null {
-  const row = db
-    .select()
-    .from(traceLog)
-    .where(eq(traceLog.traceId, traceId))
-    .get();
+  const row = db.select().from(traceLog).where(eq(traceLog.traceId, traceId)).get();
 
   if (!row) return null;
   return parseTraceRow(row);
@@ -277,7 +271,7 @@ export function listTraces(input: ListTracesInput): ListTracesResult {
  */
 export function getTraceChain(
   traceId: string,
-  direction: 'up' | 'down' | 'both' = 'both'
+  direction: 'up' | 'down' | 'both' = 'both',
 ): TraceChainResult {
   const chain: TraceSummary[] = [];
   let hasAwakening = false;
@@ -340,7 +334,7 @@ export function getTraceChain(
  */
 export function linkTraces(
   prevTraceId: string,
-  nextTraceId: string
+  nextTraceId: string,
 ): { success: boolean; message: string; prevTrace?: TraceRecord; nextTrace?: TraceRecord } {
   const prevTrace = getTrace(prevTraceId);
   const nextTrace = getTrace(nextTraceId);
@@ -383,7 +377,7 @@ export function linkTraces(
  */
 export function unlinkTraces(
   traceId: string,
-  direction: 'prev' | 'next'
+  direction: 'prev' | 'next',
 ): { success: boolean; message: string } {
   const trace = getTrace(traceId);
   if (!trace) return { success: false, message: `Trace not found: ${traceId}` };
@@ -428,9 +422,7 @@ export function unlinkTraces(
 /**
  * Get the full linked chain for a trace
  */
-export function getTraceLinkedChain(
-  traceId: string
-): { chain: TraceRecord[]; position: number } {
+export function getTraceLinkedChain(traceId: string): { chain: TraceRecord[]; position: number } {
   const chain: TraceRecord[] = [];
   let position = 0;
 
@@ -463,9 +455,11 @@ export function getTraceLinkedChain(
 /**
  * Distill awakening from a trace
  */
-export function distillTrace(
-  input: DistillTraceInput
-): { success: boolean; status: string; learningId?: string } {
+export function distillTrace(input: DistillTraceInput): {
+  success: boolean;
+  status: string;
+  learningId?: string;
+} {
   const now = Date.now();
 
   db.update(traceLog)

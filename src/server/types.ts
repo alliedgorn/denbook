@@ -100,4 +100,3 @@ export interface DashboardGrowth {
     searches: number;
   }>;
 }
-

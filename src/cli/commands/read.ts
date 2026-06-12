@@ -9,9 +9,7 @@ export function registerRead(program: Command): void {
     .option('--json', 'Output raw JSON')
     .action(async (fileOrId, opts) => {
       const isFile = fileOrId.includes('/') || fileOrId.endsWith('.md');
-      const query = isFile
-        ? { file: fileOrId }
-        : { id: fileOrId };
+      const query = isFile ? { file: fileOrId } : { id: fileOrId };
 
       const data = await oracleFetch('/api/read', { query });
 

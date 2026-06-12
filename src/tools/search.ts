@@ -13,52 +13,56 @@ import type { ToolContext, ToolResponse, OracleSearchInput } from './types.ts';
 
 export const searchToolDef = {
   name: 'oracle_search',
-  description: 'Search Oracle knowledge base using hybrid search (FTS5 keywords + ChromaDB vectors). Finds relevant principles, patterns, learnings, or retrospectives. Falls back to FTS5-only if ChromaDB unavailable.',
+  description:
+    'Search Oracle knowledge base using hybrid search (FTS5 keywords + ChromaDB vectors). Finds relevant principles, patterns, learnings, or retrospectives. Falls back to FTS5-only if ChromaDB unavailable.',
   inputSchema: {
     type: 'object',
     properties: {
       query: {
         type: 'string',
-        description: 'Search query (e.g., "nothing deleted", "force push safety")'
+        description: 'Search query (e.g., "nothing deleted", "force push safety")',
       },
       type: {
         type: 'string',
         enum: ['principle', 'pattern', 'learning', 'retro', 'all'],
         description: 'Filter by document type',
-        default: 'all'
+        default: 'all',
       },
       limit: {
         type: 'number',
         description: 'Maximum number of results',
-        default: 5
+        default: 5,
       },
       offset: {
         type: 'number',
         description: 'Number of results to skip (for pagination)',
-        default: 0
+        default: 0,
       },
       mode: {
         type: 'string',
         enum: ['hybrid', 'fts', 'vector'],
         description: 'Search mode: hybrid (default), fts (keywords only), vector (semantic only)',
-        default: 'hybrid'
+        default: 'hybrid',
       },
       project: {
         type: 'string',
-        description: 'Filter by project (e.g., "github.com/owner/repo"). Returns project + universal results.'
+        description:
+          'Filter by project (e.g., "github.com/owner/repo"). Returns project + universal results.',
       },
       cwd: {
         type: 'string',
-        description: 'Auto-detect project from working directory path (follows symlinks to ghq paths)'
+        description:
+          'Auto-detect project from working directory path (follows symlinks to ghq paths)',
       },
       model: {
         type: 'string',
         enum: ['nomic', 'qwen3', 'bge-m3'],
-        description: 'Embedding model: bge-m3 (default, multilingual Thai↔EN, 1024-dim), nomic (fast, 768-dim), or qwen3 (cross-language, 4096-dim)',
-      }
+        description:
+          'Embedding model: bge-m3 (default, multilingual Thai↔EN, 1024-dim), nomic (fast, 768-dim), or qwen3 (cross-language, 4096-dim)',
+      },
     },
-    required: ['query']
-  }
+    required: ['query'],
+  },
 };
 
 // ============================================================================
@@ -119,22 +123,26 @@ export async function vectorSearch(
   query: string,
   type: string,
   limit: number,
-  model?: string
-): Promise<Array<{
-  id: string;
-  type: string;
-  content: string;
-  source_file: string;
-  concepts: string[];
-  score: number;
-  distance: number;
-  model: string;
-  source: 'vector';
-}>> {
+  model?: string,
+): Promise<
+  Array<{
+    id: string;
+    type: string;
+    content: string;
+    source_file: string;
+    concepts: string[];
+    score: number;
+    distance: number;
+    model: string;
+    source: 'vector';
+  }>
+> {
   try {
     const whereFilter = type !== 'all' ? { type } : undefined;
     const store = model ? await ensureVectorStoreConnected(model) : ctx.vectorStore;
-    console.error(`[VectorSearch] Query: "${query.substring(0, 50)}..." limit=${limit} model=${model || 'default'}`);
+    console.error(
+      `[VectorSearch] Query: "${query.substring(0, 50)}..." limit=${limit} model=${model || 'default'}`,
+    );
 
     const results = await store.query(query, limit, whereFilter);
     console.error(`[VectorSearch] Results: ${results.ids?.length || 0} documents`);
@@ -207,7 +215,7 @@ export function combineResults(
     source: 'vector';
   }>,
   ftsWeight: number = 0.5,
-  vectorWeight: number = 0.5
+  vectorWeight: number = 0.5,
 ): Array<{
   id: string;
   type: string;
@@ -221,18 +229,21 @@ export function combineResults(
   distance?: number;
   model?: string;
 }> {
-  const resultMap = new Map<string, {
-    id: string;
-    type: string;
-    content: string;
-    source_file: string;
-    concepts: string[];
-    ftsScore?: number;
-    vectorScore?: number;
-    distance?: number;
-    model?: string;
-    source: 'fts' | 'vector' | 'hybrid';
-  }>();
+  const resultMap = new Map<
+    string,
+    {
+      id: string;
+      type: string;
+      content: string;
+      source_file: string;
+      concepts: string[];
+      ftsScore?: number;
+      vectorScore?: number;
+      distance?: number;
+      model?: string;
+      source: 'fts' | 'vector' | 'hybrid';
+    }
+  >();
 
   // Add FTS results
   for (const result of ftsResults) {
@@ -277,7 +288,7 @@ export function combineResults(
     if (result.source === 'hybrid') {
       const fts = result.ftsScore ?? 0;
       const vec = result.vectorScore ?? 0;
-      score = ((ftsWeight * fts) + (vectorWeight * vec)) * 1.1;
+      score = (ftsWeight * fts + vectorWeight * vec) * 1.1;
     } else if (result.source === 'fts') {
       score = (result.ftsScore ?? 0) * ftsWeight;
     } else {
@@ -307,9 +318,21 @@ export function combineResults(
 // Handler
 // ============================================================================
 
-export async function handleSearch(ctx: ToolContext, input: OracleSearchInput): Promise<ToolResponse> {
+export async function handleSearch(
+  ctx: ToolContext,
+  input: OracleSearchInput,
+): Promise<ToolResponse> {
   const startTime = Date.now();
-  const { query, type = 'all', limit = 5, offset = 0, mode = 'hybrid', project, cwd, model } = input;
+  const {
+    query,
+    type = 'all',
+    limit = 5,
+    offset = 0,
+    mode = 'hybrid',
+    project,
+    cwd,
+    model,
+  } = input;
 
   if (!query || query.trim().length === 0) {
     throw new Error('Query cannot be empty');
@@ -322,9 +345,7 @@ export async function handleSearch(ctx: ToolContext, input: OracleSearchInput): 
 
   // Project filter: if project specified, include project + universal (NULL)
   // If no project, return ALL documents (no filter)
-  const projectFilter = resolvedProject
-    ? 'AND (d.project = ? OR d.project IS NULL)'
-    : '';
+  const projectFilter = resolvedProject ? 'AND (d.project = ? OR d.project IS NULL)' : '';
   const projectParams = resolvedProject ? [resolvedProject] : [];
 
   let warning: string | undefined;
@@ -424,7 +445,9 @@ export async function handleSearch(ctx: ToolContext, input: OracleSearchInput): 
     metadata.warning = warning;
   }
 
-  console.error(`[MCP:SEARCH] "${query}" (${type}, ${mode}, model=${model || 'default'}) → ${results.length} results in ${searchTime}ms`);
+  console.error(
+    `[MCP:SEARCH] "${query}" (${type}, ${mode}, model=${model || 'default'}) → ${results.length} results in ${searchTime}ms`,
+  );
 
   try {
     logSearch(query, type, mode, results.length, searchTime, results);
@@ -433,9 +456,11 @@ export async function handleSearch(ctx: ToolContext, input: OracleSearchInput): 
   }
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({ results, total: results.length, query, metadata }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({ results, total: results.length, query, metadata }, null, 2),
+      },
+    ],
   };
 }

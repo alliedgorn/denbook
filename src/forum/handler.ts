@@ -40,18 +40,22 @@ function getProjectContext_(): string | undefined {
 export function createThread(
   title: string,
   createdBy: string = 'user',
-  project?: string
+  project?: string,
 ): ForumThread {
   const now = Date.now();
 
-  const result = db.insert(forumThreads).values({
-    title,
-    createdBy,
-    status: 'active',
-    project: project || null,
-    createdAt: now,
-    updatedAt: now,
-  }).returning({ id: forumThreads.id }).get();
+  const result = db
+    .insert(forumThreads)
+    .values({
+      title,
+      createdBy,
+      status: 'active',
+      project: project || null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: forumThreads.id })
+    .get();
 
   return {
     id: result.id,
@@ -68,10 +72,7 @@ export function createThread(
  * Get thread by ID
  */
 export function getThread(threadId: number): ForumThread | null {
-  const row = db.select()
-    .from(forumThreads)
-    .where(eq(forumThreads.id, threadId))
-    .get();
+  const row = db.select().from(forumThreads).where(eq(forumThreads.id, threadId)).get();
 
   if (!row) return null;
 
@@ -102,12 +103,9 @@ export function updateThreadStatus(threadId: number, status: ThreadStatus): void
 /**
  * List threads with optional filters
  */
-export function listThreads(options: {
-  status?: ThreadStatus;
-  project?: string;
-  limit?: number;
-  offset?: number;
-} = {}): { threads: ForumThread[]; total: number } {
+export function listThreads(
+  options: { status?: ThreadStatus; project?: string; limit?: number; offset?: number } = {},
+): { threads: ForumThread[]; total: number } {
   const { status, project, limit = 20, offset = 0 } = options;
 
   // Build conditions array
@@ -122,14 +120,16 @@ export function listThreads(options: {
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   // Get count
-  const countResult = db.select({ count: sql<number>`count(*)` })
+  const countResult = db
+    .select({ count: sql<number>`count(*)` })
     .from(forumThreads)
     .where(whereClause)
     .get();
   const total = countResult?.count || 0;
 
   // Get threads
-  const rows = db.select()
+  const rows = db
+    .select()
     .from(forumThreads)
     .where(whereClause)
     .orderBy(desc(forumThreads.updatedAt))
@@ -138,7 +138,7 @@ export function listThreads(options: {
     .all();
 
   return {
-    threads: rows.map(row => ({
+    threads: rows.map((row) => ({
       id: row.id,
       title: row.title,
       createdBy: row.createdBy || 'unknown',
@@ -170,26 +170,27 @@ export function addMessage(
     principlesFound?: number;
     patternsFound?: number;
     searchQuery?: string;
-  } = {}
+  } = {},
 ): ForumMessage {
   const now = Date.now();
 
-  const result = db.insert(forumMessages).values({
-    threadId,
-    role,
-    content,
-    author: options.author || null,
-    principlesFound: options.principlesFound || null,
-    patternsFound: options.patternsFound || null,
-    searchQuery: options.searchQuery || null,
-    createdAt: now,
-  }).returning({ id: forumMessages.id }).get();
+  const result = db
+    .insert(forumMessages)
+    .values({
+      threadId,
+      role,
+      content,
+      author: options.author || null,
+      principlesFound: options.principlesFound || null,
+      patternsFound: options.patternsFound || null,
+      searchQuery: options.searchQuery || null,
+      createdAt: now,
+    })
+    .returning({ id: forumMessages.id })
+    .get();
 
   // Update thread timestamp
-  db.update(forumThreads)
-    .set({ updatedAt: now })
-    .where(eq(forumThreads.id, threadId))
-    .run();
+  db.update(forumThreads).set({ updatedAt: now }).where(eq(forumThreads.id, threadId)).run();
 
   return {
     id: result.id,
@@ -214,14 +215,16 @@ export function getMessages(
   order: 'asc' | 'desc' = 'asc',
 ): { messages: ForumMessage[]; total: number } {
   const notDeleted = sql`deleted_at IS NULL`;
-  const countResult = db.select({ count: sql<number>`count(*)` })
+  const countResult = db
+    .select({ count: sql<number>`count(*)` })
     .from(forumMessages)
     .where(and(eq(forumMessages.threadId, threadId), notDeleted))
     .get();
 
   const total = countResult?.count ?? 0;
 
-  let query = db.select()
+  let query = db
+    .select()
     .from(forumMessages)
     .where(and(eq(forumMessages.threadId, threadId), notDeleted))
     .orderBy(order === 'desc' ? desc(forumMessages.createdAt) : forumMessages.createdAt);
@@ -232,7 +235,7 @@ export function getMessages(
 
   const rows = query.all();
 
-  const messages = rows.map(row => ({
+  const messages = rows.map((row) => ({
     id: row.id,
     threadId: row.threadId,
     role: row.role as MessageRole,
@@ -255,9 +258,7 @@ export function getMessages(
 /**
  * Main entry point: Send message to thread, Oracle auto-responds
  */
-export async function handleThreadMessage(
-  input: OracleThreadInput
-): Promise<OracleThreadOutput> {
+export async function handleThreadMessage(input: OracleThreadInput): Promise<OracleThreadOutput> {
   const { message, threadId, title, role = 'human', model, author: authorOverride } = input;
 
   // Get project context
@@ -310,13 +311,29 @@ export async function handleThreadMessage(
   // T#618: Auto-subscribe author and @mentioned Beasts (only if no existing preference)
   const senderName = author?.split('@')[0]?.toLowerCase() || '';
   if (senderName) {
-    try { autoSubscribe(senderName, thread.id); } catch { /* ignore */ }
+    try {
+      autoSubscribe(senderName, thread.id);
+    } catch {
+      /* ignore */
+    }
   }
   for (const m of mentions) {
-    try { autoSubscribe(m, thread.id); } catch { /* ignore */ }
+    try {
+      autoSubscribe(m, thread.id);
+    } catch {
+      /* ignore */
+    }
   }
 
-  const notified = notifyMentioned(mentions, thread.id, thread.title, author, message, undefined, directMentionSet);
+  const notified = notifyMentioned(
+    mentions,
+    thread.id,
+    thread.title,
+    author,
+    message,
+    undefined,
+    directMentionSet,
+  );
 
   // Notify all thread participants on new posts (not just @mentioned ones)
   // T#618: Participants are filtered by subscription level in notifyMentioned
@@ -325,7 +342,8 @@ export async function handleThreadMessage(
     const registry = getOracleRegistry();
     const alreadyNotified = new Set(notified);
     try {
-      const rows = db.select({ author: forumMessages.author })
+      const rows = db
+        .select({ author: forumMessages.author })
         .from(forumMessages)
         .where(eq(forumMessages.threadId, thread.id))
         .all();
@@ -333,17 +351,36 @@ export async function handleThreadMessage(
       const participants: string[] = [];
       for (const r of rows) {
         const name = r.author?.split('@')[0]?.toLowerCase();
-        if (name && name in registry && name !== 'gorn' && name !== 'human' && name !== 'user' && name !== senderName && !alreadyNotified.has(name) && !seen.has(name)) {
+        if (
+          name &&
+          name in registry &&
+          name !== 'gorn' &&
+          name !== 'human' &&
+          name !== 'user' &&
+          name !== senderName &&
+          !alreadyNotified.has(name) &&
+          !seen.has(name)
+        ) {
           seen.add(name);
           participants.push(name);
         }
       }
       if (participants.length > 0) {
         // These are thread participants, NOT direct mentions — subscription filter applies
-        const extra = notifyMentioned(participants, thread.id, thread.title, author || 'unknown', message, undefined, new Set());
+        const extra = notifyMentioned(
+          participants,
+          thread.id,
+          thread.title,
+          author || 'unknown',
+          message,
+          undefined,
+          new Set(),
+        );
         notified.push(...extra);
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   // Get updated thread status

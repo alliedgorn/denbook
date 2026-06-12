@@ -6,9 +6,7 @@ import { printJson } from '../format.ts';
 import { PORT } from '../../config.ts';
 
 export function registerServer(program: Command): void {
-  const srv = program
-    .command('server')
-    .description('Manage Oracle HTTP server');
+  const srv = program.command('server').description('Manage Oracle HTTP server');
 
   srv
     .command('start')
@@ -74,13 +72,15 @@ export function registerServer(program: Command): void {
     });
 
   // Default action: status
-  srv.action(async (opts) => {
-    const status = await getServerStatus();
-    if (opts.json) return printJson(status);
-    console.log(`Running:  ${status.running ? 'yes' : 'no'}`);
-    if (status.pid) console.log(`PID:      ${status.pid}`);
-    console.log(`Port:     ${status.port}`);
-    console.log(`Healthy:  ${status.healthy ? 'yes' : 'no'}`);
-    console.log(`URL:      ${status.url}`);
-  }).option('--json', 'Output raw JSON');
+  srv
+    .action(async (opts) => {
+      const status = await getServerStatus();
+      if (opts.json) return printJson(status);
+      console.log(`Running:  ${status.running ? 'yes' : 'no'}`);
+      if (status.pid) console.log(`PID:      ${status.pid}`);
+      console.log(`Port:     ${status.port}`);
+      console.log(`Healthy:  ${status.healthy ? 'yes' : 'no'}`);
+      console.log(`URL:      ${status.url}`);
+    })
+    .option('--json', 'Output raw JSON');
 }

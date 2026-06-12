@@ -14,7 +14,13 @@ interface ProwlHelpers {
 }
 
 export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers: ProwlHelpers) {
-  const { hasSessionAuth, isTrustedRequest, requireBeastIdentity, wsBroadcast, enqueueNotification } = helpers;
+  const {
+    hasSessionAuth,
+    isTrustedRequest,
+    requireBeastIdentity,
+    wsBroadcast,
+    enqueueNotification,
+  } = helpers;
 
   // GET /api/prowl — list tasks with filters
   app.get('/api/prowl', (c) => {
@@ -22,10 +28,16 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // then restrict to gorn + ALLOWED_PROWL_MANAGERS (mirrors the write-side allowlist).
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (caller !== 'gorn' && !ALLOWED_PROWL_MANAGERS.includes(caller)) {
-      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can view Prowl tasks` }, 403);
+      return c.json(
+        { error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can view Prowl tasks` },
+        403,
+      );
     }
     const status = c.req.query('status') || 'pending';
     const priority = c.req.query('priority');
@@ -52,28 +64,68 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     } else if (due === 'today') {
       query += " AND date(due_date) = date('now', 'localtime')";
     } else if (due === 'week') {
-      query += " AND date(due_date) BETWEEN date('now', 'localtime') AND date('now', 'localtime', '+7 days')";
+      query +=
+        " AND date(due_date) BETWEEN date('now', 'localtime') AND date('now', 'localtime', '+7 days')";
     }
 
-    query += ' ORDER BY CASE priority WHEN \'high\' THEN 0 WHEN \'medium\' THEN 1 WHEN \'low\' THEN 2 END, created_at DESC';
+    query +=
+      " ORDER BY CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 WHEN 'low' THEN 2 END, created_at DESC";
 
     const rawTasks = sqlite.prepare(query).all(...params) as any[];
 
-    const tasks = rawTasks.map(t => {
-      const checklist = sqlite.prepare('SELECT * FROM checklist_items WHERE task_id = ? ORDER BY sort_order, id').all(t.id);
+    const tasks = rawTasks.map((t) => {
+      const checklist = sqlite
+        .prepare('SELECT * FROM checklist_items WHERE task_id = ? ORDER BY sort_order, id')
+        .all(t.id);
       return { ...t, checklist };
     });
 
     const counts = {
-      pending: (sqlite.prepare("SELECT COUNT(*) as c FROM prowl_tasks WHERE status = 'pending'").get() as any).c,
-      done: (sqlite.prepare("SELECT COUNT(*) as c FROM prowl_tasks WHERE status = 'done'").get() as any).c,
-      overdue: (sqlite.prepare("SELECT COUNT(*) as c FROM prowl_tasks WHERE due_date < datetime('now', 'localtime') AND status = 'pending'").get() as any).c,
-      high: (sqlite.prepare("SELECT COUNT(*) as c FROM prowl_tasks WHERE priority = 'high' AND status = 'pending'").get() as any).c,
-      medium: (sqlite.prepare("SELECT COUNT(*) as c FROM prowl_tasks WHERE priority = 'medium' AND status = 'pending'").get() as any).c,
-      low: (sqlite.prepare("SELECT COUNT(*) as c FROM prowl_tasks WHERE priority = 'low' AND status = 'pending'").get() as any).c,
+      pending: (
+        sqlite
+          .prepare("SELECT COUNT(*) as c FROM prowl_tasks WHERE status = 'pending'")
+          .get() as any
+      ).c,
+      done: (
+        sqlite.prepare("SELECT COUNT(*) as c FROM prowl_tasks WHERE status = 'done'").get() as any
+      ).c,
+      overdue: (
+        sqlite
+          .prepare(
+            "SELECT COUNT(*) as c FROM prowl_tasks WHERE due_date < datetime('now', 'localtime') AND status = 'pending'",
+          )
+          .get() as any
+      ).c,
+      high: (
+        sqlite
+          .prepare(
+            "SELECT COUNT(*) as c FROM prowl_tasks WHERE priority = 'high' AND status = 'pending'",
+          )
+          .get() as any
+      ).c,
+      medium: (
+        sqlite
+          .prepare(
+            "SELECT COUNT(*) as c FROM prowl_tasks WHERE priority = 'medium' AND status = 'pending'",
+          )
+          .get() as any
+      ).c,
+      low: (
+        sqlite
+          .prepare(
+            "SELECT COUNT(*) as c FROM prowl_tasks WHERE priority = 'low' AND status = 'pending'",
+          )
+          .get() as any
+      ).c,
     };
 
-    const categories = (sqlite.prepare("SELECT DISTINCT category FROM prowl_tasks WHERE category IS NOT NULL ORDER BY category").all() as any[]).map(r => r.category);
+    const categories = (
+      sqlite
+        .prepare(
+          'SELECT DISTINCT category FROM prowl_tasks WHERE category IS NOT NULL ORDER BY category',
+        )
+        .all() as any[]
+    ).map((r) => r.category);
 
     return c.json({ tasks, counts, categories });
   });
@@ -84,12 +136,22 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // then restrict to gorn + ALLOWED_PROWL_MANAGERS.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (caller !== 'gorn' && !ALLOWED_PROWL_MANAGERS.includes(caller)) {
-      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can view Prowl tasks` }, 403);
+      return c.json(
+        { error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can view Prowl tasks` },
+        403,
+      );
     }
-    const rows = sqlite.prepare("SELECT category, COUNT(*) as count FROM prowl_tasks WHERE category IS NOT NULL GROUP BY category ORDER BY count DESC").all();
+    const rows = sqlite
+      .prepare(
+        'SELECT category, COUNT(*) as count FROM prowl_tasks WHERE category IS NOT NULL GROUP BY category ORDER BY count DESC',
+      )
+      .all();
     return c.json({ categories: rows });
   });
 
@@ -98,18 +160,30 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#788 — derive requester from auth-layer (T#718 pattern), reject body-asserted mismatch.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     try {
       const data = await c.req.json();
       if (!data.title?.trim()) return c.json({ error: 'title required' }, 400);
 
       if (data.created_by && data.created_by.toLowerCase() !== caller) {
-        return c.json({ error: 'Sender impersonation blocked. body.created_by must match authenticated caller or be omitted.' }, 403);
+        return c.json(
+          {
+            error:
+              'Sender impersonation blocked. body.created_by must match authenticated caller or be omitted.',
+          },
+          403,
+        );
       }
       const requester = caller;
       if (!ALLOWED_PROWL_CREATORS.includes(requester)) {
-        return c.json({ error: `Only ${ALLOWED_PROWL_CREATORS.join(', ')} can create Prowl tasks` }, 403);
+        return c.json(
+          { error: `Only ${ALLOWED_PROWL_CREATORS.join(', ')} can create Prowl tasks` },
+          403,
+        );
       }
 
       const priority = ['high', 'medium', 'low'].includes(data.priority) ? data.priority : 'medium';
@@ -118,24 +192,28 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       const validReminders = [null, '1m', '5m', '15m', '30m', '1h', '1d'];
       const remindBefore = validReminders.includes(data.remind_before) ? data.remind_before : null;
 
-      const result = sqlite.prepare(
-        'INSERT INTO prowl_tasks (title, priority, category, due_date, status, notes, source, source_id, created_by, remind_before, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(
-        data.title.trim(),
-        priority,
-        data.category || 'general',
-        data.due_date || null,
-        'pending',
-        data.notes || null,
-        data.source || 'manual',
-        data.source_id ?? null,
-        requester,
-        remindBefore,
-        now,
-        now
-      );
+      const result = sqlite
+        .prepare(
+          'INSERT INTO prowl_tasks (title, priority, category, due_date, status, notes, source, source_id, created_by, remind_before, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          data.title.trim(),
+          priority,
+          data.category || 'general',
+          data.due_date || null,
+          'pending',
+          data.notes || null,
+          data.source || 'manual',
+          data.source_id ?? null,
+          requester,
+          remindBefore,
+          now,
+          now,
+        );
 
-      const task = sqlite.prepare('SELECT * FROM prowl_tasks WHERE id = ?').get((result as any).lastInsertRowid);
+      const task = sqlite
+        .prepare('SELECT * FROM prowl_tasks WHERE id = ?')
+        .get((result as any).lastInsertRowid);
       wsBroadcast('prowl_update', { action: 'create' });
       return c.json(task, 201);
     } catch (e: any) {
@@ -148,10 +226,16 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#788 — derive caller from auth-layer.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
-      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can update Prowl tasks` }, 403);
+      return c.json(
+        { error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can update Prowl tasks` },
+        403,
+      );
     }
     const id = parseInt(c.req.param('id'), 10);
     if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
@@ -160,7 +244,8 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
     try {
       const data = await c.req.json();
-      if ('status' in data) return c.json({ error: 'Use PATCH /api/prowl/:id/status to change status' }, 400);
+      if ('status' in data)
+        return c.json({ error: 'Use PATCH /api/prowl/:id/status to change status' }, 400);
 
       const allowed = ['title', 'priority', 'category', 'due_date', 'notes', 'remind_before'];
       const updates: string[] = [];
@@ -173,7 +258,7 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       }
       if (updates.length === 0) return c.json({ error: 'No valid fields to update' }, 400);
 
-      updates.push("updated_at = ?");
+      updates.push('updated_at = ?');
       values.push(new Date().toISOString());
       values.push(id);
 
@@ -191,10 +276,16 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#788 — derive caller from auth-layer.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
-      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can change Prowl task status` }, 403);
+      return c.json(
+        { error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can change Prowl task status` },
+        403,
+      );
     }
     const id = parseInt(c.req.param('id'), 10);
     if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
@@ -204,12 +295,14 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     try {
       const data = await c.req.json();
       const newStatus = data.status;
-      if (!['pending', 'done'].includes(newStatus)) return c.json({ error: 'status must be pending or done' }, 400);
+      if (!['pending', 'done'].includes(newStatus))
+        return c.json({ error: 'status must be pending or done' }, 400);
 
       const now = new Date().toISOString();
       const completedAt = newStatus === 'done' ? now : null;
 
-      sqlite.prepare('UPDATE prowl_tasks SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?')
+      sqlite
+        .prepare('UPDATE prowl_tasks SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?')
         .run(newStatus, completedAt, now, id);
       const task = sqlite.prepare('SELECT * FROM prowl_tasks WHERE id = ?').get(id);
       wsBroadcast('prowl_update', { action: 'status' });
@@ -224,10 +317,16 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#788 — derive caller from auth-layer.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
-      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can toggle Prowl tasks` }, 403);
+      return c.json(
+        { error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can toggle Prowl tasks` },
+        403,
+      );
     }
     const id = parseInt(c.req.param('id'), 10);
     if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
@@ -238,7 +337,8 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const newStatus = existing.status === 'pending' ? 'done' : 'pending';
     const completedAt = newStatus === 'done' ? now : null;
 
-    sqlite.prepare('UPDATE prowl_tasks SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?')
+    sqlite
+      .prepare('UPDATE prowl_tasks SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?')
       .run(newStatus, completedAt, now, id);
     const task = sqlite.prepare('SELECT * FROM prowl_tasks WHERE id = ?').get(id);
     wsBroadcast('prowl_update', { action: 'toggle' });
@@ -250,10 +350,16 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#788 — derive caller from auth-layer.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
-      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can delete Prowl tasks` }, 403);
+      return c.json(
+        { error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can delete Prowl tasks` },
+        403,
+      );
     }
     const id = parseInt(c.req.param('id'), 10);
     if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
@@ -274,16 +380,24 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // then restrict to gorn + ALLOWED_PROWL_MANAGERS.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (caller !== 'gorn' && !ALLOWED_PROWL_MANAGERS.includes(caller)) {
-      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can view Prowl tasks` }, 403);
+      return c.json(
+        { error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can view Prowl tasks` },
+        403,
+      );
     }
     const taskId = parseInt(c.req.param('id'), 10);
     if (isNaN(taskId)) return c.json({ error: 'Invalid ID' }, 400);
     const task = sqlite.prepare('SELECT id FROM prowl_tasks WHERE id = ?').get(taskId);
     if (!task) return c.json({ error: 'Task not found' }, 404);
-    const items = sqlite.prepare('SELECT * FROM checklist_items WHERE task_id = ? ORDER BY sort_order, id').all(taskId);
+    const items = sqlite
+      .prepare('SELECT * FROM checklist_items WHERE task_id = ? ORDER BY sort_order, id')
+      .all(taskId);
     return c.json({ items });
   });
 
@@ -292,10 +406,16 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#788 — derive caller from auth-layer.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
-      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+      return c.json(
+        { error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` },
+        403,
+      );
     }
     const taskId = parseInt(c.req.param('id'), 10);
     if (isNaN(taskId)) return c.json({ error: 'Invalid ID' }, 400);
@@ -305,11 +425,20 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       const data = await c.req.json();
       if (!data.text?.trim()) return c.json({ error: 'text required' }, 400);
       const now = new Date().toISOString();
-      const maxOrder = (sqlite.prepare('SELECT MAX(sort_order) as m FROM checklist_items WHERE task_id = ?').get(taskId) as any)?.m || 0;
-      const result = sqlite.prepare(
-        'INSERT INTO checklist_items (task_id, text, checked, sort_order, created_at, updated_at) VALUES (?, ?, 0, ?, ?, ?)'
-      ).run(taskId, data.text.trim(), maxOrder + 1, now, now);
-      const item = sqlite.prepare('SELECT * FROM checklist_items WHERE id = ?').get((result as any).lastInsertRowid);
+      const maxOrder =
+        (
+          sqlite
+            .prepare('SELECT MAX(sort_order) as m FROM checklist_items WHERE task_id = ?')
+            .get(taskId) as any
+        )?.m || 0;
+      const result = sqlite
+        .prepare(
+          'INSERT INTO checklist_items (task_id, text, checked, sort_order, created_at, updated_at) VALUES (?, ?, 0, ?, ?, ?)',
+        )
+        .run(taskId, data.text.trim(), maxOrder + 1, now, now);
+      const item = sqlite
+        .prepare('SELECT * FROM checklist_items WHERE id = ?')
+        .get((result as any).lastInsertRowid);
       wsBroadcast('prowl_update', { action: 'checklist' });
       return c.json(item, 201);
     } catch {
@@ -322,15 +451,23 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#788 — derive caller from auth-layer.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
-      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+      return c.json(
+        { error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` },
+        403,
+      );
     }
     const taskId = parseInt(c.req.param('id'), 10);
     const itemId = parseInt(c.req.param('itemId'), 10);
     if (isNaN(taskId) || isNaN(itemId)) return c.json({ error: 'Invalid ID' }, 400);
-    const existing = sqlite.prepare('SELECT * FROM checklist_items WHERE id = ? AND task_id = ?').get(itemId, taskId);
+    const existing = sqlite
+      .prepare('SELECT * FROM checklist_items WHERE id = ? AND task_id = ?')
+      .get(itemId, taskId);
     if (!existing) return c.json({ error: 'Checklist item not found' }, 404);
     try {
       const data = await c.req.json();
@@ -347,7 +484,9 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       updates.push('updated_at = ?');
       values.push(new Date().toISOString());
       values.push(itemId);
-      sqlite.prepare(`UPDATE checklist_items SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+      sqlite
+        .prepare(`UPDATE checklist_items SET ${updates.join(', ')} WHERE id = ?`)
+        .run(...values);
       const item = sqlite.prepare('SELECT * FROM checklist_items WHERE id = ?').get(itemId);
       wsBroadcast('prowl_update', { action: 'checklist' });
       return c.json(item);
@@ -361,19 +500,29 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#788 — derive caller from auth-layer.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
-      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+      return c.json(
+        { error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` },
+        403,
+      );
     }
     const taskId = parseInt(c.req.param('id'), 10);
     const itemId = parseInt(c.req.param('itemId'), 10);
     if (isNaN(taskId) || isNaN(itemId)) return c.json({ error: 'Invalid ID' }, 400);
-    const existing = sqlite.prepare('SELECT * FROM checklist_items WHERE id = ? AND task_id = ?').get(itemId, taskId) as any;
+    const existing = sqlite
+      .prepare('SELECT * FROM checklist_items WHERE id = ? AND task_id = ?')
+      .get(itemId, taskId) as any;
     if (!existing) return c.json({ error: 'Checklist item not found' }, 404);
     const now = new Date().toISOString();
     const newChecked = existing.checked ? 0 : 1;
-    sqlite.prepare('UPDATE checklist_items SET checked = ?, updated_at = ? WHERE id = ?').run(newChecked, now, itemId);
+    sqlite
+      .prepare('UPDATE checklist_items SET checked = ?, updated_at = ? WHERE id = ?')
+      .run(newChecked, now, itemId);
     const item = sqlite.prepare('SELECT * FROM checklist_items WHERE id = ?').get(itemId);
     wsBroadcast('prowl_update', { action: 'checklist' });
     return c.json(item);
@@ -384,15 +533,23 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     // T#788 — derive caller from auth-layer.
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (!ALLOWED_PROWL_MANAGERS.includes(caller)) {
-      return c.json({ error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` }, 403);
+      return c.json(
+        { error: `Only ${ALLOWED_PROWL_MANAGERS.join(', ')} can modify Prowl checklists` },
+        403,
+      );
     }
     const taskId = parseInt(c.req.param('id'), 10);
     const itemId = parseInt(c.req.param('itemId'), 10);
     if (isNaN(taskId) || isNaN(itemId)) return c.json({ error: 'Invalid ID' }, 400);
-    const existing = sqlite.prepare('SELECT * FROM checklist_items WHERE id = ? AND task_id = ?').get(itemId, taskId);
+    const existing = sqlite
+      .prepare('SELECT * FROM checklist_items WHERE id = ? AND task_id = ?')
+      .get(itemId, taskId);
     if (!existing) return c.json({ error: 'Checklist item not found' }, 404);
     sqlite.prepare('DELETE FROM checklist_items WHERE id = ?').run(itemId);
     wsBroadcast('prowl_update', { action: 'checklist' });
@@ -407,7 +564,8 @@ export function registerProwlRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     if (hasSession.exitCode !== 0) {
       return c.json({ error: 'Sable tmux session not found' }, 503);
     }
-    const notification = '[Prowl] TEST: This is a test notification — if Sable receives this and sends Telegram, the pipeline works';
+    const notification =
+      '[Prowl] TEST: This is a test notification — if Sable receives this and sends Telegram, the pipeline works';
     enqueueNotification('sable', notification);
     return c.json({ success: true, message: 'Test notification sent to Sable' });
   });

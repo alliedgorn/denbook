@@ -9,10 +9,7 @@ import type { ServerResponse } from 'http';
  * Wrap an async handler for use in synchronous HTTP server
  * Handles errors and JSON responses automatically
  */
-export function asyncHandler<T>(
-  res: ServerResponse,
-  handler: () => Promise<T>
-): void {
+export function asyncHandler<T>(res: ServerResponse, handler: () => Promise<T>): void {
   (async () => {
     try {
       const result = await handler();
@@ -21,9 +18,11 @@ export function asyncHandler<T>(
     } catch (error) {
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({
-        error: error instanceof Error ? error.message : 'Internal server error'
-      }));
+      res.end(
+        JSON.stringify({
+          error: error instanceof Error ? error.message : 'Internal server error',
+        }),
+      );
     }
   })();
 }
@@ -35,7 +34,7 @@ export function asyncHandler<T>(
 export function validateRequired(
   res: ServerResponse,
   params: Record<string, any>,
-  required: string[]
+  required: string[],
 ): string | null {
   for (const param of required) {
     if (!params[param]) {
@@ -59,7 +58,7 @@ export function asyncHandlerWithValidation<T>(
   res: ServerResponse,
   params: Record<string, any>,
   required: string[],
-  handler: () => Promise<T>
+  handler: () => Promise<T>,
 ): void {
   if (validateRequired(res, params, required)) {
     return; // Response already sent

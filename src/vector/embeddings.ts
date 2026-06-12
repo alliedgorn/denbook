@@ -61,7 +61,7 @@ export class OllamaEmbeddings implements EmbeddingProvider {
         throw new Error(`Ollama API error: ${error}`);
       }
 
-      const data = await response.json() as { embedding: number[] };
+      const data = (await response.json()) as { embedding: number[] };
       embeddings.push(data.embedding);
 
       // Auto-detect dimensions from first response
@@ -98,7 +98,7 @@ export class OpenAIEmbeddings implements EmbeddingProvider {
     const response = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ input: texts, model: this.model }),
@@ -109,13 +109,11 @@ export class OpenAIEmbeddings implements EmbeddingProvider {
       throw new Error(`OpenAI API error: ${error}`);
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       data: { embedding: number[]; index: number }[];
     };
 
-    return data.data
-      .sort((a, b) => a.index - b.index)
-      .map(d => d.embedding);
+    return data.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
   }
 }
 
@@ -124,7 +122,7 @@ export class OpenAIEmbeddings implements EmbeddingProvider {
  */
 export function createEmbeddingProvider(
   type: EmbeddingProviderType = 'chromadb-internal',
-  model?: string
+  model?: string,
 ): EmbeddingProvider {
   switch (type) {
     case 'ollama':

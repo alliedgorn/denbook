@@ -17,29 +17,34 @@ export function logSearch(
   resultsCount: number,
   searchTimeMs: number,
   results: SearchResult[] = [],
-  project?: string
+  project?: string,
 ) {
   try {
     // Store top 5 results as JSON (id, type, score, snippet)
-    const resultsJson = results.length > 0
-      ? JSON.stringify(results.slice(0, 5).map(r => ({
-          id: r.id,
-          type: r.type,
-          score: r.score,
-          snippet: r.content?.substring(0, 100)
-        })))
-      : null;
+    const resultsJson =
+      results.length > 0
+        ? JSON.stringify(
+            results.slice(0, 5).map((r) => ({
+              id: r.id,
+              type: r.type,
+              score: r.score,
+              snippet: r.content?.substring(0, 100),
+            })),
+          )
+        : null;
 
-    db.insert(searchLog).values({
-      query,
-      type,
-      mode,
-      resultsCount,
-      searchTimeMs,
-      createdAt: Date.now(),
-      project: project || null,
-      results: resultsJson,
-    }).run();
+    db.insert(searchLog)
+      .values({
+        query,
+        type,
+        mode,
+        resultsCount,
+        searchTimeMs,
+        createdAt: Date.now(),
+        project: project || null,
+        results: resultsJson,
+      })
+      .run();
 
     // Comprehensive console logging
     console.log(`\n${'='.repeat(60)}`);
@@ -59,9 +64,17 @@ export function logSearch(
 
     // Log any unexpected fields
     if (results.length > 0) {
-      const expectedFields = ['id', 'type', 'content', 'source_file', 'concepts', 'source', 'score'];
+      const expectedFields = [
+        'id',
+        'type',
+        'content',
+        'source_file',
+        'concepts',
+        'source',
+        'score',
+      ];
       const firstResult = results[0] as unknown as Record<string, unknown>;
-      const unknownFields = Object.keys(firstResult).filter(k => !expectedFields.includes(k));
+      const unknownFields = Object.keys(firstResult).filter((k) => !expectedFields.includes(k));
       if (unknownFields.length > 0) {
         console.log(`  [UNKNOWN FIELDS]: ${unknownFields.join(', ')}`);
       }
@@ -77,12 +90,14 @@ export function logSearch(
  */
 export function logDocumentAccess(documentId: string, accessType: string, project?: string) {
   try {
-    db.insert(documentAccess).values({
-      documentId,
-      accessType,
-      createdAt: Date.now(),
-      project: project || null,
-    }).run();
+    db.insert(documentAccess)
+      .values({
+        documentId,
+        accessType,
+        createdAt: Date.now(),
+        project: project || null,
+      })
+      .run();
   } catch (e) {
     console.error('Failed to log access:', e);
   }
@@ -91,18 +106,25 @@ export function logDocumentAccess(documentId: string, accessType: string, projec
 /**
  * Log learning addition
  */
-export function logLearning(documentId: string, patternPreview: string, source: string, concepts: string[], project?: string) {
+export function logLearning(
+  documentId: string,
+  patternPreview: string,
+  source: string,
+  concepts: string[],
+  project?: string,
+) {
   try {
-    db.insert(learnLog).values({
-      documentId,
-      patternPreview: patternPreview.substring(0, 100),
-      source: source || 'Oracle Learn',
-      concepts: JSON.stringify(concepts),
-      createdAt: Date.now(),
-      project: project || null,
-    }).run();
+    db.insert(learnLog)
+      .values({
+        documentId,
+        patternPreview: patternPreview.substring(0, 100),
+        source: source || 'Oracle Learn',
+        concepts: JSON.stringify(concepts),
+        createdAt: Date.now(),
+        project: project || null,
+      })
+      .run();
   } catch (e) {
     console.error('Failed to log learning:', e);
   }
 }
-

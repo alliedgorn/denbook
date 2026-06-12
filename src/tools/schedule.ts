@@ -16,7 +16,12 @@ import os from 'os';
 import path from 'path';
 import { eq, and, gte, lte, like, asc, or } from 'drizzle-orm';
 import { schedule } from '../db/schema.ts';
-import type { ToolContext, ToolResponse, OracleScheduleAddInput, OracleScheduleListInput } from './types.ts';
+import type {
+  ToolContext,
+  ToolResponse,
+  OracleScheduleAddInput,
+  OracleScheduleListInput,
+} from './types.ts';
 
 const SCHEDULE_REL = 'ψ/inbox/schedule.md';
 
@@ -25,23 +30,66 @@ function getSchedulePath(): string {
 }
 
 const MONTHS: Record<string, number> = {
-  jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3,
-  apr: 4, april: 4, may: 5, jun: 6, june: 6,
-  jul: 7, july: 7, aug: 8, august: 8, sep: 9, september: 9,
-  oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12,
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
   // Thai abbreviated months (formal: ม.ค., common: มค.)
-  'ม.ค.': 1, 'มค.': 1, 'มค': 1,
-  'ก.พ.': 2, 'กพ.': 2, 'กพ': 2,
-  'มี.ค.': 3, 'มีค.': 3, 'มีค': 3,
-  'เม.ย.': 4, 'เมย.': 4, 'เมย': 4,
-  'พ.ค.': 5, 'พค.': 5, 'พค': 5,
-  'มิ.ย.': 6, 'มิย.': 6, 'มิย': 6,
-  'ก.ค.': 7, 'กค.': 7, 'กค': 7,
-  'ส.ค.': 8, 'สค.': 8, 'สค': 8,
-  'ก.ย.': 9, 'กย.': 9, 'กย': 9,
-  'ต.ค.': 10, 'ตค.': 10, 'ตค': 10,
-  'พ.ย.': 11, 'พย.': 11, 'พย': 11,
-  'ธ.ค.': 12, 'ธค.': 12, 'ธค': 12,
+  'ม.ค.': 1,
+  'มค.': 1,
+  มค: 1,
+  'ก.พ.': 2,
+  'กพ.': 2,
+  กพ: 2,
+  'มี.ค.': 3,
+  'มีค.': 3,
+  มีค: 3,
+  'เม.ย.': 4,
+  'เมย.': 4,
+  เมย: 4,
+  'พ.ค.': 5,
+  'พค.': 5,
+  พค: 5,
+  'มิ.ย.': 6,
+  'มิย.': 6,
+  มิย: 6,
+  'ก.ค.': 7,
+  'กค.': 7,
+  กค: 7,
+  'ส.ค.': 8,
+  'สค.': 8,
+  สค: 8,
+  'ก.ย.': 9,
+  'กย.': 9,
+  กย: 9,
+  'ต.ค.': 10,
+  'ตค.': 10,
+  ตค: 10,
+  'พ.ย.': 11,
+  'พย.': 11,
+  พย: 11,
+  'ธ.ค.': 12,
+  'ธค.': 12,
+  ธค: 12,
 };
 
 /**
@@ -65,8 +113,9 @@ export function parseDate(input: string): string {
   }
 
   // "5 Mar", "5 March", "5 Mar 2026", "Mar 5", "March 5 2026"
-  const monthNameMatch = trimmed.match(/^(\d{1,2})\s+([A-Za-zก-๙.]+)(?:\s+(\d{4}))?$/i)
-    || trimmed.match(/^([A-Za-zก-๙.]+)\s+(\d{1,2})(?:[,\s]+(\d{4}))?$/i);
+  const monthNameMatch =
+    trimmed.match(/^(\d{1,2})\s+([A-Za-zก-๙.]+)(?:\s+(\d{4}))?$/i) ||
+    trimmed.match(/^([A-Za-zก-๙.]+)\s+(\d{1,2})(?:[,\s]+(\d{4}))?$/i);
   if (monthNameMatch) {
     let day: number, monthStr: string, yearStr: string | undefined;
     if (/^\d/.test(monthNameMatch[1])) {
@@ -91,7 +140,9 @@ export function parseDate(input: string): string {
     const day = parseInt(slashMatch[1]);
     const month = parseInt(slashMatch[2]);
     const year = slashMatch[3]
-      ? (slashMatch[3].length === 2 ? 2000 + parseInt(slashMatch[3]) : parseInt(slashMatch[3]))
+      ? slashMatch[3].length === 2
+        ? 2000 + parseInt(slashMatch[3])
+        : parseInt(slashMatch[3])
       : thisYear;
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
       return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -117,113 +168,131 @@ function fmtLocal(d: Date): string {
 
 export const scheduleAddToolDef = {
   name: 'oracle_schedule_add',
-  description: 'Add an appointment or event to the shared schedule. The schedule is per-human (not per-project) and shared across all Oracles.',
+  description:
+    'Add an appointment or event to the shared schedule. The schedule is per-human (not per-project) and shared across all Oracles.',
   inputSchema: {
     type: 'object',
     properties: {
       date: {
         type: 'string',
-        description: 'Date of the event (e.g. "5 Mar", "2026-03-05", "tomorrow", "28 ก.พ.")'
+        description: 'Date of the event (e.g. "5 Mar", "2026-03-05", "tomorrow", "28 ก.พ.")',
       },
       event: {
         type: 'string',
-        description: 'Event description (e.g. "นัดอ.เศรษฐ์", "Team standup")'
+        description: 'Event description (e.g. "นัดอ.เศรษฐ์", "Team standup")',
       },
       time: {
         type: 'string',
-        description: 'Optional time (e.g. "14:00", "TBD")'
+        description: 'Optional time (e.g. "14:00", "TBD")',
       },
       notes: {
         type: 'string',
-        description: 'Optional notes about the event'
+        description: 'Optional notes about the event',
       },
       recurring: {
         type: 'string',
         description: 'Optional recurrence: "daily", "weekly", "monthly"',
-        enum: ['daily', 'weekly', 'monthly']
-      }
+        enum: ['daily', 'weekly', 'monthly'],
+      },
     },
-    required: ['date', 'event']
-  }
+    required: ['date', 'event'],
+  },
 };
 
 export const scheduleListToolDef = {
   name: 'oracle_schedule_list',
-  description: 'List appointments from the shared schedule. Filter by date, range, or keyword. Defaults to today + 14 days.',
+  description:
+    'List appointments from the shared schedule. Filter by date, range, or keyword. Defaults to today + 14 days.',
   inputSchema: {
     type: 'object',
     properties: {
       date: {
         type: 'string',
-        description: 'Specific date to query (e.g. "2026-03-05", "today", "tomorrow")'
+        description: 'Specific date to query (e.g. "2026-03-05", "today", "tomorrow")',
       },
       from: {
         type: 'string',
-        description: 'Range start date (inclusive). Defaults to today.'
+        description: 'Range start date (inclusive). Defaults to today.',
       },
       to: {
         type: 'string',
-        description: 'Range end date (inclusive). Defaults to 14 days from now.'
+        description: 'Range end date (inclusive). Defaults to 14 days from now.',
       },
       filter: {
         type: 'string',
-        description: 'Keyword to filter events (e.g. "standup", "เศรษฐ์")'
+        description: 'Keyword to filter events (e.g. "standup", "เศรษฐ์")',
       },
       status: {
         type: 'string',
         description: 'Filter by status',
-        enum: ['pending', 'done', 'cancelled', 'all']
+        enum: ['pending', 'done', 'cancelled', 'all'],
       },
       limit: {
         type: 'number',
-        description: 'Max results (default 50)'
-      }
-    }
-  }
+        description: 'Max results (default 50)',
+      },
+    },
+  },
 };
 
 // ============================================================================
 // Handlers
 // ============================================================================
 
-export async function handleScheduleAdd(ctx: ToolContext, input: OracleScheduleAddInput): Promise<ToolResponse> {
+export async function handleScheduleAdd(
+  ctx: ToolContext,
+  input: OracleScheduleAddInput,
+): Promise<ToolResponse> {
   const { event, time, notes } = input;
   const dateCanonical = parseDate(input.date);
   const now = Date.now();
 
-  const result = ctx.db.insert(schedule).values({
-    date: dateCanonical,
-    dateRaw: input.date,
-    time: time || null,
-    event,
-    notes: notes || null,
-    recurring: input.recurring || null,
-    status: 'pending',
-    createdAt: now,
-    updatedAt: now,
-  }).returning({ id: schedule.id }).get();
+  const result = ctx.db
+    .insert(schedule)
+    .values({
+      date: dateCanonical,
+      dateRaw: input.date,
+      time: time || null,
+      event,
+      notes: notes || null,
+      recurring: input.recurring || null,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: schedule.id })
+    .get();
 
   // Auto-export to schedule.md
   exportScheduleToMarkdown(ctx);
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        success: true,
-        id: result.id,
-        date: dateCanonical,
-        dateRaw: input.date,
-        event,
-        time: time || 'TBD',
-        notes: notes || '',
-        message: 'Event added to schedule'
-      }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            success: true,
+            id: result.id,
+            date: dateCanonical,
+            dateRaw: input.date,
+            event,
+            time: time || 'TBD',
+            notes: notes || '',
+            message: 'Event added to schedule',
+          },
+          null,
+          2,
+        ),
+      },
+    ],
   };
 }
 
-export async function handleScheduleList(ctx: ToolContext, input: OracleScheduleListInput): Promise<ToolResponse> {
+export async function handleScheduleList(
+  ctx: ToolContext,
+  input: OracleScheduleListInput,
+): Promise<ToolResponse> {
   const limit = input.limit || 50;
   const statusFilter = input.status || 'pending';
 
@@ -241,25 +310,27 @@ export async function handleScheduleList(ctx: ToolContext, input: OracleSchedule
   } else {
     // Range query
     const from = input.from ? parseDate(input.from) : fmt(new Date());
-    const to = input.to ? parseDate(input.to) : (() => {
-      const d = new Date();
-      d.setDate(d.getDate() + 14);
-      return fmt(d);
-    })();
+    const to = input.to
+      ? parseDate(input.to)
+      : (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 14);
+          return fmt(d);
+        })();
     conditions.push(gte(schedule.date, from));
     conditions.push(lte(schedule.date, to));
   }
 
   if (input.filter) {
-    conditions.push(or(
-      like(schedule.event, `%${input.filter}%`),
-      like(schedule.notes, `%${input.filter}%`)
-    )!);
+    conditions.push(
+      or(like(schedule.event, `%${input.filter}%`), like(schedule.notes, `%${input.filter}%`))!,
+    );
   }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const events = ctx.db.select()
+  const events = ctx.db
+    .select()
     .from(schedule)
     .where(where)
     .orderBy(asc(schedule.date), asc(schedule.time))
@@ -274,23 +345,29 @@ export async function handleScheduleList(ctx: ToolContext, input: OracleSchedule
   }
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        total: events.length,
-        events: events.map(e => ({
-          id: e.id,
-          date: e.date,
-          dateRaw: e.dateRaw,
-          time: e.time || 'TBD',
-          event: e.event,
-          notes: e.notes,
-          recurring: e.recurring,
-          status: e.status,
-        })),
-        byDate,
-      }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            total: events.length,
+            events: events.map((e) => ({
+              id: e.id,
+              date: e.date,
+              dateRaw: e.dateRaw,
+              time: e.time || 'TBD',
+              event: e.event,
+              notes: e.notes,
+              recurring: e.recurring,
+              status: e.status,
+            })),
+            byDate,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
   };
 }
 
@@ -299,7 +376,8 @@ export async function handleScheduleList(ctx: ToolContext, input: OracleSchedule
 // ============================================================================
 
 function exportScheduleToMarkdown(ctx: ToolContext): void {
-  const events = ctx.db.select()
+  const events = ctx.db
+    .select()
     .from(schedule)
     .where(eq(schedule.status, 'pending'))
     .orderBy(asc(schedule.date), asc(schedule.time))
@@ -329,7 +407,7 @@ function exportScheduleToMarkdown(ctx: ToolContext): void {
   }
 
   // Recurring section
-  const recurring = events.filter(e => e.recurring);
+  const recurring = events.filter((e) => e.recurring);
   if (recurring.length > 0) {
     md += `\n## Recurring\n\n`;
     md += `| Day | Time | Event |\n`;

@@ -142,12 +142,14 @@ afterAll(() => {
 
 describe('handleReflect - SELECT oracle_documents', () => {
   it('should select random document of type principle or learning', () => {
-    const result = db.prepare(`
+    const result = db
+      .prepare(`
       SELECT id, type, source_file, concepts FROM oracle_documents
       WHERE type IN ('principle', 'learning')
       ORDER BY RANDOM()
       LIMIT 1
-    `).get() as any;
+    `)
+      .get() as any;
 
     expect(result).toBeDefined();
     expect(['principle', 'learning']).toContain(result.type);
@@ -160,12 +162,14 @@ describe('handleReflect - SELECT oracle_documents', () => {
 
     // Run multiple times to verify randomness
     for (let i = 0; i < 20; i++) {
-      const result = db.prepare(`
+      const result = db
+        .prepare(`
         SELECT id FROM oracle_documents
         WHERE type IN ('principle', 'learning')
         ORDER BY RANDOM()
         LIMIT 1
-      `).get() as any;
+      `)
+        .get() as any;
       results.add(result.id);
     }
 
@@ -175,12 +179,14 @@ describe('handleReflect - SELECT oracle_documents', () => {
 
   it('should only return principle and learning types', () => {
     for (let i = 0; i < 10; i++) {
-      const result = db.prepare(`
+      const result = db
+        .prepare(`
         SELECT type FROM oracle_documents
         WHERE type IN ('principle', 'learning')
         ORDER BY RANDOM()
         LIMIT 1
-      `).get() as any;
+      `)
+        .get() as any;
 
       expect(result.type).not.toBe('retro');
     }
@@ -209,7 +215,7 @@ describe('handleLearn - INSERT oracle_documents', () => {
       now,
       null,
       'github.com/test/repo',
-      'oracle_learn'
+      'oracle_learn',
     );
 
     const result = db.prepare('SELECT * FROM oracle_documents WHERE id = ?').get(id) as any;
@@ -250,14 +256,16 @@ describe('handleList - COUNT oracle_documents', () => {
   });
 
   it('should count documents by type', () => {
-    const result = db.prepare('SELECT COUNT(*) as total FROM oracle_documents WHERE type = ?')
+    const result = db
+      .prepare('SELECT COUNT(*) as total FROM oracle_documents WHERE type = ?')
       .get('principle') as any;
 
     expect(result.total).toBe(2);
   });
 
   it('should return 0 for non-existent type', () => {
-    const result = db.prepare('SELECT COUNT(*) as total FROM oracle_documents WHERE type = ?')
+    const result = db
+      .prepare('SELECT COUNT(*) as total FROM oracle_documents WHERE type = ?')
       .get('nonexistent') as any;
 
     expect(result.total).toBe(0);
@@ -270,34 +278,40 @@ describe('handleList - COUNT oracle_documents', () => {
 
 describe('handleStats - Aggregation queries', () => {
   it('should count documents grouped by type', () => {
-    const results = db.prepare(`
+    const results = db
+      .prepare(`
       SELECT type, COUNT(*) as count
       FROM oracle_documents
       GROUP BY type
-    `).all() as Array<{ type: string; count: number }>;
+    `)
+      .all() as Array<{ type: string; count: number }>;
 
     expect(results.length).toBeGreaterThan(0);
 
-    const typeMap = new Map(results.map(r => [r.type, r.count]));
+    const typeMap = new Map(results.map((r) => [r.type, r.count]));
     expect(typeMap.get('principle')).toBe(2);
     expect(typeMap.get('learning')).toBeGreaterThanOrEqual(2);
     expect(typeMap.get('retro')).toBe(1);
   });
 
   it('should get max indexed_at timestamp', () => {
-    const result = db.prepare(`
+    const result = db
+      .prepare(`
       SELECT MAX(indexed_at) as last_indexed FROM oracle_documents
-    `).get() as any;
+    `)
+      .get() as any;
 
     expect(result.last_indexed).toBeDefined();
     expect(result.last_indexed).toBeGreaterThan(0);
   });
 
   it('should select all concepts (non-empty)', () => {
-    const results = db.prepare(`
+    const results = db
+      .prepare(`
       SELECT concepts FROM oracle_documents
       WHERE concepts IS NOT NULL AND concepts != '[]'
-    `).all() as Array<{ concepts: string }>;
+    `)
+      .all() as Array<{ concepts: string }>;
 
     expect(results.length).toBeGreaterThan(0);
 
@@ -308,10 +322,12 @@ describe('handleStats - Aggregation queries', () => {
   });
 
   it('should calculate unique concepts count', () => {
-    const results = db.prepare(`
+    const results = db
+      .prepare(`
       SELECT concepts FROM oracle_documents
       WHERE concepts IS NOT NULL AND concepts != '[]'
-    `).all() as Array<{ concepts: string }>;
+    `)
+      .all() as Array<{ concepts: string }>;
 
     const uniqueConcepts = new Set<string>();
     for (const row of results) {
@@ -334,30 +350,36 @@ describe('handleStats - Aggregation queries', () => {
 
 describe('handleConcepts - SELECT concepts', () => {
   it('should select concepts from all documents', () => {
-    const results = db.prepare(`
+    const results = db
+      .prepare(`
       SELECT concepts FROM oracle_documents
       WHERE concepts IS NOT NULL AND concepts != '[]'
-    `).all() as Array<{ concepts: string }>;
+    `)
+      .all() as Array<{ concepts: string }>;
 
     expect(results.length).toBeGreaterThan(0);
   });
 
   it('should select concepts filtered by type', () => {
-    const results = db.prepare(`
+    const results = db
+      .prepare(`
       SELECT concepts FROM oracle_documents
       WHERE type = ? AND concepts IS NOT NULL AND concepts != '[]'
-    `).all('principle') as Array<{ concepts: string }>;
+    `)
+      .all('principle') as Array<{ concepts: string }>;
 
     expect(results.length).toBe(2); // Our 2 test principles have concepts
   });
 
   it('should count concept occurrences correctly', () => {
     // Only check the original 5 test documents
-    const results = db.prepare(`
+    const results = db
+      .prepare(`
       SELECT concepts FROM oracle_documents
       WHERE id IN ('principle_1', 'principle_2', 'learning_1', 'learning_2', 'retro_1')
       AND concepts IS NOT NULL AND concepts != '[]'
-    `).all() as Array<{ concepts: string }>;
+    `)
+      .all() as Array<{ concepts: string }>;
 
     const conceptCounts = new Map<string, number>();
     for (const row of results) {
@@ -502,9 +524,11 @@ describe('storeDocuments - INSERT oracle_documents (batch)', () => {
       insertStmt.run(doc.id, doc.type, doc.source_file, doc.concepts, now, now, now, null);
     }
 
-    const count = db.prepare(`
+    const count = db
+      .prepare(`
       SELECT COUNT(*) as count FROM oracle_documents WHERE id LIKE ?
-    `).get(`batch_%_${now}`) as any;
+    `)
+      .get(`batch_%_${now}`) as any;
 
     expect(count.count).toBe(3);
   });
@@ -553,9 +577,11 @@ describe('storeDocuments - INSERT oracle_documents (batch)', () => {
     `).run(id, content, concepts);
 
     // Verify FTS indexing works
-    const ftsResult = db.prepare(`
+    const ftsResult = db
+      .prepare(`
       SELECT id, content FROM oracle_fts WHERE oracle_fts MATCH 'indexing'
-    `).get() as any;
+    `)
+      .get() as any;
 
     expect(ftsResult).toBeDefined();
     expect(ftsResult.id).toBe(id);
@@ -583,7 +609,7 @@ describe('Edge Cases', () => {
   it('should handle special characters in content', () => {
     const now = Date.now();
     const id = `special_chars_${now}`;
-    const content = "Test with 'quotes', \"double quotes\", and unicode: ψ 日本語";
+    const content = 'Test with \'quotes\', "double quotes", and unicode: ψ 日本語';
 
     db.prepare(`
       INSERT INTO oracle_fts (id, content, concepts) VALUES (?, ?, ?)
@@ -619,11 +645,13 @@ describe('Drizzle Pattern Verification', () => {
     // db.select({ type: oracleDocuments.type, count: sql`count(*)` })
     //   .from(oracleDocuments).groupBy(oracleDocuments.type).all()
 
-    const results = db.prepare(`
+    const results = db
+      .prepare(`
       SELECT type, COUNT(*) as count
       FROM oracle_documents
       GROUP BY type
-    `).all() as Array<{ type: string; count: number }>;
+    `)
+      .all() as Array<{ type: string; count: number }>;
 
     // Verify structure matches Drizzle output
     expect(results[0]).toHaveProperty('type');
@@ -643,9 +671,11 @@ describe('Drizzle Pattern Verification', () => {
   it('should verify ORDER BY RANDOM() LIMIT 1 pattern', () => {
     // db.select().from(oracleDocuments).orderBy(sql`RANDOM()`).limit(1).get()
 
-    const result = db.prepare(`
+    const result = db
+      .prepare(`
       SELECT * FROM oracle_documents ORDER BY RANDOM() LIMIT 1
-    `).get() as any;
+    `)
+      .get() as any;
 
     expect(result).toBeDefined();
     expect(result).toHaveProperty('id');
@@ -658,11 +688,13 @@ describe('Drizzle Pattern Verification', () => {
 
     // Drizzle .returning() returns the inserted row
     // SQLite supports RETURNING clause
-    const result = db.prepare(`
+    const result = db
+      .prepare(`
       INSERT INTO oracle_documents (id, type, source_file, concepts, created_at, updated_at, indexed_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
       RETURNING *
-    `).get(id, 'learning', 'test-returning.md', '["test"]', now, now, now) as any;
+    `)
+      .get(id, 'learning', 'test-returning.md', '["test"]', now, now, now) as any;
 
     expect(result).toBeDefined();
     expect(result.id).toBe(id);

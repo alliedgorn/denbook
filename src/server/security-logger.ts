@@ -16,26 +16,26 @@ import { randomUUID } from 'crypto';
 // ============================================================================
 
 export type SecurityEventType =
-  | 'auth_failure'           // Failed login attempt
-  | 'auth_success'           // Successful login (info-level, for correlation)
-  | 'permission_denied'      // 403 response
-  | 'rate_limited'           // Rate limit triggered (429)
-  | 'token_created'          // OAuth token stored
-  | 'token_refreshed'        // OAuth token refreshed
-  | 'token_revoked'          // OAuth token revoked/disconnected
-  | 'settings_changed'       // Auth/security settings modified
-  | 'impersonation_blocked'  // ?as= spoofing blocked on protected endpoint
-  | 'session_destroyed'      // Session logout
-  | 'alert_triggered'        // Threshold alert fired by checkAlertThresholds
-  | 'token_validated'        // Beast token validated (sampled, T#546)
-  | 'guest_banned'           // Guest account banned (T#616)
-  | 'guest_unbanned'         // Guest account unbanned (T#616)
-  | 'token_max_lifetime_reached'      // Spec #51 — refresh chain hit MAX_LIFETIME
-  | 'token_rotated_admin'             // Spec #51/#52 — owner-driven rotation (POST /api/auth/tokens/rotate)
-  | 'token_self_rotated'              // Spec #52 — Beast-self rotation (POST /api/auth/rotate)
-  | 'token_rotation_grace_used'       // Spec #52 — stale-in-flight grace window absorbed
-  | 'token_chain_compromised'         // Spec #52 — rotation-detection trip; chain revoked
-  | 'token_chain_revoked'             // Spec #52 — owner-revoke walked the chain
+  | 'auth_failure' // Failed login attempt
+  | 'auth_success' // Successful login (info-level, for correlation)
+  | 'permission_denied' // 403 response
+  | 'rate_limited' // Rate limit triggered (429)
+  | 'token_created' // OAuth token stored
+  | 'token_refreshed' // OAuth token refreshed
+  | 'token_revoked' // OAuth token revoked/disconnected
+  | 'settings_changed' // Auth/security settings modified
+  | 'impersonation_blocked' // ?as= spoofing blocked on protected endpoint
+  | 'session_destroyed' // Session logout
+  | 'alert_triggered' // Threshold alert fired by checkAlertThresholds
+  | 'token_validated' // Beast token validated (sampled, T#546)
+  | 'guest_banned' // Guest account banned (T#616)
+  | 'guest_unbanned' // Guest account unbanned (T#616)
+  | 'token_max_lifetime_reached' // Spec #51 — refresh chain hit MAX_LIFETIME
+  | 'token_rotated_admin' // Spec #51/#52 — owner-driven rotation (POST /api/auth/tokens/rotate)
+  | 'token_self_rotated' // Spec #52 — Beast-self rotation (POST /api/auth/rotate)
+  | 'token_rotation_grace_used' // Spec #52 — stale-in-flight grace window absorbed
+  | 'token_chain_compromised' // Spec #52 — rotation-detection trip; chain revoked
+  | 'token_chain_revoked' // Spec #52 — owner-revoke walked the chain
   | 'token_rotation_attempted_invalid'; // Spec #52 — rotate attempted with invalid/expired/locked token
 
 export type SecuritySeverity = 'info' | 'warning' | 'critical';
@@ -68,12 +68,20 @@ try {
     ip_source TEXT,
     request_id TEXT
   )`);
-  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_security_events_timestamp ON security_events(timestamp)`);
+  sqlite.exec(
+    `CREATE INDEX IF NOT EXISTS idx_security_events_timestamp ON security_events(timestamp)`,
+  );
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_security_events_type ON security_events(event_type)`);
-  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_security_events_severity ON security_events(severity)`);
+  sqlite.exec(
+    `CREATE INDEX IF NOT EXISTS idx_security_events_severity ON security_events(severity)`,
+  );
   sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_security_events_actor ON security_events(actor)`);
-  sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_security_events_request_id ON security_events(request_id)`);
-} catch { /* table exists */ }
+  sqlite.exec(
+    `CREATE INDEX IF NOT EXISTS idx_security_events_request_id ON security_events(request_id)`,
+  );
+} catch {
+  /* table exists */
+}
 
 // ============================================================================
 // Prepared statements (reused for performance)
@@ -81,12 +89,12 @@ try {
 
 const insertStmt = sqlite.prepare(
   `INSERT INTO security_events (timestamp, event_type, severity, actor, actor_type, target, details, ip_source, request_id)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 
 const countRecentByTypeStmt = sqlite.prepare(
   `SELECT COUNT(*) as count FROM security_events
-   WHERE event_type = ? AND ip_source = ? AND timestamp > ?`
+   WHERE event_type = ? AND ip_source = ? AND timestamp > ?`,
 );
 
 // ============================================================================
@@ -124,8 +132,8 @@ export function logSecurityEvent(event: SecurityEvent): void {
 // ============================================================================
 
 const ALERT_THRESHOLDS = {
-  auth_failure: { count: 5, windowSeconds: 300 },      // 5 failures in 5 min
-  rate_limited: { count: 3, windowSeconds: 300 },       // 3 rate limits in 5 min
+  auth_failure: { count: 5, windowSeconds: 300 }, // 5 failures in 5 min
+  rate_limited: { count: 3, windowSeconds: 300 }, // 3 rate limits in 5 min
   permission_denied: { count: 10, windowSeconds: 300 }, // 10 denials in 5 min
 } as const;
 
@@ -135,11 +143,9 @@ function checkAlertThresholds(event: SecurityEvent, now: number): void {
 
   try {
     const cutoff = now - threshold.windowSeconds;
-    const result = countRecentByTypeStmt.get(
-      event.eventType,
-      event.ipSource,
-      cutoff
-    ) as { count: number } | undefined;
+    const result = countRecentByTypeStmt.get(event.eventType, event.ipSource, cutoff) as
+      | { count: number }
+      | undefined;
 
     if (result && result.count >= threshold.count) {
       const msg = `[SecurityAlert] ${event.eventType} threshold exceeded: ${result.count} events from ${event.ipSource} in ${threshold.windowSeconds}s (actor: ${event.actor || 'unknown'})`;
@@ -163,7 +169,9 @@ function checkAlertThresholds(event: SecurityEvent, now: number): void {
           event.ipSource,
           event.requestId || null,
         );
-      } catch { /* don't recurse on failure */ }
+      } catch {
+        /* don't recurse on failure */
+      }
     }
   } catch {
     // Alert check is best-effort
@@ -193,10 +201,10 @@ export const SECURITY_RETENTION_DAYS = 90;
  */
 export function pruneSecurityEvents(): number {
   try {
-    const cutoffSeconds = Math.floor(Date.now() / 1000) - (SECURITY_RETENTION_DAYS * 24 * 60 * 60);
-    const result = sqlite.prepare(
-      `DELETE FROM security_events WHERE timestamp < ?`
-    ).run(cutoffSeconds);
+    const cutoffSeconds = Math.floor(Date.now() / 1000) - SECURITY_RETENTION_DAYS * 24 * 60 * 60;
+    const result = sqlite
+      .prepare(`DELETE FROM security_events WHERE timestamp < ?`)
+      .run(cutoffSeconds);
     return result.changes || 0;
   } catch (err) {
     console.error(`[SecurityLogger] Prune failed: ${err}`);

@@ -24,7 +24,9 @@ async function main() {
 
   // Open oracle.db to read documents
   const db = new Database(DB_PATH, { readonly: true });
-  const total = db.query('SELECT COUNT(*) as count FROM oracle_documents').get() as { count: number };
+  const total = db.query('SELECT COUNT(*) as count FROM oracle_documents').get() as {
+    count: number;
+  };
   console.log(`Documents: ${total.count}`);
 
   // Create LanceDB store with qwen3
@@ -38,17 +40,21 @@ async function main() {
   await store.connect();
 
   // Fresh index
-  try { await store.deleteCollection(); } catch {}
+  try {
+    await store.deleteCollection();
+  } catch {}
   await store.ensureCollection();
 
   // Read all docs (join oracle_documents + oracle_fts for content, GROUP BY to dedupe FTS chunks)
-  const rows = db.query(`
+  const rows = db
+    .query(`
     SELECT d.id, d.type, GROUP_CONCAT(f.content, '\n') as content, d.source_file, d.concepts, d.project, d.created_at
     FROM oracle_documents d
     JOIN oracle_fts f ON d.id = f.id
     GROUP BY d.id
     ORDER BY d.created_at DESC
-  `).all() as Array<{
+  `)
+    .all() as Array<{
     id: string;
     type: string;
     content: string;
@@ -67,7 +73,7 @@ async function main() {
     const batch = rows.slice(i, i + BATCH_SIZE);
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
 
-    const docs = batch.map(row => ({
+    const docs = batch.map((row) => ({
       id: row.id,
       document: row.content,
       metadata: {
@@ -85,7 +91,9 @@ async function main() {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
       const rate = (indexed / Number(elapsed)).toFixed(1);
       const eta = ((rows.length - indexed) / Number(rate)).toFixed(0);
-      console.log(`  Batch ${batchNum}/${totalBatches} — ${indexed}/${rows.length} docs — ${rate}/s — ETA ${eta}s`);
+      console.log(
+        `  Batch ${batchNum}/${totalBatches} — ${indexed}/${rows.length} docs — ${rate}/s — ETA ${eta}s`,
+      );
     } catch (e) {
       errors++;
       console.error(`  Batch ${batchNum} FAILED:`, e instanceof Error ? e.message : String(e));
@@ -104,7 +112,7 @@ async function main() {
   db.close();
 }
 
-main().catch(e => {
+main().catch((e) => {
   console.error('Indexer failed:', e);
   process.exit(1);
 });
