@@ -13,16 +13,17 @@ import fs from 'fs';
 const REPO_ROOT = path.join(homedir(), 'Code/github.com/Soul-Brews-Studio/oracle-v2');
 
 // Find all oracle_learn docs without project using Drizzle
-const docs = db.select({
-  id: oracleDocuments.id,
-  sourceFile: oracleDocuments.sourceFile
-})
+const docs = db
+  .select({
+    id: oracleDocuments.id,
+    sourceFile: oracleDocuments.sourceFile,
+  })
   .from(oracleDocuments)
   .where(
     and(
       eq(oracleDocuments.createdBy, 'oracle_learn'),
-      or(isNull(oracleDocuments.project), eq(oracleDocuments.project, ''))
-    )
+      or(isNull(oracleDocuments.project), eq(oracleDocuments.project, '')),
+    ),
   )
   .all();
 
@@ -47,9 +48,9 @@ for (const doc of docs) {
 
     // Method 2: Try FTS content if file not found
     if (!project) {
-      const ftsResult = sqlite.prepare(
-        'SELECT content FROM oracle_fts WHERE id = ?'
-      ).get(doc.id) as { content: string } | undefined;
+      const ftsResult = sqlite.prepare('SELECT content FROM oracle_fts WHERE id = ?').get(doc.id) as
+        | { content: string }
+        | undefined;
 
       if (ftsResult?.content) {
         project = extractProjectFromSource(ftsResult.content);
@@ -59,10 +60,7 @@ for (const doc of docs) {
 
     if (project) {
       // Update using Drizzle
-      db.update(oracleDocuments)
-        .set({ project })
-        .where(eq(oracleDocuments.id, doc.id))
-        .run();
+      db.update(oracleDocuments).set({ project }).where(eq(oracleDocuments.id, doc.id)).run();
 
       console.log(`✓ Fixed ${doc.id} → ${project}`);
       fixed++;

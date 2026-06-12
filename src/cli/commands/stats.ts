@@ -20,9 +20,12 @@ export function registerStats(program: Command): void {
         }
       }
       if (data.vector) {
-        console.log(`  Vector: ${data.vector.enabled ? `${data.vector.count} embeddings` : 'disabled'}`);
+        console.log(
+          `  Vector: ${data.vector.enabled ? `${data.vector.count} embeddings` : 'disabled'}`,
+        );
       }
       if (data.vault_repo) console.log(`  Vault: ${data.vault_repo}`);
-      if (data.lastIndexed) console.log(`  Last indexed: ${new Date(data.lastIndexed).toISOString()}`);
+      if (data.lastIndexed)
+        console.log(`  Last indexed: ${new Date(data.lastIndexed).toISOString()}`);
     });
 }

@@ -45,7 +45,11 @@ interface IntegrationsHelpers {
   isForgeAuthorized: (c: any, options?: { mode: 'read' | 'write' }) => boolean;
 }
 
-export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: IntegrationsHelpers): void {
+export function registerIntegrationsRoutes(
+  app: OpenAPIHono,
+  sqliteDb: Database,
+  helpers: IntegrationsHelpers,
+): void {
   const { hasSessionAuth, isTrustedRequest, isForgeAuthorized } = helpers;
   const sqlite: Database = sqliteDb;
   // Drop-in: integ_block (constants + helpers + state Maps + routes)
@@ -53,7 +57,8 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
   const OAUTH_KEY = process.env.OAUTH_ENCRYPTION_KEY; // 32-byte hex string
   const WITHINGS_CLIENT_ID = process.env.WITHINGS_CLIENT_ID || '';
   const WITHINGS_CLIENT_SECRET = process.env.WITHINGS_CLIENT_SECRET || '';
-  const WITHINGS_REDIRECT_URI = process.env.WITHINGS_REDIRECT_URI || 'https://denbook.online/api/oauth/withings/callback';
+  const WITHINGS_REDIRECT_URI =
+    process.env.WITHINGS_REDIRECT_URI || 'https://denbook.online/api/oauth/withings/callback';
 
   function encryptToken(token: string): { encrypted: string; iv: string; tag: string } {
     if (!OAUTH_KEY) throw new Error('OAUTH_ENCRYPTION_KEY not set');
@@ -89,48 +94,86 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
     const res = await fetch('https://wbsapi.withings.net/v2/signature', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ action: 'getnonce', client_id: WITHINGS_CLIENT_ID, timestamp: String(timestamp), signature }),
+      body: new URLSearchParams({
+        action: 'getnonce',
+        client_id: WITHINGS_CLIENT_ID,
+        timestamp: String(timestamp),
+        signature,
+      }),
     });
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
     if (data.status !== 0) throw new Error(`Nonce failed: ${data.error}`);
     return data.body.nonce;
   }
 
   // Refresh Withings tokens if needed
-  async function ensureFreshWithingsToken(): Promise<{ accessToken: string; userId: string } | null> {
-    const token = sqlite.prepare("SELECT * FROM oauth_tokens WHERE provider = 'withings' LIMIT 1").get() as any;
+  async function ensureFreshWithingsToken(): Promise<{
+    accessToken: string;
+    userId: string;
+  } | null> {
+    const token = sqlite
+      .prepare("SELECT * FROM oauth_tokens WHERE provider = 'withings' LIMIT 1")
+      .get() as any;
     if (!token) return null;
 
     const now = Math.floor(Date.now() / 1000);
     if (token.expires_at > now + 600) {
       // Token still fresh (>10 min remaining)
-      return { accessToken: decryptToken(token.access_token_enc, token.access_iv || token.token_iv, token.access_tag || token.token_tag), userId: token.user_id };
+      return {
+        accessToken: decryptToken(
+          token.access_token_enc,
+          token.access_iv || token.token_iv,
+          token.access_tag || token.token_tag,
+        ),
+        userId: token.user_id,
+      };
     }
 
     // Refresh token
     try {
-      const refreshToken = decryptToken(token.refresh_token_enc, token.refresh_iv || token.token_iv, token.refresh_tag || token.token_tag);
+      const refreshToken = decryptToken(
+        token.refresh_token_enc,
+        token.refresh_iv || token.token_iv,
+        token.refresh_tag || token.token_tag,
+      );
       const nonce = await getWithingsNonce();
       const signature = withingsSign(`requesttoken,${WITHINGS_CLIENT_ID},${nonce}`);
       const res = await fetch('https://wbsapi.withings.net/v2/oauth2', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          action: 'requesttoken', grant_type: 'refresh_token',
-          client_id: WITHINGS_CLIENT_ID, client_secret: WITHINGS_CLIENT_SECRET,
-          refresh_token: refreshToken, nonce, signature,
+          action: 'requesttoken',
+          grant_type: 'refresh_token',
+          client_id: WITHINGS_CLIENT_ID,
+          client_secret: WITHINGS_CLIENT_SECRET,
+          refresh_token: refreshToken,
+          nonce,
+          signature,
         }),
       });
-      const data = await res.json() as any;
+      const data = (await res.json()) as any;
       if (data.status !== 0) throw new Error(`Refresh failed: ${data.error}`);
 
       const { access_token, refresh_token, expires_in, userid } = data.body;
       const enc = encryptToken(access_token);
       const refreshEnc = encryptToken(refresh_token);
-      sqlite.prepare(
-        `UPDATE oauth_tokens SET access_token_enc = ?, refresh_token_enc = ?, access_iv = ?, access_tag = ?, refresh_iv = ?, refresh_tag = ?,
-         expires_at = ?, user_id = ?, updated_at = ? WHERE id = ?`
-      ).run(enc.encrypted, refreshEnc.encrypted, enc.iv, enc.tag, refreshEnc.iv, refreshEnc.tag, now + expires_in, userid, now, token.id);
+      sqlite
+        .prepare(
+          `UPDATE oauth_tokens SET access_token_enc = ?, refresh_token_enc = ?, access_iv = ?, access_tag = ?, refresh_iv = ?, refresh_tag = ?,
+         expires_at = ?, user_id = ?, updated_at = ? WHERE id = ?`,
+        )
+        .run(
+          enc.encrypted,
+          refreshEnc.encrypted,
+          enc.iv,
+          enc.tag,
+          refreshEnc.iv,
+          refreshEnc.tag,
+          now + expires_in,
+          userid,
+          now,
+          token.id,
+        );
 
       logSecurityEvent({
         eventType: 'token_refreshed',
@@ -154,12 +197,15 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
   // GET /api/oauth/withings/authorize — start OAuth flow
   app.get('/api/oauth/withings/authorize', (c) => {
     if (!hasSessionAuth(c)) return c.json({ error: 'Gorn authentication required' }, 403);
-    if (!WITHINGS_CLIENT_ID) return c.json({ error: 'Withings not configured (missing WITHINGS_CLIENT_ID)' }, 500);
+    if (!WITHINGS_CLIENT_ID)
+      return c.json({ error: 'Withings not configured (missing WITHINGS_CLIENT_ID)' }, 500);
 
     const state = require('crypto').randomBytes(16).toString('hex');
     oauthStates.set(state, Date.now());
     // Clean old states (>10 min)
-    for (const [k, v] of oauthStates) { if (Date.now() - v > 600000) oauthStates.delete(k); }
+    for (const [k, v] of oauthStates) {
+      if (Date.now() - v > 600000) oauthStates.delete(k);
+    }
 
     const params = new URLSearchParams({
       response_type: 'code',
@@ -179,7 +225,8 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
     if (error) return c.redirect('/forge?oauth_error=' + encodeURIComponent(error));
     if (!code || !state) return c.json({ error: 'Missing code or state' }, 400);
-    if (!oauthStates.has(state)) return c.json({ error: 'Invalid or expired state (CSRF check failed)' }, 403);
+    if (!oauthStates.has(state))
+      return c.json({ error: 'Invalid or expired state (CSRF check failed)' }, 403);
     oauthStates.delete(state);
 
     try {
@@ -190,13 +237,21 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          action: 'requesttoken', grant_type: 'authorization_code',
-          client_id: WITHINGS_CLIENT_ID, client_secret: WITHINGS_CLIENT_SECRET,
-          code, redirect_uri: WITHINGS_REDIRECT_URI, nonce, signature,
+          action: 'requesttoken',
+          grant_type: 'authorization_code',
+          client_id: WITHINGS_CLIENT_ID,
+          client_secret: WITHINGS_CLIENT_SECRET,
+          code,
+          redirect_uri: WITHINGS_REDIRECT_URI,
+          nonce,
+          signature,
         }),
       });
-      const data = await res.json() as any;
-      if (data.status !== 0) return c.redirect('/forge?oauth_error=' + encodeURIComponent(data.error || 'Token exchange failed'));
+      const data = (await res.json()) as any;
+      if (data.status !== 0)
+        return c.redirect(
+          '/forge?oauth_error=' + encodeURIComponent(data.error || 'Token exchange failed'),
+        );
 
       const { access_token, refresh_token, expires_in, userid, scope } = data.body;
       const now = Math.floor(Date.now() / 1000);
@@ -207,10 +262,25 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
       // Store (upsert — replace existing Withings connection)
       sqlite.prepare("DELETE FROM oauth_tokens WHERE provider = 'withings'").run();
-      sqlite.prepare(
-        `INSERT INTO oauth_tokens (provider, user_id, access_token_enc, refresh_token_enc, access_iv, access_tag, refresh_iv, refresh_tag, expires_at, scopes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run('withings', String(userid), accessEnc.encrypted, refreshEnc.encrypted, accessEnc.iv, accessEnc.tag, refreshEnc.iv, refreshEnc.tag, now + expires_in, scope || 'user.info,user.metrics', now, now);
+      sqlite
+        .prepare(
+          `INSERT INTO oauth_tokens (provider, user_id, access_token_enc, refresh_token_enc, access_iv, access_tag, refresh_iv, refresh_tag, expires_at, scopes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          'withings',
+          String(userid),
+          accessEnc.encrypted,
+          refreshEnc.encrypted,
+          accessEnc.iv,
+          accessEnc.tag,
+          refreshEnc.iv,
+          refreshEnc.tag,
+          now + expires_in,
+          scope || 'user.info,user.metrics',
+          now,
+          now,
+        );
 
       logSecurityEvent({
         eventType: 'token_created',
@@ -225,10 +295,22 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
       try {
         await fetch('https://wbsapi.withings.net/notify', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Bearer ${access_token}` },
-          body: new URLSearchParams({ action: 'subscribe', callbackurl: WITHINGS_REDIRECT_URI.replace('/callback', '').replace('/api/oauth/withings', '/api/webhooks/withings'), appli: '1' }),
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: `Bearer ${access_token}`,
+          },
+          body: new URLSearchParams({
+            action: 'subscribe',
+            callbackurl: WITHINGS_REDIRECT_URI.replace('/callback', '').replace(
+              '/api/oauth/withings',
+              '/api/webhooks/withings',
+            ),
+            appli: '1',
+          }),
         });
-      } catch { /* webhook subscription failure is non-critical */ }
+      } catch {
+        /* webhook subscription failure is non-critical */
+      }
 
       return c.redirect('/forge?withings=connected');
     } catch (err) {
@@ -239,17 +321,24 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
   // GET /api/oauth/withings/status — connection status
   app.get('/api/oauth/withings/status', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge access required' }, 403);
-    const token = sqlite.prepare("SELECT provider, user_id, expires_at, scopes, updated_at FROM oauth_tokens WHERE provider = 'withings' LIMIT 1").get() as any;
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge access required' }, 403);
+    const token = sqlite
+      .prepare(
+        "SELECT provider, user_id, expires_at, scopes, updated_at FROM oauth_tokens WHERE provider = 'withings' LIMIT 1",
+      )
+      .get() as any;
     if (!token) return c.json({ connected: false });
     const now = Math.floor(Date.now() / 1000);
     // Last successful sync time — use in-memory tracker (updated every sync, even with 0 new records)
     // Fall back to DB created_at for first load after server restart (T#536)
     let lastSync = withingsLastSyncAt;
     if (!lastSync) {
-      const lastSyncRow = sqlite.prepare(
-        "SELECT MAX(created_at) as sync_time FROM routine_logs WHERE source = 'withings' AND deleted_at IS NULL"
-      ).get() as any;
+      const lastSyncRow = sqlite
+        .prepare(
+          "SELECT MAX(created_at) as sync_time FROM routine_logs WHERE source = 'withings' AND deleted_at IS NULL",
+        )
+        .get() as any;
       lastSync = lastSyncRow?.sync_time || null;
     }
     return c.json({
@@ -264,17 +353,22 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
   // GET /api/withings/devices — proxy to Withings device list (T#478)
   app.get('/api/withings/devices', async (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge access required' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge access required' }, 403);
     try {
       const tokenData = await ensureFreshWithingsToken();
       if (!tokenData) return c.json({ error: 'Withings not connected' }, 400);
       const res = await fetch('https://wbsapi.withings.net/v2/user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Bearer ${tokenData.accessToken}` },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Bearer ${tokenData.accessToken}`,
+        },
         body: new URLSearchParams({ action: 'getdevice' }),
       });
-      const data = await res.json() as any;
-      if (data.status !== 0) return c.json({ error: data.error || `Withings API error: ${data.status}` }, 502);
+      const data = (await res.json()) as any;
+      if (data.status !== 0)
+        return c.json({ error: data.error || `Withings API error: ${data.status}` }, 502);
       return c.json({ devices: data.body?.devices || [] });
     } catch (err: any) {
       return c.json({ error: err?.message || 'Failed to fetch devices' }, 500);
@@ -290,13 +384,28 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
       if (tokenData) {
         await fetch('https://wbsapi.withings.net/notify', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Bearer ${tokenData.accessToken}` },
-          body: new URLSearchParams({ action: 'revoke', callbackurl: WITHINGS_REDIRECT_URI.replace('/callback', '').replace('/api/oauth/withings', '/api/webhooks/withings'), appli: '1' }),
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: `Bearer ${tokenData.accessToken}`,
+          },
+          body: new URLSearchParams({
+            action: 'revoke',
+            callbackurl: WITHINGS_REDIRECT_URI.replace('/callback', '').replace(
+              '/api/oauth/withings',
+              '/api/webhooks/withings',
+            ),
+            appli: '1',
+          }),
         });
       }
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
     sqlite.prepare("DELETE FROM oauth_tokens WHERE provider = 'withings'").run();
-    const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+    const ip =
+      c.req.header('x-real-ip') ||
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+      'local';
     logSecurityEvent({
       eventType: 'token_revoked',
       severity: 'info',
@@ -312,13 +421,23 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
   // Withings measurement type mapping
   const WITHINGS_MEASTYPES: Record<number, string> = {
-    1: 'weight', 5: 'fat_free_mass', 6: 'body_fat_pct', 8: 'fat_mass',
-    9: 'diastolic', 10: 'systolic',
-    76: 'muscle_mass', 77: 'hydration', 88: 'bone_mass', 170: 'visceral_fat',
+    1: 'weight',
+    5: 'fat_free_mass',
+    6: 'body_fat_pct',
+    8: 'fat_mass',
+    9: 'diastolic',
+    10: 'systolic',
+    76: 'muscle_mass',
+    77: 'hydration',
+    88: 'bone_mass',
+    170: 'visceral_fat',
   };
 
   // Fetch and store Withings measurements for a date range
-  async function syncWithingsMeasurements(startdate: number, enddate: number): Promise<{ synced: number; skipped: number }> {
+  async function syncWithingsMeasurements(
+    startdate: number,
+    enddate: number,
+  ): Promise<{ synced: number; skipped: number }> {
     const tokenData = await ensureFreshWithingsToken();
     if (!tokenData) throw new Error('No Withings connection');
 
@@ -332,20 +451,31 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
     const res = await fetch('https://wbsapi.withings.net/measure', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Bearer ${tokenData.accessToken}` },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Bearer ${tokenData.accessToken}`,
+      },
       body: new URLSearchParams(params),
     });
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
     if (data.status !== 0) throw new Error(`Withings API error: ${data.error || data.status}`);
 
     const measuregrps = data.body?.measuregrps || [];
-    let synced = 0, skipped = 0;
+    let synced = 0,
+      skipped = 0;
 
     for (const grp of measuregrps) {
       const grpid = grp.grpid;
       // Dedup by withings_grpid (check both weight and measurement types)
-      const existing = sqlite.prepare("SELECT id FROM routine_logs WHERE source = 'withings' AND json_extract(data, '$.withings_grpid') = ? AND deleted_at IS NULL LIMIT 1").get(grpid);
-      if (existing) { skipped++; continue; }
+      const existing = sqlite
+        .prepare(
+          "SELECT id FROM routine_logs WHERE source = 'withings' AND json_extract(data, '$.withings_grpid') = ? AND deleted_at IS NULL LIMIT 1",
+        )
+        .get(grpid);
+      if (existing) {
+        skipped++;
+        continue;
+      }
 
       const measurements: Record<string, number> = {};
       for (const m of grp.measures || []) {
@@ -367,28 +497,39 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
           source: 'withings',
           withings_grpid: grpid,
         });
-        sqlite.prepare(
-          'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)'
-        ).run('blood_pressure', loggedAt, bpData, 'withings', now);
+        sqlite
+          .prepare(
+            'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)',
+          )
+          .run('blood_pressure', loggedAt, bpData, 'withings', now);
         delete measurements.systolic;
         delete measurements.diastolic;
       }
 
       // Store weight as 'weight' type so Forge chart picks it up
       if (measurements.weight) {
-        const weightData = JSON.stringify({ value: measurements.weight, unit: 'kg', source: 'withings', withings_grpid: grpid });
-        sqlite.prepare(
-          'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)'
-        ).run('weight', loggedAt, weightData, 'withings', now);
+        const weightData = JSON.stringify({
+          value: measurements.weight,
+          unit: 'kg',
+          source: 'withings',
+          withings_grpid: grpid,
+        });
+        sqlite
+          .prepare(
+            'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)',
+          )
+          .run('weight', loggedAt, weightData, 'withings', now);
       }
 
       // Store full body composition as 'measurement' type (only if body-comp fields remain)
       const bodyCompKeys = Object.keys(measurements);
       if (bodyCompKeys.length > 0 && (bodyCompKeys.length > 1 || !measurements.weight)) {
         const logData = JSON.stringify({ ...measurements, withings_grpid: grpid });
-        sqlite.prepare(
-          'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)'
-        ).run('measurement', loggedAt, logData, 'withings', now);
+        sqlite
+          .prepare(
+            'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)',
+          )
+          .run('measurement', loggedAt, logData, 'withings', now);
       }
       synced++;
     }
@@ -407,10 +548,14 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
     const startdate = parseInt(String(body.startdate || '0'), 10);
     const enddate = parseInt(String(body.enddate || '0'), 10);
 
-    console.log(`[Withings] Webhook received: userid=${userid} appli=${appli} startdate=${startdate} enddate=${enddate}`);
+    console.log(
+      `[Withings] Webhook received: userid=${userid} appli=${appli} startdate=${startdate} enddate=${enddate}`,
+    );
 
     // Validate userid matches stored token
-    const token = sqlite.prepare("SELECT user_id FROM oauth_tokens WHERE provider = 'withings' LIMIT 1").get() as any;
+    const token = sqlite
+      .prepare("SELECT user_id FROM oauth_tokens WHERE provider = 'withings' LIMIT 1")
+      .get() as any;
     if (!token || token.user_id !== userid) {
       console.log(`[Withings] Webhook rejected: unknown userid ${userid}`);
       return c.text('OK', 200); // Still return 200 to avoid Withings retries
@@ -422,7 +567,7 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
     }
 
     // Async sync — don't block the 200 response
-    syncWithingsMeasurements(startdate, enddate).catch(err => {
+    syncWithingsMeasurements(startdate, enddate).catch((err) => {
       console.error('[Withings] Async sync failed:', err);
     });
 
@@ -431,16 +576,21 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
   // POST /api/oauth/withings/sync — manual sync trigger (T#415)
   app.post('/api/oauth/withings/sync', async (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge access required' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge access required' }, 403);
 
-    const token = sqlite.prepare("SELECT * FROM oauth_tokens WHERE provider = 'withings' LIMIT 1").get() as any;
+    const token = sqlite
+      .prepare("SELECT * FROM oauth_tokens WHERE provider = 'withings' LIMIT 1")
+      .get() as any;
     if (!token) return c.json({ error: 'Withings not connected' }, 400);
 
     try {
       // Get last sync time from most recent Withings log
-      const lastLog = sqlite.prepare(
-        "SELECT logged_at FROM routine_logs WHERE source = 'withings' AND deleted_at IS NULL ORDER BY logged_at DESC LIMIT 1"
-      ).get() as any;
+      const lastLog = sqlite
+        .prepare(
+          "SELECT logged_at FROM routine_logs WHERE source = 'withings' AND deleted_at IS NULL ORDER BY logged_at DESC LIMIT 1",
+        )
+        .get() as any;
 
       const now = Math.floor(Date.now() / 1000);
       const full = c.req.query('full') === 'true';
@@ -464,7 +614,8 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
   const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
-  const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'https://denbook.online/api/oauth/google/callback';
+  const GOOGLE_REDIRECT_URI =
+    process.env.GOOGLE_REDIRECT_URI || 'https://denbook.online/api/oauth/google/callback';
   const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
 
   // PKCE state storage (in-memory, short-lived) — stores state → { timestamp, codeVerifier }
@@ -500,7 +651,7 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
   function checkGoogleRateLimit(beast: string): boolean {
     const now = Date.now();
     const oneMinAgo = now - 60000;
-    const timestamps = (googleRateLimits.get(beast) || []).filter(t => t > oneMinAgo);
+    const timestamps = (googleRateLimits.get(beast) || []).filter((t) => t > oneMinAgo);
     if (timestamps.length >= GOOGLE_RATE_LIMIT) return false;
     timestamps.push(now);
     googleRateLimits.set(beast, timestamps);
@@ -518,17 +669,30 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
   // Refresh Google tokens if needed
   async function ensureFreshGoogleToken(): Promise<{ accessToken: string; userId: string } | null> {
-    const token = sqlite.prepare("SELECT * FROM oauth_tokens WHERE provider = 'google' LIMIT 1").get() as any;
+    const token = sqlite
+      .prepare("SELECT * FROM oauth_tokens WHERE provider = 'google' LIMIT 1")
+      .get() as any;
     if (!token) return null;
 
     const now = Math.floor(Date.now() / 1000);
     if (token.expires_at > now + 600) {
-      return { accessToken: decryptToken(token.access_token_enc, token.access_iv || token.token_iv, token.access_tag || token.token_tag), userId: token.user_id };
+      return {
+        accessToken: decryptToken(
+          token.access_token_enc,
+          token.access_iv || token.token_iv,
+          token.access_tag || token.token_tag,
+        ),
+        userId: token.user_id,
+      };
     }
 
     // Refresh — Google does NOT rotate refresh tokens
     try {
-      const refreshToken = decryptToken(token.refresh_token_enc, token.refresh_iv || token.token_iv, token.refresh_tag || token.token_tag);
+      const refreshToken = decryptToken(
+        token.refresh_token_enc,
+        token.refresh_iv || token.token_iv,
+        token.refresh_tag || token.token_tag,
+      );
       const res = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -539,16 +703,18 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
           grant_type: 'refresh_token',
         }),
       });
-      const data = await res.json() as any;
+      const data = (await res.json()) as any;
       if (data.error) throw new Error(`Refresh failed: ${data.error}`);
 
       const { access_token, expires_in } = data;
       const enc = encryptToken(access_token);
       // Google keeps same refresh token — only update access token
-      sqlite.prepare(
-        `UPDATE oauth_tokens SET access_token_enc = ?, access_iv = ?, access_tag = ?,
-         expires_at = ?, updated_at = ? WHERE id = ?`
-      ).run(enc.encrypted, enc.iv, enc.tag, now + expires_in, now, token.id);
+      sqlite
+        .prepare(
+          `UPDATE oauth_tokens SET access_token_enc = ?, access_iv = ?, access_tag = ?,
+         expires_at = ?, updated_at = ? WHERE id = ?`,
+        )
+        .run(enc.encrypted, enc.iv, enc.tag, now + expires_in, now, token.id);
 
       logSecurityEvent({
         eventType: 'token_refreshed',
@@ -567,23 +733,36 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
   }
 
   // Google access control middleware
-  function checkGoogleAccess(beast: string, requiredScope: string = 'gmail.readonly'): { allowed: boolean; error?: string; status?: number } {
-    const access = sqlite.prepare("SELECT scopes FROM google_access WHERE beast = ?").get(beast) as any;
+  function checkGoogleAccess(
+    beast: string,
+    requiredScope: string = 'gmail.readonly',
+  ): { allowed: boolean; error?: string; status?: number } {
+    const access = sqlite
+      .prepare('SELECT scopes FROM google_access WHERE beast = ?')
+      .get(beast) as any;
     if (!access) return { allowed: false, error: 'Not authorized for Google access', status: 401 };
     const scopes = access.scopes.split(',').map((s: string) => s.trim());
-    if (!scopes.includes(requiredScope)) return { allowed: false, error: 'Insufficient Google scope', status: 403 };
+    if (!scopes.includes(requiredScope))
+      return { allowed: false, error: 'Insufficient Google scope', status: 403 };
     return { allowed: true };
   }
 
   // Log Google API access
   function logGoogleAccess(beast: string, endpoint: string, query?: string, messageId?: string) {
     const now = Math.floor(Date.now() / 1000);
-    sqlite.prepare("INSERT INTO google_audit_log (beast, endpoint, query, message_id, created_at) VALUES (?, ?, ?, ?, ?)").run(beast, endpoint, query || null, messageId || null, now);
+    sqlite
+      .prepare(
+        'INSERT INTO google_audit_log (beast, endpoint, query, message_id, created_at) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(beast, endpoint, query || null, messageId || null, now);
   }
 
   // Wrap email content with untrusted boundary tags (prompt injection defense)
   function tagUntrustedContent(content: string, maxLength: number = 50000): string {
-    const truncated = content.length > maxLength ? content.substring(0, maxLength) + '\n[... truncated at 50KB]' : content;
+    const truncated =
+      content.length > maxLength
+        ? content.substring(0, maxLength) + '\n[... truncated at 50KB]'
+        : content;
     return `--- BEGIN UNTRUSTED EMAIL CONTENT ---\n${truncated}\n--- END UNTRUSTED EMAIL CONTENT ---`;
   }
 
@@ -596,7 +775,8 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
   // GET /api/oauth/google/authorize — start OAuth flow with PKCE
   app.get('/api/oauth/google/authorize', (c) => {
     if (!hasSessionAuth(c)) return c.json({ error: 'Gorn authentication required' }, 403);
-    if (!GOOGLE_CLIENT_ID) return c.json({ error: 'Google not configured (missing GOOGLE_CLIENT_ID)' }, 500);
+    if (!GOOGLE_CLIENT_ID)
+      return c.json({ error: 'Google not configured (missing GOOGLE_CLIENT_ID)' }, 500);
 
     // CSRF state + PKCE code verifier
     const state = require('crypto').randomBytes(16).toString('hex');
@@ -605,7 +785,9 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
     googleOauthStates.set(state, { ts: Date.now(), codeVerifier });
     // Clean old states (>10 min)
-    for (const [k, v] of googleOauthStates) { if (Date.now() - v.ts > 600000) googleOauthStates.delete(k); }
+    for (const [k, v] of googleOauthStates) {
+      if (Date.now() - v.ts > 600000) googleOauthStates.delete(k);
+    }
 
     const params = new URLSearchParams({
       response_type: 'code',
@@ -650,11 +832,20 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
           code_verifier: stateData.codeVerifier,
         }),
       });
-      const data = await res.json() as any;
-      if (data.error) return c.redirect('/settings?oauth_error=' + encodeURIComponent(data.error_description || data.error));
+      const data = (await res.json()) as any;
+      if (data.error)
+        return c.redirect(
+          '/settings?oauth_error=' + encodeURIComponent(data.error_description || data.error),
+        );
 
       const { access_token, refresh_token, expires_in, scope } = data;
-      if (!refresh_token) return c.redirect('/settings?oauth_error=' + encodeURIComponent('No refresh token returned — try disconnecting from Google and reconnecting'));
+      if (!refresh_token)
+        return c.redirect(
+          '/settings?oauth_error=' +
+            encodeURIComponent(
+              'No refresh token returned — try disconnecting from Google and reconnecting',
+            ),
+        );
 
       const now = Math.floor(Date.now() / 1000);
 
@@ -664,9 +855,11 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
         const infoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
           headers: { Authorization: `Bearer ${access_token}` },
         });
-        const info = await infoRes.json() as any;
+        const info = (await infoRes.json()) as any;
         userEmail = info.email || 'unknown';
-      } catch { /* non-critical */ }
+      } catch {
+        /* non-critical */
+      }
 
       // Encrypt tokens
       const accessEnc = encryptToken(access_token);
@@ -674,10 +867,25 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
       // Store (upsert — replace existing Google connection)
       sqlite.prepare("DELETE FROM oauth_tokens WHERE provider = 'google'").run();
-      sqlite.prepare(
-        `INSERT INTO oauth_tokens (provider, user_id, access_token_enc, refresh_token_enc, access_iv, access_tag, refresh_iv, refresh_tag, expires_at, scopes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run('google', userEmail, accessEnc.encrypted, refreshEnc.encrypted, accessEnc.iv, accessEnc.tag, refreshEnc.iv, refreshEnc.tag, now + expires_in, scope || GOOGLE_SCOPES, now, now);
+      sqlite
+        .prepare(
+          `INSERT INTO oauth_tokens (provider, user_id, access_token_enc, refresh_token_enc, access_iv, access_tag, refresh_iv, refresh_tag, expires_at, scopes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          'google',
+          userEmail,
+          accessEnc.encrypted,
+          refreshEnc.encrypted,
+          accessEnc.iv,
+          accessEnc.tag,
+          refreshEnc.iv,
+          refreshEnc.tag,
+          now + expires_in,
+          scope || GOOGLE_SCOPES,
+          now,
+          now,
+        );
 
       logSecurityEvent({
         eventType: 'token_created',
@@ -698,8 +906,13 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
   // GET /api/oauth/google/status — connection status
   app.get('/api/oauth/google/status', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Authentication required' }, 403);
-    const token = sqlite.prepare("SELECT provider, user_id, expires_at, scopes, updated_at FROM oauth_tokens WHERE provider = 'google' LIMIT 1").get() as any;
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Authentication required' }, 403);
+    const token = sqlite
+      .prepare(
+        "SELECT provider, user_id, expires_at, scopes, updated_at FROM oauth_tokens WHERE provider = 'google' LIMIT 1",
+      )
+      .get() as any;
     if (!token) return c.json({ connected: false });
     const now = Math.floor(Date.now() / 1000);
     return c.json({
@@ -725,9 +938,14 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
         });
         console.log('[Google] Token revoked at Google');
       }
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
     sqlite.prepare("DELETE FROM oauth_tokens WHERE provider = 'google'").run();
-    const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+    const ip =
+      c.req.header('x-real-ip') ||
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+      'local';
     logSecurityEvent({
       eventType: 'token_revoked',
       severity: 'info',
@@ -746,19 +964,27 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
   // GET /api/google/access — list allowed Beasts
   app.get('/api/google/access', (c) => {
     if (!hasSessionAuth(c)) return c.json({ error: 'Gorn authentication required' }, 403);
-    const rows = sqlite.prepare("SELECT beast, scopes, granted_by, created_at FROM google_access ORDER BY created_at").all();
+    const rows = sqlite
+      .prepare(
+        'SELECT beast, scopes, granted_by, created_at FROM google_access ORDER BY created_at',
+      )
+      .all();
     return c.json({ access: rows });
   });
 
   // POST /api/google/access — grant Beast access
   app.post('/api/google/access', async (c) => {
     if (!hasSessionAuth(c)) return c.json({ error: 'Gorn authentication required' }, 403);
-    const body = await c.req.json() as any;
+    const body = (await c.req.json()) as any;
     const { beast, scopes } = body;
     if (!beast || !scopes) return c.json({ error: 'Missing beast or scopes' }, 400);
     const now = Math.floor(Date.now() / 1000);
     try {
-      sqlite.prepare("INSERT OR REPLACE INTO google_access (beast, scopes, granted_by, created_at) VALUES (?, ?, 'gorn', ?)").run(beast.toLowerCase(), scopes, now);
+      sqlite
+        .prepare(
+          "INSERT OR REPLACE INTO google_access (beast, scopes, granted_by, created_at) VALUES (?, ?, 'gorn', ?)",
+        )
+        .run(beast.toLowerCase(), scopes, now);
       console.log(`[Google] Access granted: ${beast} (${scopes})`);
       return c.json({ granted: true, beast, scopes });
     } catch (err: any) {
@@ -770,7 +996,7 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
   app.delete('/api/google/access/:beast', (c) => {
     if (!hasSessionAuth(c)) return c.json({ error: 'Gorn authentication required' }, 403);
     const beast = c.req.param('beast').toLowerCase();
-    sqlite.prepare("DELETE FROM google_access WHERE beast = ?").run(beast);
+    sqlite.prepare('DELETE FROM google_access WHERE beast = ?').run(beast);
     console.log(`[Google] Access revoked: ${beast}`);
     return c.json({ revoked: true, beast });
   });
@@ -780,8 +1006,11 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
     if (!hasSessionAuth(c)) return c.json({ error: 'Gorn authentication required' }, 403);
     const limit = Math.min(parseInt(c.req.query('limit') || '50'), 200);
     const offset = parseInt(c.req.query('offset') || '0');
-    const rows = sqlite.prepare("SELECT * FROM google_audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?").all(limit, offset);
-    const total = (sqlite.prepare("SELECT COUNT(*) as count FROM google_audit_log").get() as any).count;
+    const rows = sqlite
+      .prepare('SELECT * FROM google_audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?')
+      .all(limit, offset);
+    const total = (sqlite.prepare('SELECT COUNT(*) as count FROM google_audit_log').get() as any)
+      .count;
     return c.json({ logs: rows, total });
   });
 
@@ -814,8 +1043,9 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
       const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
         headers: { Authorization: `Bearer ${tokenData.accessToken}` },
       });
-      const data = await res.json() as any;
-      if (!res.ok) return c.json({ error: data.error?.message || `Gmail API error: ${res.status}` }, 502);
+      const data = (await res.json()) as any;
+      if (!res.ok)
+        return c.json({ error: data.error?.message || `Gmail API error: ${res.status}` }, 502);
 
       logGoogleAccess(beast, '/api/google/gmail/profile');
       return c.json(data);
@@ -839,8 +1069,9 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
       const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels', {
         headers: { Authorization: `Bearer ${tokenData.accessToken}` },
       });
-      const data = await res.json() as any;
-      if (!res.ok) return c.json({ error: data.error?.message || `Gmail API error: ${res.status}` }, 502);
+      const data = (await res.json()) as any;
+      if (!res.ok)
+        return c.json({ error: data.error?.message || `Gmail API error: ${res.status}` }, 502);
 
       logGoogleAccess(beast, '/api/google/gmail/labels');
       return c.json(data);
@@ -869,13 +1100,14 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
       const params = new URLSearchParams({ maxResults: String(maxResults) });
       if (q) params.set('q', q);
       if (pageToken) params.set('pageToken', pageToken);
-      if (labelIds) labelIds.split(',').forEach(id => params.append('labelIds', id.trim()));
+      if (labelIds) labelIds.split(',').forEach((id) => params.append('labelIds', id.trim()));
 
       const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, {
         headers: { Authorization: `Bearer ${tokenData.accessToken}` },
       });
-      const data = await res.json() as any;
-      if (!res.ok) return c.json({ error: data.error?.message || `Gmail API error: ${res.status}` }, 502);
+      const data = (await res.json()) as any;
+      if (!res.ok)
+        return c.json({ error: data.error?.message || `Gmail API error: ${res.status}` }, 502);
 
       logGoogleAccess(beast, '/api/google/gmail/messages', q || undefined);
       return c.json(data);
@@ -898,15 +1130,20 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
       const tokenData = await ensureFreshGoogleToken();
       if (!tokenData) return c.json({ error: 'Google not connected' }, 401);
 
-      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`, {
-        headers: { Authorization: `Bearer ${tokenData.accessToken}` },
-      });
-      const data = await res.json() as any;
-      if (!res.ok) return c.json({ error: data.error?.message || `Gmail API error: ${res.status}` }, 502);
+      const res = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
+        {
+          headers: { Authorization: `Bearer ${tokenData.accessToken}` },
+        },
+      );
+      const data = (await res.json()) as any;
+      if (!res.ok)
+        return c.json({ error: data.error?.message || `Gmail API error: ${res.status}` }, 502);
 
       // Parse message into clean format — text only, no HTML (XSS prevention per Bertus)
       const headers = data.payload?.headers || [];
-      const getHeader = (name: string) => headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+      const getHeader = (name: string) =>
+        headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
 
       // Extract plain text body from MIME parts
       let textBody = '';
@@ -953,16 +1190,21 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
       const tokenData = await ensureFreshGoogleToken();
       if (!tokenData) return c.json({ error: 'Google not connected' }, 401);
 
-      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=full`, {
-        headers: { Authorization: `Bearer ${tokenData.accessToken}` },
-      });
-      const data = await res.json() as any;
-      if (!res.ok) return c.json({ error: data.error?.message || `Gmail API error: ${res.status}` }, 502);
+      const res = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=full`,
+        {
+          headers: { Authorization: `Bearer ${tokenData.accessToken}` },
+        },
+      );
+      const data = (await res.json()) as any;
+      if (!res.ok)
+        return c.json({ error: data.error?.message || `Gmail API error: ${res.status}` }, 502);
 
       // Format each message in thread — text only, no HTML
       const messages = (data.messages || []).map((msg: any) => {
         const headers = msg.payload?.headers || [];
-        const getHeader = (name: string) => headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+        const getHeader = (name: string) =>
+          headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
 
         let textBody = '';
         function extractText(part: any) {
@@ -992,8 +1234,6 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
     }
   });
 
-
-
   // Withings auto-sync daemon body — assigned to module-level forward-declared var.
   // initIntegrations() schedules setInterval/setTimeout against this assignment.
   // Withings daily auto-sync (T#523) — sync every 24h, first run 60s after boot
@@ -1002,11 +1242,15 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
 
   async function runWithingsAutoSync() {
     try {
-      const token = sqlite.prepare("SELECT * FROM oauth_tokens WHERE provider = 'withings' LIMIT 1").get() as any;
+      const token = sqlite
+        .prepare("SELECT * FROM oauth_tokens WHERE provider = 'withings' LIMIT 1")
+        .get() as any;
       if (!token) return; // Not connected, skip silently
-      const lastLog = sqlite.prepare(
-        "SELECT logged_at FROM routine_logs WHERE source = 'withings' AND deleted_at IS NULL ORDER BY logged_at DESC LIMIT 1"
-      ).get() as any;
+      const lastLog = sqlite
+        .prepare(
+          "SELECT logged_at FROM routine_logs WHERE source = 'withings' AND deleted_at IS NULL ORDER BY logged_at DESC LIMIT 1",
+        )
+        .get() as any;
       const now = Math.floor(Date.now() / 1000);
       const startdate = lastLog
         ? Math.floor(new Date(lastLog.logged_at).getTime() / 1000)
@@ -1022,5 +1266,4 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
   // ============================================================================
   // Supersede Log Routes (Issue #18, #19)
   // ============================================================================
-
 }

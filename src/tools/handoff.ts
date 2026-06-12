@@ -13,37 +13,44 @@ import type { ToolContext, ToolResponse, OracleHandoffInput } from './types.ts';
 
 export const handoffToolDef = {
   name: 'oracle_handoff',
-  description: 'Write session context to the Oracle inbox for future sessions to pick up. Creates a timestamped markdown file in ψ/inbox/handoff/. Use at end of sessions to preserve context.',
+  description:
+    'Write session context to the Oracle inbox for future sessions to pick up. Creates a timestamped markdown file in ψ/inbox/handoff/. Use at end of sessions to preserve context.',
   inputSchema: {
     type: 'object',
     properties: {
       content: {
         type: 'string',
-        description: 'The handoff content (markdown). Include context, progress, next steps.'
+        description: 'The handoff content (markdown). Include context, progress, next steps.',
       },
       slug: {
         type: 'string',
-        description: 'Optional slug for the filename. Auto-generated from content if not provided.'
-      }
+        description: 'Optional slug for the filename. Auto-generated from content if not provided.',
+      },
     },
-    required: ['content']
-  }
+    required: ['content'],
+  },
 };
 
-export async function handleHandoff(ctx: ToolContext, input: OracleHandoffInput): Promise<ToolResponse> {
+export async function handleHandoff(
+  ctx: ToolContext,
+  input: OracleHandoffInput,
+): Promise<ToolResponse> {
   const { content, slug: slugInput } = input;
   const now = new Date();
 
   const dateStr = now.toISOString().split('T')[0];
   const timeStr = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
 
-  const slug = slugInput || content
-    .substring(0, 50)
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '') || 'handoff';
+  const slug =
+    slugInput ||
+    content
+      .substring(0, 50)
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') ||
+    'handoff';
 
   const filename = `${dateStr}_${timeStr}_${slug}.md`;
 
@@ -70,13 +77,19 @@ export async function handleHandoff(ctx: ToolContext, input: OracleHandoffInput)
   console.error(`[MCP:HANDOFF] Written: ${sourceFileRel}`);
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        success: true,
-        file: sourceFileRel,
-        message: `Handoff written${vaultRoot ? ' (vault)' : ''}. Next session can read it with oracle_inbox().`
-      }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            success: true,
+            file: sourceFileRel,
+            message: `Handoff written${vaultRoot ? ' (vault)' : ''}. Next session can read it with oracle_inbox().`,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
   };
 }

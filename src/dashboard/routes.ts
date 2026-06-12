@@ -24,9 +24,27 @@ interface DashboardHelpers {
   setOracleCache: (cache: { data: any; ts: number } | null) => void;
 }
 
-export function registerDashboardRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: DashboardHelpers): void {
+export function registerDashboardRoutes(
+  app: OpenAPIHono,
+  sqliteDb: Database,
+  helpers: DashboardHelpers,
+): void {
   const sqlite: Database = sqliteDb;
-  const { hasSessionAuth, handleDashboardSummary, handleDashboardActivity, handleDashboardGrowth, handleStats, handleReflect, handleList, handleGraph, handleMap, handleMap3d, handleVectorStats, getSetting, DB_PATH } = helpers;
+  const {
+    hasSessionAuth,
+    handleDashboardSummary,
+    handleDashboardActivity,
+    handleDashboardGrowth,
+    handleStats,
+    handleReflect,
+    handleList,
+    handleGraph,
+    handleMap,
+    handleMap3d,
+    handleVectorStats,
+    getSetting,
+    DB_PATH,
+  } = helpers;
   let oracleCache = helpers.oracleCache;
 
   app.get('/api/reflect', (c) => {
@@ -39,18 +57,21 @@ export function registerDashboardRoutes(app: OpenAPIHono, sqliteDb: Database, he
     let vectorStats = { vector: { enabled: false, count: 0, collection: 'oracle_knowledge' } };
     try {
       vectorStats = await handleVectorStats();
-    } catch { /* vector unavailable */ }
+    } catch {
+      /* vector unavailable */
+    }
     return c.json({ ...stats, ...vectorStats, vault_repo: vaultRepo });
   });
 
   app.get('/api/oracles', (c) => {
     const hours = parseInt(c.req.query('hours') || '168'); // default 7 days
     const now = Date.now();
-    if (oracleCache && (now - oracleCache.ts) < 60_000) return c.json(oracleCache.data);
+    if (oracleCache && now - oracleCache.ts < 60_000) return c.json(oracleCache.data);
 
     const cutoff = now - hours * 3600_000;
     // Active identities (forum authors, trace sessions, learn sources)
-    const identities = sqlite.prepare(`
+    const identities = sqlite
+      .prepare(`
       SELECT oracle_name, source, max(last_seen) as last_seen, sum(actions) as actions
       FROM (
         SELECT author as oracle_name, 'forum' as source, max(created_at) as last_seen, count(*) as actions
@@ -68,10 +89,12 @@ export function registerDashboardRoutes(app: OpenAPIHono, sqliteDb: Database, he
       WHERE oracle_name IS NOT NULL AND oracle_name != 'unknown'
       GROUP BY oracle_name
       ORDER BY last_seen DESC
-    `).all(cutoff, cutoff, cutoff);
+    `)
+      .all(cutoff, cutoff, cutoff);
 
     // Projects with indexed knowledge (each project = an Oracle's domain)
-    const projects = sqlite.prepare(`
+    const projects = sqlite
+      .prepare(`
       SELECT project, count(*) as docs,
              count(DISTINCT type) as types,
              max(created_at) as last_indexed
@@ -79,7 +102,8 @@ export function registerDashboardRoutes(app: OpenAPIHono, sqliteDb: Database, he
       WHERE project IS NOT NULL
       GROUP BY project
       ORDER BY last_indexed DESC
-    `).all();
+    `)
+      .all();
 
     const result = {
       identities,
@@ -138,6 +162,4 @@ export function registerDashboardRoutes(app: OpenAPIHono, sqliteDb: Database, he
     const period = c.req.query('period') || 'week';
     return c.json(handleDashboardGrowth(period));
   });
-
-
 }

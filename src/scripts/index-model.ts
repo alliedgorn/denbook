@@ -50,17 +50,21 @@ async function main() {
   await store.connect();
 
   // Fresh index
-  try { await store.deleteCollection(); } catch {}
+  try {
+    await store.deleteCollection();
+  } catch {}
   await store.ensureCollection();
 
   // FTS5 join requires raw SQL — Drizzle doesn't support virtual tables
-  const rows = sqlite.prepare(`
+  const rows = sqlite
+    .prepare(`
     SELECT d.id, d.type, GROUP_CONCAT(f.content, '\n') as content, d.source_file, d.concepts, d.project, d.created_at
     FROM oracle_documents d
     JOIN oracle_fts f ON d.id = f.id
     GROUP BY d.id
     ORDER BY d.created_at DESC
-  `).all() as Array<{
+  `)
+    .all() as Array<{
     id: string;
     type: string;
     content: string;
@@ -79,7 +83,7 @@ async function main() {
     const batch = rows.slice(i, i + BATCH_SIZE);
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
 
-    const docs = batch.map(row => ({
+    const docs = batch.map((row) => ({
       id: row.id,
       document: row.content,
       metadata: {
@@ -97,7 +101,9 @@ async function main() {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
       const rate = (indexed / Number(elapsed)).toFixed(1);
       const eta = ((rows.length - indexed) / Number(rate)).toFixed(0);
-      console.log(`  Batch ${batchNum}/${totalBatches} — ${indexed}/${rows.length} docs — ${rate}/s — ETA ${eta}s`);
+      console.log(
+        `  Batch ${batchNum}/${totalBatches} — ${indexed}/${rows.length} docs — ${rate}/s — ETA ${eta}s`,
+      );
     } catch (e) {
       errors++;
       console.error(`  Batch ${batchNum} FAILED:`, e instanceof Error ? e.message : String(e));
@@ -116,7 +122,7 @@ async function main() {
   sqlite.close();
 }
 
-main().catch(e => {
+main().catch((e) => {
   console.error('Indexer failed:', e);
   process.exit(1);
 });

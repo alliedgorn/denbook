@@ -99,22 +99,26 @@ const FORBIDDEN: ForbiddenPattern[] = [
   {
     name: 'sql.identifier() call',
     needle: 'sql.identifier(',
-    reason: 'GHSA-gpj5-g38j-94v9 — drizzle <0.45.2 SQL injection via unescaped identifiers. Any new use requires reachability re-analysis.',
+    reason:
+      'GHSA-gpj5-g38j-94v9 — drizzle <0.45.2 SQL injection via unescaped identifiers. Any new use requires reachability re-analysis.',
   },
   {
     name: 'sql.raw() call',
     needle: 'sql.raw(',
-    reason: 'Raw SQL construction — if the string comes from user input, identifier or value injection is trivial. Any new use requires a security comment.',
+    reason:
+      'Raw SQL construction — if the string comes from user input, identifier or value injection is trivial. Any new use requires a security comment.',
   },
   {
     name: 'getTableColumns() call',
     needle: 'getTableColumns(',
-    reason: 'Drizzle programmatic column introspection. Safe on static schema, risky if table object comes from user input. Any new use requires review.',
+    reason:
+      'Drizzle programmatic column introspection. Safe on static schema, risky if table object comes from user input. Any new use requires review.',
   },
   {
     name: 'getTableConfig() call',
     needle: 'getTableConfig(',
-    reason: 'Same as getTableColumns — drizzle programmatic table metadata access. Any new use requires review.',
+    reason:
+      'Same as getTableColumns — drizzle programmatic table metadata access. Any new use requires review.',
   },
   // MCP SDK transport surface — locks stdio-only (per Bertus extension msg #8118
   // and review extension msg #8122). Block every HTTP-ish transport the SDK
@@ -123,7 +127,8 @@ const FORBIDDEN: ForbiddenPattern[] = [
   {
     name: 'MCP streamableHttp import',
     needle: '@modelcontextprotocol/sdk/server/streamableHttp',
-    reason: 'HTTP streamable transport. Importing loads @hono/node-server and makes hono CVEs reachable. Oracle-v2 is stdio-only per the T#663 reachability sweep.',
+    reason:
+      'HTTP streamable transport. Importing loads @hono/node-server and makes hono CVEs reachable. Oracle-v2 is stdio-only per the T#663 reachability sweep.',
   },
   {
     name: 'MCP web-standard streamable HTTP import',
@@ -138,17 +143,20 @@ const FORBIDDEN: ForbiddenPattern[] = [
   {
     name: 'MCP express transport import',
     needle: '@modelcontextprotocol/sdk/server/express',
-    reason: 'Express transport. Importing loads express, express-rate-limit, path-to-regexp. Oracle-v2 is stdio-only.',
+    reason:
+      'Express transport. Importing loads express, express-rate-limit, path-to-regexp. Oracle-v2 is stdio-only.',
   },
   {
     name: 'MCP auth router import',
     needle: '@modelcontextprotocol/sdk/server/auth/router',
-    reason: 'MCP auth router. Loads the same express chain as above. Oracle-v2 does not use MCP auth.',
+    reason:
+      'MCP auth router. Loads the same express chain as above. Oracle-v2 does not use MCP auth.',
   },
   {
     name: 'MCP auth handlers import',
     needle: '@modelcontextprotocol/sdk/server/auth/handlers',
-    reason: 'MCP auth handlers (register / authorize / revoke / token / metadata). Each imports express. Oracle-v2 does not use MCP auth.',
+    reason:
+      'MCP auth handlers (register / authorize / revoke / token / metadata). Each imports express. Oracle-v2 does not use MCP auth.',
   },
 ];
 
@@ -207,7 +215,10 @@ test('T#664: no vulnerable-surface API calls in src/ (reachability lock)', () =>
   const matches = findMatches();
 
   const report = matches
-    .map((m) => `  ${m.file}:${m.line} — ${m.pattern.name}\n    ${m.lineText}\n    reason: ${m.pattern.reason}`)
+    .map(
+      (m) =>
+        `  ${m.file}:${m.line} — ${m.pattern.name}\n    ${m.lineText}\n    reason: ${m.pattern.reason}`,
+    )
     .join('\n\n');
 
   const failMessage =

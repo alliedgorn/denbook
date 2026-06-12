@@ -8,7 +8,12 @@
  */
 
 import { Database } from 'bun:sqlite';
-import type { VectorStoreAdapter, VectorDocument, VectorQueryResult, EmbeddingProvider } from '../types.ts';
+import type {
+  VectorStoreAdapter,
+  VectorDocument,
+  VectorQueryResult,
+  EmbeddingProvider,
+} from '../types.ts';
 
 /** Convert number[] to Float32Array binary blob for sqlite-vec */
 function toBlob(vec: number[]): Buffer {
@@ -22,7 +27,11 @@ function fromBlob(blob: any): number[] {
   }
   // Fallback: try JSON parse if stored as string
   if (typeof blob === 'string') {
-    try { return JSON.parse(blob); } catch { return []; }
+    try {
+      return JSON.parse(blob);
+    } catch {
+      return [];
+    }
   }
   return [];
 }
@@ -62,7 +71,9 @@ export class SqliteVecAdapter implements VectorStoreAdapter {
           this.db.loadExtension(p);
           loaded = true;
           break;
-        } catch { /* try next */ }
+        } catch {
+          /* try next */
+        }
       }
     }
 
@@ -114,7 +125,10 @@ export class SqliteVecAdapter implements VectorStoreAdapter {
       this.db.exec(`DROP TABLE IF EXISTS ${this.collectionName}_vec`);
       console.log(`[sqlite-vec] Collection '${this.collectionName}' deleted`);
     } catch (e) {
-      console.warn('[sqlite-vec] deleteCollection failed:', e instanceof Error ? e.message : String(e));
+      console.warn(
+        '[sqlite-vec] deleteCollection failed:',
+        e instanceof Error ? e.message : String(e),
+      );
     }
   }
 
@@ -125,7 +139,7 @@ export class SqliteVecAdapter implements VectorStoreAdapter {
     await this.ensureCollection();
 
     // Generate embeddings for all documents
-    const texts = docs.map(d => d.document);
+    const texts = docs.map((d) => d.document);
     const embeddings = await this.embedder.embed(texts);
 
     const insertMeta = this.db.prepare(`
@@ -154,7 +168,11 @@ export class SqliteVecAdapter implements VectorStoreAdapter {
     console.log(`[sqlite-vec] Added ${docs.length} documents`);
   }
 
-  async query(text: string, limit: number = 10, where?: Record<string, any>): Promise<VectorQueryResult> {
+  async query(
+    text: string,
+    limit: number = 10,
+    where?: Record<string, any>,
+  ): Promise<VectorQueryResult> {
     if (!this.db) throw new Error('sqlite-vec not connected');
 
     // Generate query embedding
@@ -164,13 +182,15 @@ export class SqliteVecAdapter implements VectorStoreAdapter {
     const fetchLimit = where ? limit * 3 : limit;
 
     // KNN search via sqlite-vec — uses `k = ?` constraint, not LIMIT
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(`
       SELECT v.id, v.distance, m.document, m.metadata
       FROM ${this.collectionName}_vec v
       JOIN ${this.collectionName}_meta m ON v.id = m.id
       WHERE v.embedding MATCH ? AND k = ?
       ORDER BY v.distance
-    `).all(toBlob(queryEmbedding), fetchLimit) as Array<{
+    `)
+      .all(toBlob(queryEmbedding), fetchLimit) as Array<{
       id: string;
       distance: number;
       document: string;
@@ -180,17 +200,19 @@ export class SqliteVecAdapter implements VectorStoreAdapter {
     // Apply where filter in JS (sqlite-vec doesn't support metadata filtering)
     let filtered = rows;
     if (where) {
-      filtered = rows.filter(row => {
-        const meta = JSON.parse(row.metadata);
-        return Object.entries(where).every(([k, v]) => meta[k] === v);
-      }).slice(0, limit);
+      filtered = rows
+        .filter((row) => {
+          const meta = JSON.parse(row.metadata);
+          return Object.entries(where).every(([k, v]) => meta[k] === v);
+        })
+        .slice(0, limit);
     }
 
     return {
-      ids: filtered.map(r => r.id),
-      documents: filtered.map(r => r.document),
-      distances: filtered.map(r => r.distance),
-      metadatas: filtered.map(r => JSON.parse(r.metadata)),
+      ids: filtered.map((r) => r.id),
+      documents: filtered.map((r) => r.document),
+      distances: filtered.map((r) => r.distance),
+      metadatas: filtered.map((r) => JSON.parse(r.metadata)),
     };
   }
 
@@ -198,22 +220,26 @@ export class SqliteVecAdapter implements VectorStoreAdapter {
     if (!this.db) throw new Error('sqlite-vec not connected');
 
     // Get the document's embedding from vec table (returns binary blob)
-    const doc = this.db.prepare(`
+    const doc = this.db
+      .prepare(`
       SELECT embedding FROM ${this.collectionName}_vec WHERE id = ?
-    `).get(id) as { embedding: any } | null;
+    `)
+      .get(id) as { embedding: any } | null;
 
     if (!doc) {
       throw new Error(`No embedding found for document: ${id}`);
     }
 
     // KNN search using the existing embedding blob
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(`
       SELECT v.id, v.distance, m.document, m.metadata
       FROM ${this.collectionName}_vec v
       JOIN ${this.collectionName}_meta m ON v.id = m.id
       WHERE v.embedding MATCH ? AND k = ?
       ORDER BY v.distance
-    `).all(doc.embedding, nResults + 1) as Array<{
+    `)
+      .all(doc.embedding, nResults + 1) as Array<{
       id: string;
       distance: number;
       document: string;
@@ -221,13 +247,13 @@ export class SqliteVecAdapter implements VectorStoreAdapter {
     }>;
 
     // Filter out the source document
-    const filtered = rows.filter(r => r.id !== id).slice(0, nResults);
+    const filtered = rows.filter((r) => r.id !== id).slice(0, nResults);
 
     return {
-      ids: filtered.map(r => r.id),
-      documents: filtered.map(r => r.document),
-      distances: filtered.map(r => r.distance),
-      metadatas: filtered.map(r => JSON.parse(r.metadata)),
+      ids: filtered.map((r) => r.id),
+      documents: filtered.map((r) => r.document),
+      distances: filtered.map((r) => r.distance),
+      metadatas: filtered.map((r) => JSON.parse(r.metadata)),
     };
   }
 
@@ -235,9 +261,9 @@ export class SqliteVecAdapter implements VectorStoreAdapter {
     if (!this.db) return { count: 0 };
 
     try {
-      const result = this.db.prepare(
-        `SELECT COUNT(*) as count FROM ${this.collectionName}_meta`
-      ).get() as { count: number };
+      const result = this.db
+        .prepare(`SELECT COUNT(*) as count FROM ${this.collectionName}_meta`)
+        .get() as { count: number };
       return { count: result.count };
     } catch {
       return { count: 0 };
@@ -249,20 +275,24 @@ export class SqliteVecAdapter implements VectorStoreAdapter {
     return { count: stats.count, name: this.collectionName };
   }
 
-  async getAllEmbeddings(limit: number = 5000): Promise<{ ids: string[]; embeddings: number[][]; metadatas: any[] }> {
+  async getAllEmbeddings(
+    limit: number = 5000,
+  ): Promise<{ ids: string[]; embeddings: number[][]; metadatas: any[] }> {
     if (!this.db) return { ids: [], embeddings: [], metadatas: [] };
 
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(`
       SELECT v.id, v.embedding, m.metadata
       FROM ${this.collectionName}_vec v
       JOIN ${this.collectionName}_meta m ON v.id = m.id
       LIMIT ?
-    `).all(limit) as Array<{ id: string; embedding: any; metadata: string }>;
+    `)
+      .all(limit) as Array<{ id: string; embedding: any; metadata: string }>;
 
     return {
-      ids: rows.map(r => r.id),
-      embeddings: rows.map(r => fromBlob(r.embedding)),
-      metadatas: rows.map(r => JSON.parse(r.metadata)),
+      ids: rows.map((r) => r.id),
+      embeddings: rows.map((r) => fromBlob(r.embedding)),
+      metadatas: rows.map((r) => JSON.parse(r.metadata)),
     };
   }
 }

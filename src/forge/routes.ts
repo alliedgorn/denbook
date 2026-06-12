@@ -10,17 +10,38 @@ import { ORACLE_DATA_DIR } from '../config.ts';
 function detectImageType(buffer: Buffer): { ext: string; mime: string } | null {
   if (buffer.length < 12) return null;
   // JPEG
-  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return { ext: 'jpg', mime: 'image/jpeg' };
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff)
+    return { ext: 'jpg', mime: 'image/jpeg' };
   // PNG
-  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return { ext: 'png', mime: 'image/png' };
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47)
+    return { ext: 'png', mime: 'image/png' };
   // GIF
-  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) return { ext: 'gif', mime: 'image/gif' };
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46)
+    return { ext: 'gif', mime: 'image/gif' };
   // WebP
-  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
-      buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) return { ext: 'webp', mime: 'image/webp' };
+  if (
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  )
+    return { ext: 'webp', mime: 'image/webp' };
   // HEIC
-  if (buffer[4] === 0x66 && buffer[5] === 0x74 && buffer[6] === 0x79 && buffer[7] === 0x70 &&
-      buffer[8] === 0x68 && buffer[9] === 0x65 && buffer[10] === 0x69 && buffer[11] === 0x63) return { ext: 'heic', mime: 'image/heic' };
+  if (
+    buffer[4] === 0x66 &&
+    buffer[5] === 0x74 &&
+    buffer[6] === 0x79 &&
+    buffer[7] === 0x70 &&
+    buffer[8] === 0x68 &&
+    buffer[9] === 0x65 &&
+    buffer[10] === 0x69 &&
+    buffer[11] === 0x63
+  )
+    return { ext: 'heic', mime: 'image/heic' };
   return null;
 }
 
@@ -40,7 +61,11 @@ interface ForgeHelpers {
 // for /api/withings/devices auth gate) receive isForgeAuthorized via server.ts's
 // surviving copy passed through the helpers DI. T#788 cleanup may dedupe.
 
-export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: ForgeHelpers): void {
+export function registerForgeRoutes(
+  app: OpenAPIHono,
+  sqliteDb: Database,
+  helpers: ForgeHelpers,
+): void {
   const { hasSessionAuth, isTrustedRequest, wsBroadcast } = helpers;
   const sqlite: Database = sqliteDb;
 
@@ -104,13 +129,22 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       INSERT INTO routine_logs SELECT * FROM routine_logs_new;
       DROP TABLE routine_logs_new;
     `);
-  } catch { /* already migrated or no constraint to remove */ }
+  } catch {
+    /* already migrated or no constraint to remove */
+  }
 
   // T#496: Normalize logged_at to UTC — fix entries stored without Z suffix
   try {
-    const fixed = sqlite.prepare("UPDATE routine_logs SET logged_at = logged_at || 'Z' WHERE logged_at NOT LIKE '%Z' AND logged_at NOT LIKE '%+%' AND deleted_at IS NULL").run();
-    if ((fixed as any).changes > 0) console.log(`[Forge] Normalized ${(fixed as any).changes} logged_at entries to UTC`);
-  } catch { /* table may not exist yet */ }
+    const fixed = sqlite
+      .prepare(
+        "UPDATE routine_logs SET logged_at = logged_at || 'Z' WHERE logged_at NOT LIKE '%Z' AND logged_at NOT LIKE '%+%' AND deleted_at IS NULL",
+      )
+      .run();
+    if ((fixed as any).changes > 0)
+      console.log(`[Forge] Normalized ${(fixed as any).changes} logged_at entries to UTC`);
+  } catch {
+    /* table may not exist yet */
+  }
 
   // Ensure uploads/routine dir exists
   const ROUTINE_UPLOADS = path.join(ORACLE_DATA_DIR, 'uploads', 'routine');
@@ -119,10 +153,10 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   // Forge beast → mode map. 'write' implies 'read'. Owner session always full write.
   // Library #96 lever 1: scope-for-post-compromise-damage — grant the minimum mode each lane needs.
   const FORGE_BEAST_MODES: Record<string, 'read' | 'write'> = {
-    gorn: 'write',   // owner
-    sable: 'write',  // gatekeeper — logs meals for bear
-    karo: 'write',   // partner — bedrock 04-09 grant
-    boro: 'read',    // coach — periodization + progression reads only; writes route through Sable
+    gorn: 'write', // owner
+    sable: 'write', // gatekeeper — logs meals for bear
+    karo: 'write', // partner — bedrock 04-09 grant
+    boro: 'read', // coach — periodization + progression reads only; writes route through Sable
   };
 
   // Auth helper: Gorn (session) + allowlisted beasts per FORGE_BEAST_MODES.
@@ -132,7 +166,10 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   // the legacy ?as= query param shape. Bearer-token-actor path is checked first;
   // ?as= path retained for backwards-compat with existing callers (Sable TG flows,
   // legacy scripts) until follow-up T# removes it post-migration audit.
-  function isForgeAuthorized(c: any, options: { mode: 'read' | 'write' } = { mode: 'write' }): boolean {
+  function isForgeAuthorized(
+    c: any,
+    options: { mode: 'read' | 'write' } = { mode: 'write' },
+  ): boolean {
     if (hasSessionAuth(c)) return true; // Gorn browser session — owner, full write
 
     // T#718 path: read requester from authenticated bearer-token actor (no ?as= needed)
@@ -141,7 +178,7 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       const beastMode = FORGE_BEAST_MODES[actor];
       if (!beastMode) return false;
       if (options.mode === 'read') return true; // either mode satisfies read
-      return beastMode === 'write';              // write requires write
+      return beastMode === 'write'; // write requires write
     }
 
     // Backwards-compat: ?as= query param + isTrustedRequest local-network bypass.
@@ -162,7 +199,8 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // GET /api/routine/logs — list logs
   app.get('/api/routine/logs', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const type = c.req.query('type');
     const from = c.req.query('from');
     const to = c.req.query('to');
@@ -171,36 +209,55 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
     let query = 'SELECT * FROM routine_logs WHERE deleted_at IS NULL';
     const params: any[] = [];
-    if (type) { query += ' AND type = ?'; params.push(type); }
-    if (from) { query += ' AND logged_at >= ?'; params.push(from); }
-    if (to) { query += ' AND logged_at <= ?'; params.push(to); }
+    if (type) {
+      query += ' AND type = ?';
+      params.push(type);
+    }
+    if (from) {
+      query += ' AND logged_at >= ?';
+      params.push(from);
+    }
+    if (to) {
+      query += ' AND logged_at <= ?';
+      params.push(to);
+    }
     query += ' ORDER BY logged_at DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
 
     const logs = sqlite.prepare(query).all(...params);
-    const total = (sqlite.prepare('SELECT COUNT(*) as c FROM routine_logs WHERE deleted_at IS NULL').get() as any).c;
+    const total = (
+      sqlite.prepare('SELECT COUNT(*) as c FROM routine_logs WHERE deleted_at IS NULL').get() as any
+    ).c;
     return c.json({ logs, total });
   });
 
   // GET /api/routine/today — today's logs grouped by type
   app.get('/api/routine/today', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const today = new Date().toISOString().slice(0, 10);
-    const logs = sqlite.prepare(
-      "SELECT * FROM routine_logs WHERE deleted_at IS NULL AND date(logged_at) = ? ORDER BY logged_at DESC"
-    ).all(today);
+    const logs = sqlite
+      .prepare(
+        'SELECT * FROM routine_logs WHERE deleted_at IS NULL AND date(logged_at) = ? ORDER BY logged_at DESC',
+      )
+      .all(today);
     return c.json({ logs, date: today });
   });
 
   // GET /api/routine/weight — weight history for chart (with time-based grouping)
   app.get('/api/routine/weight', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const range = c.req.query('range'); // week, month, year, 3y, 10y, all
     let dateFilter = '';
     if (range) {
       const now = new Date();
       const rangeMap: Record<string, number> = {
-        week: 7, month: 30, year: 365, '3y': 365 * 3, '10y': 365 * 10,
+        week: 7,
+        month: 30,
+        year: 365,
+        '3y': 365 * 3,
+        '10y': 365 * 10,
       };
       const days = rangeMap[range];
       if (days) {
@@ -211,25 +268,29 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
     // Grouping strategy per range (Dex/Quill spec, thread #323)
     // week/month/3m: daily points, 6m/year: weekly avg, 3y/10y/all: monthly avg
-    const grouping = (['3y', '10y', 'all'].includes(range || ''))
+    const grouping = ['3y', '10y', 'all'].includes(range || '')
       ? 'monthly'
-      : (['year'].includes(range || '') ? 'weekly' : 'daily');
+      : ['year'].includes(range || '')
+        ? 'weekly'
+        : 'daily';
 
     if (grouping === 'daily') {
-      const rows = sqlite.prepare(
-        `SELECT id, logged_at, json_extract(data, '$.value') as value, json_extract(data, '$.unit') as unit
-         FROM routine_logs WHERE type = 'weight' AND deleted_at IS NULL${dateFilter} ORDER BY logged_at ASC`
-      ).all();
+      const rows = sqlite
+        .prepare(
+          `SELECT id, logged_at, json_extract(data, '$.value') as value, json_extract(data, '$.unit') as unit
+         FROM routine_logs WHERE type = 'weight' AND deleted_at IS NULL${dateFilter} ORDER BY logged_at ASC`,
+        )
+        .all();
       return c.json({ weights: rows, grouping: 'daily' });
     }
 
     // Grouped query — return avg, min, max per period
-    const groupExpr = grouping === 'weekly'
-      ? "strftime('%Y-W%W', logged_at)"
-      : "strftime('%Y-%m', logged_at)";
+    const groupExpr =
+      grouping === 'weekly' ? "strftime('%Y-W%W', logged_at)" : "strftime('%Y-%m', logged_at)";
 
-    const rows = sqlite.prepare(
-      `SELECT ${groupExpr} as period,
+    const rows = sqlite
+      .prepare(
+        `SELECT ${groupExpr} as period,
               ROUND(AVG(json_extract(data, '$.value')), 1) as value,
               ROUND(MIN(json_extract(data, '$.value')), 1) as min_value,
               ROUND(MAX(json_extract(data, '$.value')), 1) as max_value,
@@ -239,21 +300,27 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
        FROM routine_logs
        WHERE type = 'weight' AND deleted_at IS NULL${dateFilter}
        GROUP BY ${groupExpr}
-       ORDER BY period ASC`
-    ).all();
+       ORDER BY period ASC`,
+      )
+      .all();
     return c.json({ weights: rows, grouping });
   });
 
   // GET /api/routine/blood-pressure — BP history for chart (Prowl #80)
   // Mirrors /api/routine/weight: range filter + time-based grouping
   app.get('/api/routine/blood-pressure', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const range = c.req.query('range');
     let dateFilter = '';
     if (range) {
       const now = new Date();
       const rangeMap: Record<string, number> = {
-        week: 7, month: 30, year: 365, '3y': 365 * 3, '10y': 365 * 10,
+        week: 7,
+        month: 30,
+        year: 365,
+        '3y': 365 * 3,
+        '10y': 365 * 10,
       };
       const days = rangeMap[range];
       if (days) {
@@ -262,26 +329,30 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       }
     }
 
-    const grouping = (['3y', '10y', 'all'].includes(range || ''))
+    const grouping = ['3y', '10y', 'all'].includes(range || '')
       ? 'monthly'
-      : (['year'].includes(range || '') ? 'weekly' : 'daily');
+      : ['year'].includes(range || '')
+        ? 'weekly'
+        : 'daily';
 
     if (grouping === 'daily') {
-      const rows = sqlite.prepare(
-        `SELECT id, logged_at,
+      const rows = sqlite
+        .prepare(
+          `SELECT id, logged_at,
                 json_extract(data, '$.systolic') as systolic,
                 json_extract(data, '$.diastolic') as diastolic
-         FROM routine_logs WHERE type = 'blood_pressure' AND deleted_at IS NULL${dateFilter} ORDER BY logged_at ASC`
-      ).all();
+         FROM routine_logs WHERE type = 'blood_pressure' AND deleted_at IS NULL${dateFilter} ORDER BY logged_at ASC`,
+        )
+        .all();
       return c.json({ readings: rows, grouping: 'daily' });
     }
 
-    const groupExpr = grouping === 'weekly'
-      ? "strftime('%Y-W%W', logged_at)"
-      : "strftime('%Y-%m', logged_at)";
+    const groupExpr =
+      grouping === 'weekly' ? "strftime('%Y-W%W', logged_at)" : "strftime('%Y-%m', logged_at)";
 
-    const rows = sqlite.prepare(
-      `SELECT ${groupExpr} as period,
+    const rows = sqlite
+      .prepare(
+        `SELECT ${groupExpr} as period,
               ROUND(AVG(json_extract(data, '$.systolic')), 0) as systolic,
               ROUND(AVG(json_extract(data, '$.diastolic')), 0) as diastolic,
               ROUND(MIN(json_extract(data, '$.systolic')), 0) as systolic_min,
@@ -293,8 +364,9 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
        FROM routine_logs
        WHERE type = 'blood_pressure' AND deleted_at IS NULL${dateFilter}
        GROUP BY ${groupExpr}
-       ORDER BY period ASC`
-    ).all();
+       ORDER BY period ASC`,
+      )
+      .all();
     return c.json({ readings: rows, grouping });
   });
 
@@ -304,17 +376,20 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   // (Bar Shrug 04-22 / Shoulder Press 04-23 / Bench Press 04-24). Replaces
   // 20-page pull-and-filter workflow with a single structured summary.
   app.get('/api/routine/exercise-summary', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const exercise = c.req.query('exercise');
     if (!exercise) return c.json({ error: 'exercise query param required' }, 400);
     const needle = exercise.toLowerCase().trim();
     if (!needle) return c.json({ error: 'exercise query param must be non-empty after trim' }, 400);
 
-    const rows = sqlite.prepare(
-      `SELECT id, logged_at, data FROM routine_logs
+    const rows = sqlite
+      .prepare(
+        `SELECT id, logged_at, data FROM routine_logs
        WHERE type = 'workout' AND deleted_at IS NULL
-       ORDER BY logged_at DESC`
-    ).all() as any[];
+       ORDER BY logged_at DESC`,
+      )
+      .all() as any[];
 
     interface MatchedSession {
       date: string;
@@ -325,10 +400,14 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
     for (const row of rows) {
       let data: any;
-      try { data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data; } catch { continue; }
+      try {
+        data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+      } catch {
+        continue;
+      }
       const exercises: any[] = data.exercises || [];
       for (const ex of exercises) {
-        const rawName = typeof ex === 'string' ? ex : (ex.name || '');
+        const rawName = typeof ex === 'string' ? ex : ex.name || '';
         const { name, equipment } = parseExerciseName(rawName);
         const fullName = (equipment ? `${name} · ${equipment}` : name).trim();
         if (!fullName) continue;
@@ -366,7 +445,12 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         peak: null,
         recent: [],
         trend: 'cold',
-        frequency: { total_sessions: 0, last_session_date: null, sessions_last_30d: 0, sessions_last_90d: 0 },
+        frequency: {
+          total_sessions: 0,
+          last_session_date: null,
+          sessions_last_30d: 0,
+          sessions_last_90d: 0,
+        },
         note: 'No matching sessions found. Try broader search term or check spelling.',
       });
     }
@@ -388,7 +472,7 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     }
 
     // Recent: last 5 sessions (already sorted DESC)
-    const recent = matching.slice(0, 5).map(m => ({
+    const recent = matching.slice(0, 5).map((m) => ({
       date: m.date.slice(0, 10),
       session_title: m.session_title,
       sets: m.sets,
@@ -398,8 +482,8 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     const now = Date.now();
     const d30 = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
     const d90 = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString();
-    const sessions_last_30d = matching.filter(m => m.date >= d30).length;
-    const sessions_last_90d = matching.filter(m => m.date >= d90).length;
+    const sessions_last_30d = matching.filter((m) => m.date >= d30).length;
+    const sessions_last_90d = matching.filter((m) => m.date >= d90).length;
 
     // Trend: compare last 3 sessions peak-weight to prior 3-6 sessions peak-weight
     let trend: string;
@@ -445,11 +529,13 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   // GET /api/routine/prs — sibling endpoint per Boro spec (Prowl #83).
   // Alias to /api/routine/personal-records?grouped=true for cleaner call-site naming.
   app.get('/api/routine/prs', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const range = c.req.query('range');
     let dateFilter = '';
     if (range === 'month') dateFilter = "AND achieved_at >= datetime('now', '-30 days')";
-    const records = sqlite.prepare(`
+    const records = sqlite
+      .prepare(`
       SELECT pr.* FROM personal_records pr
       INNER JOIN (
         SELECT exercise_name, MAX(weight) as max_weight
@@ -460,7 +546,8 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       WHERE 1=1 ${dateFilter}
       GROUP BY pr.exercise_name
       ORDER BY pr.weight DESC, pr.reps DESC
-    `).all();
+    `)
+      .all();
     return c.json({ records, total_exercises: records.length });
   });
 
@@ -473,26 +560,38 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   }
 
   // Parse string-format exercises like "Chest Press 190lbs 8/8/6" into sets
-  function parseExerciseString(raw: string): { name: string; sets: { weight: number; reps: number; unit: string }[] } {
+  function parseExerciseString(raw: string): {
+    name: string;
+    sets: { weight: number; reps: number; unit: string }[];
+  } {
     // Match: "Exercise Name <weight><unit> <reps>/<reps>/..."
     const match = raw.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*(kg|lbs?|KG|LBS?)\s+([\d/]+)$/);
     if (!match) return { name: raw, sets: [] };
     const name = match[1].trim();
     const weight = parseFloat(match[2]);
     const unit = match[3].toLowerCase().startsWith('lb') ? 'lbs' : 'kg';
-    const repsList = match[4].split('/').map(r => parseInt(r) || 0).filter(r => r > 0);
-    return { name, sets: repsList.map(reps => ({ weight, reps, unit })) };
+    const repsList = match[4]
+      .split('/')
+      .map((r) => parseInt(r) || 0)
+      .filter((r) => r > 0);
+    return { name, sets: repsList.map((reps) => ({ weight, reps, unit })) };
   }
 
   // GET /api/routine/workout-trends — exercise progress over time (T#397)
   app.get('/api/routine/workout-trends', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const range = c.req.query('range') || 'year';
     const exercise = c.req.query('exercise'); // optional: filter to specific exercise
 
     let dateFilter = '';
     const rangeMap: Record<string, number> = {
-      week: 7, month: 30, '3m': 90, year: 365, '3y': 365 * 3, '10y': 365 * 10,
+      week: 7,
+      month: 30,
+      '3m': 90,
+      year: 365,
+      '3y': 365 * 3,
+      '10y': 365 * 10,
     };
     const days = rangeMap[range];
     if (days) {
@@ -501,31 +600,40 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     }
 
     // Get all workout logs in range
-    const rows = sqlite.prepare(
-      `SELECT id, logged_at, data FROM routine_logs
+    const rows = sqlite
+      .prepare(
+        `SELECT id, logged_at, data FROM routine_logs
        WHERE type = 'workout' AND deleted_at IS NULL${dateFilter}
-       ORDER BY logged_at ASC`
-    ).all() as any[];
+       ORDER BY logged_at ASC`,
+      )
+      .all() as any[];
 
     // Parse exercises from each workout, compute per-exercise stats
-    const exerciseData: Map<string, Array<{
-      date: string;
-      maxWeight: number;
-      totalVolume: number;
-      totalSets: number;
-      totalReps: number;
-      unit: string;
-    }>> = new Map();
+    const exerciseData: Map<
+      string,
+      Array<{
+        date: string;
+        maxWeight: number;
+        totalVolume: number;
+        totalSets: number;
+        totalReps: number;
+        unit: string;
+      }>
+    > = new Map();
 
     const exerciseFrequency: Map<string, number> = new Map();
 
     for (const row of rows) {
       let data: any;
-      try { data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data; } catch { continue; }
+      try {
+        data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+      } catch {
+        continue;
+      }
       const exercises: any[] = data.exercises || [];
 
       for (const ex of exercises) {
-        const rawName = typeof ex === 'string' ? ex : (ex.name || '');
+        const rawName = typeof ex === 'string' ? ex : ex.name || '';
         const { name, equipment } = parseExerciseName(rawName);
         if (!name) continue;
         // Include equipment in the key to split Machine vs Dumbbell etc.
@@ -566,8 +674,7 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     }
 
     // Top 5 by frequency (default selection), but include ALL trend data
-    const sortedExercises = [...exerciseFrequency.entries()]
-      .sort((a, b) => b[1] - a[1]);
+    const sortedExercises = [...exerciseFrequency.entries()].sort((a, b) => b[1] - a[1]);
     const topExercises = exercise
       ? [...exerciseData.keys()]
       : sortedExercises.slice(0, 5).map(([name]) => name);
@@ -588,23 +695,33 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // GET /api/routine/body-composition — body comp history from Withings (T#479, Spec #28)
   app.get('/api/routine/body-composition', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge access required' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge access required' }, 403);
     const range = c.req.query('range') || 'month';
     const rangeMap: Record<string, string> = {
-      '1w': '-7 days', week: '-7 days', '1m': '-30 days', month: '-30 days',
-      '3m': '-90 days', '1y': '-365 days', year: '-365 days',
-      '3y': '-1095 days', '10y': '-3650 days', all: '-36500 days',
+      '1w': '-7 days',
+      week: '-7 days',
+      '1m': '-30 days',
+      month: '-30 days',
+      '3m': '-90 days',
+      '1y': '-365 days',
+      year: '-365 days',
+      '3y': '-1095 days',
+      '10y': '-3650 days',
+      all: '-36500 days',
     };
     const dateOffset = rangeMap[range] || '-30 days';
 
-    const rows = sqlite.prepare(
-      `SELECT logged_at, data FROM routine_logs
+    const rows = sqlite
+      .prepare(
+        `SELECT logged_at, data FROM routine_logs
        WHERE type = 'measurement' AND source = 'withings' AND deleted_at IS NULL
        AND logged_at >= datetime('now', 'localtime', ?)
-       ORDER BY logged_at ASC`
-    ).all(dateOffset) as any[];
+       ORDER BY logged_at ASC`,
+      )
+      .all(dateOffset) as any[];
 
-    const measurements = rows.map(r => {
+    const measurements = rows.map((r) => {
       const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
       return {
         logged_at: r.logged_at,
@@ -623,13 +740,27 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     const previous = measurements.length > 1 ? measurements[measurements.length - 2] : null;
 
     // Compute trends
-    const trends: Record<string, { current: number | null; previous: number | null; direction: string }> = {};
+    const trends: Record<
+      string,
+      { current: number | null; previous: number | null; direction: string }
+    > = {};
     if (latest && previous) {
-      for (const key of ['body_fat_pct', 'fat_mass', 'muscle_mass', 'bone_mass', 'hydration', 'visceral_fat'] as const) {
+      for (const key of [
+        'body_fat_pct',
+        'fat_mass',
+        'muscle_mass',
+        'bone_mass',
+        'hydration',
+        'visceral_fat',
+      ] as const) {
         const curr = (latest as any)[key];
         const prev = (previous as any)[key];
         if (curr != null && prev != null) {
-          trends[key] = { current: curr, previous: prev, direction: curr > prev ? 'up' : curr < prev ? 'down' : 'stable' };
+          trends[key] = {
+            current: curr,
+            previous: prev,
+            direction: curr > prev ? 'up' : curr < prev ? 'down' : 'stable',
+          };
         }
       }
     }
@@ -639,37 +770,66 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // GET /api/routine/stats — summary stats
   app.get('/api/routine/stats', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
-    const totalLogs = (sqlite.prepare('SELECT COUNT(*) as c FROM routine_logs WHERE deleted_at IS NULL').get() as any).c;
-    const byType = sqlite.prepare('SELECT type, COUNT(*) as count FROM routine_logs WHERE deleted_at IS NULL GROUP BY type').all();
-    const thisWeek = (sqlite.prepare("SELECT COUNT(*) as c FROM routine_logs WHERE deleted_at IS NULL AND type = 'workout' AND logged_at >= datetime('now', '-7 days')").get() as any).c;
-    const latestWeight = sqlite.prepare("SELECT json_extract(data, '$.value') as value, logged_at FROM routine_logs WHERE type = 'weight' AND deleted_at IS NULL ORDER BY logged_at DESC LIMIT 1").get() as any;
-    return c.json({ total_logs: totalLogs, by_type: byType, workouts_this_week: thisWeek, latest_weight: latestWeight });
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    const totalLogs = (
+      sqlite.prepare('SELECT COUNT(*) as c FROM routine_logs WHERE deleted_at IS NULL').get() as any
+    ).c;
+    const byType = sqlite
+      .prepare(
+        'SELECT type, COUNT(*) as count FROM routine_logs WHERE deleted_at IS NULL GROUP BY type',
+      )
+      .all();
+    const thisWeek = (
+      sqlite
+        .prepare(
+          "SELECT COUNT(*) as c FROM routine_logs WHERE deleted_at IS NULL AND type = 'workout' AND logged_at >= datetime('now', '-7 days')",
+        )
+        .get() as any
+    ).c;
+    const latestWeight = sqlite
+      .prepare(
+        "SELECT json_extract(data, '$.value') as value, logged_at FROM routine_logs WHERE type = 'weight' AND deleted_at IS NULL ORDER BY logged_at DESC LIMIT 1",
+      )
+      .get() as any;
+    return c.json({
+      total_logs: totalLogs,
+      by_type: byType,
+      workouts_this_week: thisWeek,
+      latest_weight: latestWeight,
+    });
   });
 
   // GET /api/routine/summary — enhanced summary for Stats tab (T#410)
   app.get('/api/routine/summary', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const range = c.req.query('range') || 'week';
     const rangeMap: Record<string, number> = { week: 7, month: 30, '3m': 90, year: 365 };
     const days = rangeMap[range] || 7;
     const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-    const workoutsThisRange = (sqlite.prepare(
-      "SELECT COUNT(*) as c FROM routine_logs WHERE deleted_at IS NULL AND type = 'workout' AND logged_at >= ?"
-    ).get(from) as any).c;
+    const workoutsThisRange = (
+      sqlite
+        .prepare(
+          "SELECT COUNT(*) as c FROM routine_logs WHERE deleted_at IS NULL AND type = 'workout' AND logged_at >= ?",
+        )
+        .get(from) as any
+    ).c;
 
     // Total volume this range (sum of weight * reps across all sets)
-    const workoutRows = sqlite.prepare(
-      "SELECT data FROM routine_logs WHERE deleted_at IS NULL AND type = 'workout' AND logged_at >= ?"
-    ).all(from) as any[];
+    const workoutRows = sqlite
+      .prepare(
+        "SELECT data FROM routine_logs WHERE deleted_at IS NULL AND type = 'workout' AND logged_at >= ?",
+      )
+      .all(from) as any[];
 
     let totalVolume = 0;
     let bestLift = { exercise: '', weight: 0, reps: 0, unit: 'kg' };
     for (const row of workoutRows) {
       try {
         const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
-        for (const ex of (data.exercises || [])) {
+        for (const ex of data.exercises || []) {
           if (typeof ex === 'string') {
             const parsed = parseExerciseString(ex);
             for (const s of parsed.sets) {
@@ -680,7 +840,7 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
             }
           } else {
             const { name } = parseExerciseName(ex.name || '');
-            for (const s of (ex.sets || [])) {
+            for (const s of ex.sets || []) {
               const w = parseFloat(s.weight) || 0;
               const r = parseInt(s.reps) || 0;
               totalVolume += w * r;
@@ -690,18 +850,31 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
             }
           }
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
 
-    const latestWeight = sqlite.prepare(
-      "SELECT json_extract(data, '$.value') as value, logged_at FROM routine_logs WHERE type = 'weight' AND deleted_at IS NULL ORDER BY logged_at DESC LIMIT 1"
-    ).get() as any;
+    const latestWeight = sqlite
+      .prepare(
+        "SELECT json_extract(data, '$.value') as value, logged_at FROM routine_logs WHERE type = 'weight' AND deleted_at IS NULL ORDER BY logged_at DESC LIMIT 1",
+      )
+      .get() as any;
 
-    const prevWeight = sqlite.prepare(
-      "SELECT json_extract(data, '$.value') as value FROM routine_logs WHERE type = 'weight' AND deleted_at IS NULL ORDER BY logged_at DESC LIMIT 1 OFFSET 1"
-    ).get() as any;
+    const prevWeight = sqlite
+      .prepare(
+        "SELECT json_extract(data, '$.value') as value FROM routine_logs WHERE type = 'weight' AND deleted_at IS NULL ORDER BY logged_at DESC LIMIT 1 OFFSET 1",
+      )
+      .get() as any;
 
-    const weightTrend = latestWeight && prevWeight ? (latestWeight.value > prevWeight.value ? 'up' : latestWeight.value < prevWeight.value ? 'down' : 'stable') : null;
+    const weightTrend =
+      latestWeight && prevWeight
+        ? latestWeight.value > prevWeight.value
+          ? 'up'
+          : latestWeight.value < prevWeight.value
+            ? 'down'
+            : 'stable'
+        : null;
 
     return c.json({
       workouts: workoutsThisRange,
@@ -714,14 +887,21 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // GET /api/routine/exercises — exercise library (T#410)
   app.get('/api/routine/exercises', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const q = c.req.query('q');
     const muscleGroup = c.req.query('muscle_group');
 
     let query = 'SELECT * FROM exercises WHERE 1=1';
     const params: any[] = [];
-    if (q) { query += ' AND name LIKE ?'; params.push(`%${q}%`); }
-    if (muscleGroup) { query += ' AND muscle_group = ?'; params.push(muscleGroup); }
+    if (q) {
+      query += ' AND name LIKE ?';
+      params.push(`%${q}%`);
+    }
+    if (muscleGroup) {
+      query += ' AND muscle_group = ?';
+      params.push(muscleGroup);
+    }
     query += ' ORDER BY name ASC';
 
     const exercises = sqlite.prepare(query).all(...params);
@@ -730,44 +910,52 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // POST /api/routine/exercises — add custom exercise (T#410)
   app.post('/api/routine/exercises', async (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     try {
       const body = await c.req.json();
       const { name, muscle_group, equipment } = body;
       if (!name) return c.json({ error: 'Exercise name is required' }, 400);
       try {
-        sqlite.prepare(
-          'INSERT INTO exercises (name, muscle_group, equipment, created_by) VALUES (?, ?, ?, ?)'
-        ).run(name, muscle_group || null, equipment || null, 'manual');
+        sqlite
+          .prepare(
+            'INSERT INTO exercises (name, muscle_group, equipment, created_by) VALUES (?, ?, ?, ?)',
+          )
+          .run(name, muscle_group || null, equipment || null, 'manual');
       } catch (e: any) {
         if (e.message?.includes('UNIQUE')) return c.json({ error: 'Exercise already exists' }, 409);
         throw e;
       }
-      const exercise = sqlite.prepare('SELECT * FROM exercises WHERE name = ? AND equipment IS ?').get(name, equipment || null);
+      const exercise = sqlite
+        .prepare('SELECT * FROM exercises WHERE name = ? AND equipment IS ?')
+        .get(name, equipment || null);
       return c.json(exercise, 201);
-    } catch { return c.json({ error: 'Invalid request' }, 400); }
+    } catch {
+      return c.json({ error: 'Invalid request' }, 400);
+    }
   });
 
   // POST /api/routine/exercises/seed — seed exercise library from existing workout data (T#410)
   app.post('/api/routine/exercises/seed', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
 
-    const rows = sqlite.prepare(
-      "SELECT data FROM routine_logs WHERE type = 'workout' AND deleted_at IS NULL"
-    ).all() as any[];
+    const rows = sqlite
+      .prepare("SELECT data FROM routine_logs WHERE type = 'workout' AND deleted_at IS NULL")
+      .all() as any[];
 
     const seen = new Set<string>();
     let seeded = 0;
 
     const insert = sqlite.prepare(
-      'INSERT OR IGNORE INTO exercises (name, muscle_group, equipment, created_by) VALUES (?, ?, ?, ?)'
+      'INSERT OR IGNORE INTO exercises (name, muscle_group, equipment, created_by) VALUES (?, ?, ?, ?)',
     );
 
     for (const row of rows) {
       try {
         const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
-        for (const ex of (data.exercises || [])) {
-          const rawName = typeof ex === 'string' ? ex : (ex.name || '');
+        for (const ex of data.exercises || []) {
+          const rawName = typeof ex === 'string' ? ex : ex.name || '';
           const { name, equipment } = parseExerciseName(rawName);
           const key = `${name}|${equipment}`;
           if (!name || seen.has(key)) continue;
@@ -775,7 +963,9 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
           const result = insert.run(name, data.muscle_group || null, equipment || null, 'import');
           if (result.changes > 0) seeded++;
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
 
     return c.json({ seeded, total: seen.size });
@@ -783,7 +973,8 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // GET /api/routine/personal-records — personal records list (T#410, T#543)
   app.get('/api/routine/personal-records', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const exercise = c.req.query('exercise');
     const range = c.req.query('range');
     const grouped = c.req.query('grouped'); // 'true' = best lift per exercise
@@ -792,7 +983,8 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       // Best lift per exercise — highest weight, then highest reps at that weight
       let dateFilter = '';
       if (range === 'month') dateFilter = "AND achieved_at >= datetime('now', '-30 days')";
-      const records = sqlite.prepare(`
+      const records = sqlite
+        .prepare(`
         SELECT pr.* FROM personal_records pr
         INNER JOIN (
           SELECT exercise_name, MAX(weight) as max_weight
@@ -803,13 +995,17 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         WHERE 1=1 ${dateFilter}
         GROUP BY pr.exercise_name
         ORDER BY pr.weight DESC, pr.reps DESC
-      `).all();
+      `)
+        .all();
       return c.json({ records });
     }
 
     let query = 'SELECT * FROM personal_records WHERE 1=1';
     const params: any[] = [];
-    if (exercise) { query += ' AND exercise_name = ?'; params.push(exercise); }
+    if (exercise) {
+      query += ' AND exercise_name = ?';
+      params.push(exercise);
+    }
     if (range === 'month') {
       query += " AND achieved_at >= datetime('now', '-30 days')";
     }
@@ -821,34 +1017,44 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // POST /api/routine/personal-records/seed — backfill PRs from all workout logs (T#543)
   app.post('/api/routine/personal-records/seed', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
-    const workouts = sqlite.prepare(
-      "SELECT id, logged_at, data FROM routine_logs WHERE type = 'workout' AND deleted_at IS NULL"
-    ).all() as any[];
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    const workouts = sqlite
+      .prepare(
+        "SELECT id, logged_at, data FROM routine_logs WHERE type = 'workout' AND deleted_at IS NULL",
+      )
+      .all() as any[];
 
     const prInsert = sqlite.prepare(
-      'INSERT OR IGNORE INTO personal_records (exercise_name, weight, reps, unit, achieved_at, log_id) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT OR IGNORE INTO personal_records (exercise_name, weight, reps, unit, achieved_at, log_id) VALUES (?, ?, ?, ?, ?, ?)',
     );
 
     let inserted = 0;
     const insertPR = sqlite.transaction(() => {
       for (const log of workouts) {
         const d = typeof log.data === 'string' ? JSON.parse(log.data) : log.data;
-        for (const ex of (d.exercises || [])) {
+        for (const ex of d.exercises || []) {
           if (typeof ex === 'string') {
             // Manual format: "Chest Press 190lbs 8/8/6"
             const parsed = parseExerciseString(ex);
             for (const s of parsed.sets) {
               if (s.weight > 0 && s.reps > 0) {
-                const res = prInsert.run(parsed.name, s.weight, s.reps, s.unit, log.logged_at, log.id);
+                const res = prInsert.run(
+                  parsed.name,
+                  s.weight,
+                  s.reps,
+                  s.unit,
+                  log.logged_at,
+                  log.id,
+                );
                 if ((res as any).changes > 0) inserted++;
               }
             }
           } else {
             // Structured format from Alpha Progression
-            const { name } = parseExerciseName(typeof ex === 'string' ? ex : (ex.name || ''));
+            const { name } = parseExerciseName(typeof ex === 'string' ? ex : ex.name || '');
             if (!name) continue;
-            for (const s of (ex.sets || [])) {
+            for (const s of ex.sets || []) {
               const w = parseFloat(s.weight) || 0;
               const r = parseInt(s.reps) || 0;
               if (w > 0 && r > 0) {
@@ -868,11 +1074,15 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // GET /api/routine/photos — photo gallery
   app.get('/api/routine/photos', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const tag = c.req.query('tag');
     let query = "SELECT * FROM routine_logs WHERE type = 'photo' AND deleted_at IS NULL";
     const params: any[] = [];
-    if (tag) { query += " AND json_extract(data, '$.tag') = ?"; params.push(tag); }
+    if (tag) {
+      query += " AND json_extract(data, '$.tag') = ?";
+      params.push(tag);
+    }
     query += ' ORDER BY logged_at DESC';
     const photos = sqlite.prepare(query).all(...params);
     return c.json({ photos });
@@ -882,8 +1092,15 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   // identically. Also addresses the inconsistency between create-path and
   // edit-path discipline (same shape as T#706 parseDaysOfWeek helper).
   // Mutates workoutData in place to coerce rpe to Number.
-  function validateWorkoutData(workoutData: any): { ok: true; data: any } | { ok: false; error: string; hint?: string } {
-    if (!workoutData || typeof workoutData !== 'object' || !workoutData.exercises || !Array.isArray(workoutData.exercises)) {
+  function validateWorkoutData(
+    workoutData: any,
+  ): { ok: true; data: any } | { ok: false; error: string; hint?: string } {
+    if (
+      !workoutData ||
+      typeof workoutData !== 'object' ||
+      !workoutData.exercises ||
+      !Array.isArray(workoutData.exercises)
+    ) {
       return {
         ok: false,
         error: 'Workout must include an exercises array.',
@@ -900,46 +1117,82 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         };
       }
       if (!ex.name?.trim()) {
-        return { ok: false, error: `Exercise ${i + 1}: name is required.`, hint: '{ name: "Bench Press", sets: [{ weight: 80, reps: 10, unit: "kg" }] }' };
+        return {
+          ok: false,
+          error: `Exercise ${i + 1}: name is required.`,
+          hint: '{ name: "Bench Press", sets: [{ weight: 80, reps: 10, unit: "kg" }] }',
+        };
       }
       if (!ex.sets || !Array.isArray(ex.sets) || ex.sets.length === 0) {
-        return { ok: false, error: `Exercise ${i + 1} ("${ex.name}"): sets array is required with at least one set.`, hint: 'sets: [{ weight: 80, reps: 10, unit: "kg" }]' };
+        return {
+          ok: false,
+          error: `Exercise ${i + 1} ("${ex.name}"): sets array is required with at least one set.`,
+          hint: 'sets: [{ weight: 80, reps: 10, unit: "kg" }]',
+        };
       }
       // T#710: per-exercise notes — optional string
       if (ex.notes != null && typeof ex.notes !== 'string') {
-        return { ok: false, error: `Exercise ${i + 1} ("${ex.name}"): notes must be a string if provided.`, hint: 'notes: "felt strong, depth good"' };
+        return {
+          ok: false,
+          error: `Exercise ${i + 1} ("${ex.name}"): notes must be a string if provided.`,
+          hint: 'notes: "felt strong, depth good"',
+        };
       }
       // T#711: hevy_template_id — optional string, cross-link to Hevy exercise library
       if (ex.hevy_template_id != null && typeof ex.hevy_template_id !== 'string') {
-        return { ok: false, error: `Exercise ${i + 1} ("${ex.name}"): hevy_template_id must be a string if provided.`, hint: 'hevy_template_id: "D04AC939"' };
+        return {
+          ok: false,
+          error: `Exercise ${i + 1} ("${ex.name}"): hevy_template_id must be a string if provided.`,
+          hint: 'hevy_template_id: "D04AC939"',
+        };
       }
       // T#711: superset_id — optional finite number, preserves Hevy superset grouping
       if (ex.superset_id != null) {
         if (typeof ex.superset_id !== 'number' || !Number.isFinite(ex.superset_id)) {
-          return { ok: false, error: `Exercise ${i + 1} ("${ex.name}"): superset_id must be a finite number if provided.`, hint: 'superset_id: 0' };
+          return {
+            ok: false,
+            error: `Exercise ${i + 1} ("${ex.name}"): superset_id must be a finite number if provided.`,
+            hint: 'superset_id: 0',
+          };
         }
       }
       for (let j = 0; j < ex.sets.length; j++) {
         const s = ex.sets[j];
         if (s.weight == null || s.reps == null) {
-          return { ok: false, error: `Exercise ${i + 1} ("${ex.name}"), set ${j + 1}: weight and reps are required.`, hint: '{ weight: 80, reps: 10, unit: "kg" }' };
+          return {
+            ok: false,
+            error: `Exercise ${i + 1} ("${ex.name}"), set ${j + 1}: weight and reps are required.`,
+            hint: '{ weight: 80, reps: 10, unit: "kg" }',
+          };
         }
         // T#710: per-set RPE — optional number 1-10
         if (s.rpe != null) {
           const rpeNum = Number(s.rpe);
           if (isNaN(rpeNum) || rpeNum < 1 || rpeNum > 10) {
-            return { ok: false, error: `Exercise ${i + 1} ("${ex.name}"), set ${j + 1}: rpe must be a number between 1 and 10 if provided.`, hint: '{ weight: 80, reps: 10, rpe: 8 }' };
+            return {
+              ok: false,
+              error: `Exercise ${i + 1} ("${ex.name}"), set ${j + 1}: rpe must be a number between 1 and 10 if provided.`,
+              hint: '{ weight: 80, reps: 10, rpe: 8 }',
+            };
           }
           s.rpe = rpeNum;
         }
         // T#711: per-set type — optional enum (normal|warmup|dropset|failure)
         if (s.type != null) {
           if (typeof s.type !== 'string') {
-            return { ok: false, error: `Exercise ${i + 1} ("${ex.name}"), set ${j + 1}: type must be a string if provided.`, hint: 'type: "warmup" | "normal" | "dropset" | "failure"' };
+            return {
+              ok: false,
+              error: `Exercise ${i + 1} ("${ex.name}"), set ${j + 1}: type must be a string if provided.`,
+              hint: 'type: "warmup" | "normal" | "dropset" | "failure"',
+            };
           }
           const t = s.type.toLowerCase();
           if (t !== 'normal' && t !== 'warmup' && t !== 'dropset' && t !== 'failure') {
-            return { ok: false, error: `Exercise ${i + 1} ("${ex.name}"), set ${j + 1}: type must be one of normal, warmup, dropset, failure.`, hint: 'type: "warmup"' };
+            return {
+              ok: false,
+              error: `Exercise ${i + 1} ("${ex.name}"), set ${j + 1}: type must be one of normal, warmup, dropset, failure.`,
+              hint: 'type: "warmup"',
+            };
           }
           s.type = t;
         }
@@ -950,7 +1203,8 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // POST /api/routine/logs — create log entry
   app.post('/api/routine/logs', async (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     try {
       const data = await c.req.json();
       const { type, logged_at } = data;
@@ -963,31 +1217,53 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         const mealData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
         if (mealData.items && Array.isArray(mealData.items)) {
           // T#430: itemized meal — validate each item, auto-sum totals
-          if (mealData.items.length === 0) return c.json({ error: 'At least 1 meal item required' }, 400);
+          if (mealData.items.length === 0)
+            return c.json({ error: 'At least 1 meal item required' }, 400);
           const macroFields = ['calories', 'protein', 'carbs', 'fat'] as const;
           for (let i = 0; i < mealData.items.length; i++) {
             const item = mealData.items[i];
             if (!item.name?.trim()) return c.json({ error: `Item ${i + 1}: name required` }, 400);
-            const missing = macroFields.filter(f => item[f] == null || item[f] === '');
-            if (missing.length > 0) return c.json({ error: `Item ${i + 1} (${item.name}): macros required: ${missing.join(', ')}` }, 400);
+            const missing = macroFields.filter((f) => item[f] == null || item[f] === '');
+            if (missing.length > 0)
+              return c.json(
+                { error: `Item ${i + 1} (${item.name}): macros required: ${missing.join(', ')}` },
+                400,
+              );
             for (const f of macroFields) {
               const v = Number(item[f]);
-              if (isNaN(v) || v < 0) return c.json({ error: `Item ${i + 1} (${item.name}): ${f} must be a non-negative number` }, 400);
+              if (isNaN(v) || v < 0)
+                return c.json(
+                  { error: `Item ${i + 1} (${item.name}): ${f} must be a non-negative number` },
+                  400,
+                );
               item[f] = v;
             }
           }
           // Auto-compute top-level totals from items
           for (const f of macroFields) {
-            mealData[f] = mealData.items.reduce((sum: number, item: any) => sum + (Number(item[f]) || 0), 0);
+            mealData[f] = mealData.items.reduce(
+              (sum: number, item: any) => sum + (Number(item[f]) || 0),
+              0,
+            );
           }
           // Auto-generate description from items if not provided
           if (!mealData.description) {
-            mealData.description = mealData.items.map((item: any) => item.name).slice(0, 3).join(', ') + (mealData.items.length > 3 ? '...' : '');
+            mealData.description =
+              mealData.items
+                .map((item: any) => item.name)
+                .slice(0, 3)
+                .join(', ') + (mealData.items.length > 3 ? '...' : '');
           }
           data.data = mealData;
         } else {
           // T#483: meal items are now mandatory — no more total-only logging
-          return c.json({ error: 'Meal items required. Each meal must include an items array with individual food items and per-item macros (name, calories, protein, carbs, fat).' }, 400);
+          return c.json(
+            {
+              error:
+                'Meal items required. Each meal must include an items array with individual food items and per-item macros (name, calories, protein, carbs, fat).',
+            },
+            400,
+          );
         }
       }
       // Workout validation — enforce structured exercise format (T#521, T#522, T#710)
@@ -1004,9 +1280,11 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       if (logged_at && !logged_at.endsWith('Z') && !logged_at.includes('+')) {
         normalizedLoggedAt = logged_at + 'Z';
       }
-      const result = sqlite.prepare(
-        'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)'
-      ).run(type, normalizedLoggedAt, jsonData, data.source || 'manual', now);
+      const result = sqlite
+        .prepare(
+          'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run(type, normalizedLoggedAt, jsonData, data.source || 'manual', now);
       const logId = (result as any).lastInsertRowid;
       const log = sqlite.prepare('SELECT * FROM routine_logs WHERE id = ?').get(logId);
 
@@ -1015,12 +1293,12 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         try {
           const workoutData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
           const prInsert = sqlite.prepare(
-            'INSERT OR IGNORE INTO personal_records (exercise_name, weight, reps, unit, achieved_at, log_id) VALUES (?, ?, ?, ?, ?, ?)'
+            'INSERT OR IGNORE INTO personal_records (exercise_name, weight, reps, unit, achieved_at, log_id) VALUES (?, ?, ?, ?, ?, ?)',
           );
-          for (const ex of (workoutData.exercises || [])) {
-            const { name } = parseExerciseName(typeof ex === 'string' ? ex : (ex.name || ''));
+          for (const ex of workoutData.exercises || []) {
+            const { name } = parseExerciseName(typeof ex === 'string' ? ex : ex.name || '');
             if (!name) continue;
-            for (const s of (ex.sets || [])) {
+            for (const s of ex.sets || []) {
               const w = parseFloat(s.weight) || 0;
               const r = parseInt(s.reps) || 0;
               if (w > 0 && r > 0) {
@@ -1028,18 +1306,25 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
               }
             }
           }
-        } catch { /* PR update failure is non-critical */ }
+        } catch {
+          /* PR update failure is non-critical */
+        }
       }
 
       return c.json(log, 201);
-    } catch { return c.json({ error: 'Invalid request' }, 400); }
+    } catch {
+      return c.json({ error: 'Invalid request' }, 400);
+    }
   });
 
   // PATCH /api/routine/logs/:id — edit log
   app.patch('/api/routine/logs/:id', async (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const id = parseInt(c.req.param('id'), 10);
-    const existing = sqlite.prepare('SELECT * FROM routine_logs WHERE id = ? AND deleted_at IS NULL').get(id);
+    const existing = sqlite
+      .prepare('SELECT * FROM routine_logs WHERE id = ? AND deleted_at IS NULL')
+      .get(id);
     if (!existing) return c.json({ error: 'Log not found' }, 404);
     try {
       const body = await c.req.json();
@@ -1051,15 +1336,28 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         if (existingData === 'meal') {
           const mealData = typeof body.data === 'string' ? JSON.parse(body.data) : body.data;
           if (!mealData.items || !Array.isArray(mealData.items) || mealData.items.length === 0) {
-            return c.json({ error: 'Meal items required. Each meal must include an items array with individual food items and per-item macros.' }, 400);
+            return c.json(
+              {
+                error:
+                  'Meal items required. Each meal must include an items array with individual food items and per-item macros.',
+              },
+              400,
+            );
           }
           if (mealData.items && Array.isArray(mealData.items) && mealData.items.length > 0) {
             const macroFields = ['calories', 'protein', 'carbs', 'fat'] as const;
             for (const f of macroFields) {
-              mealData[f] = mealData.items.reduce((sum: number, item: any) => sum + (Number(item[f]) || 0), 0);
+              mealData[f] = mealData.items.reduce(
+                (sum: number, item: any) => sum + (Number(item[f]) || 0),
+                0,
+              );
             }
             if (!mealData.description) {
-              mealData.description = mealData.items.map((item: any) => item.name).slice(0, 3).join(', ') + (mealData.items.length > 3 ? '...' : '');
+              mealData.description =
+                mealData.items
+                  .map((item: any) => item.name)
+                  .slice(0, 3)
+                  .join(', ') + (mealData.items.length > 3 ? '...' : '');
             }
             body.data = mealData;
           }
@@ -1072,45 +1370,62 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
           if (!result.ok) return c.json({ error: result.error, hint: result.hint }, 400);
           body.data = result.data;
         }
-        updates.push('data = ?'); values.push(typeof body.data === 'string' ? body.data : JSON.stringify(body.data));
+        updates.push('data = ?');
+        values.push(typeof body.data === 'string' ? body.data : JSON.stringify(body.data));
       }
       if (body.logged_at) {
         let normalizedLoggedAt = body.logged_at;
         if (!body.logged_at.endsWith('Z') && !body.logged_at.includes('+')) {
           normalizedLoggedAt = body.logged_at + 'Z';
         }
-        updates.push('logged_at = ?'); values.push(normalizedLoggedAt);
+        updates.push('logged_at = ?');
+        values.push(normalizedLoggedAt);
       }
       if (updates.length === 0) return c.json({ error: 'No fields to update' }, 400);
       values.push(id);
       sqlite.prepare(`UPDATE routine_logs SET ${updates.join(', ')} WHERE id = ?`).run(...values);
       return c.json(sqlite.prepare('SELECT * FROM routine_logs WHERE id = ?').get(id));
-    } catch { return c.json({ error: 'Invalid request' }, 400); }
+    } catch {
+      return c.json({ error: 'Invalid request' }, 400);
+    }
   });
 
   // DELETE /api/routine/logs/:id — soft delete
   app.delete('/api/routine/logs/:id', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const id = parseInt(c.req.param('id'), 10);
-    const existing = sqlite.prepare('SELECT * FROM routine_logs WHERE id = ? AND deleted_at IS NULL').get(id);
+    const existing = sqlite
+      .prepare('SELECT * FROM routine_logs WHERE id = ? AND deleted_at IS NULL')
+      .get(id);
     if (!existing) return c.json({ error: 'Log not found' }, 404);
-    sqlite.prepare('UPDATE routine_logs SET deleted_at = ? WHERE id = ?').run(new Date().toISOString(), id);
+    sqlite
+      .prepare('UPDATE routine_logs SET deleted_at = ? WHERE id = ?')
+      .run(new Date().toISOString(), id);
     return c.json({ success: true, id });
   });
 
   // GET /api/routine/logs/deleted — list soft-deleted entries for recovery
   app.get('/api/routine/logs/deleted', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const limit = parseInt(c.req.query('limit') || '50');
-    const rows = sqlite.prepare('SELECT * FROM routine_logs WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT ?').all(limit);
+    const rows = sqlite
+      .prepare(
+        'SELECT * FROM routine_logs WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT ?',
+      )
+      .all(limit);
     return c.json({ logs: rows, total: (rows as any[]).length });
   });
 
   // PATCH /api/routine/logs/:id/restore — undelete a soft-deleted log
   app.patch('/api/routine/logs/:id/restore', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const id = parseInt(c.req.param('id'), 10);
-    const existing = sqlite.prepare('SELECT * FROM routine_logs WHERE id = ? AND deleted_at IS NOT NULL').get(id);
+    const existing = sqlite
+      .prepare('SELECT * FROM routine_logs WHERE id = ? AND deleted_at IS NOT NULL')
+      .get(id);
     if (!existing) return c.json({ error: 'Deleted log not found' }, 404);
     sqlite.prepare('UPDATE routine_logs SET deleted_at = NULL WHERE id = ?').run(id);
     return c.json({ success: true, id, restored: true });
@@ -1118,19 +1433,29 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // POST /api/routine/photo/upload — upload progress photo
   app.post('/api/routine/photo/upload', async (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     try {
       let formData: FormData;
-      try { formData = await c.req.formData(); } catch { return c.json({ error: 'No file provided. Send multipart/form-data with a file field.' }, 400); }
+      try {
+        formData = await c.req.formData();
+      } catch {
+        return c.json(
+          { error: 'No file provided. Send multipart/form-data with a file field.' },
+          400,
+        );
+      }
       const file = formData.get('file') as File;
-      const tag = formData.get('tag') as string || '';
-      const notes = formData.get('notes') as string || '';
-      if (!file || !(file instanceof File) || file.size === 0) return c.json({ error: 'No file provided' }, 400);
+      const tag = (formData.get('tag') as string) || '';
+      const notes = (formData.get('notes') as string) || '';
+      if (!file || !(file instanceof File) || file.size === 0)
+        return c.json({ error: 'No file provided' }, 400);
       if (file.size > 10 * 1024 * 1024) return c.json({ error: 'File too large. Max 10MB' }, 400);
 
       const buffer = Buffer.from(await file.arrayBuffer());
       const imageType = detectImageType(buffer);
-      if (!imageType) return c.json({ error: 'Invalid image. Only JPG, PNG, GIF, WebP allowed.' }, 400);
+      if (!imageType)
+        return c.json({ error: 'Invalid image. Only JPG, PNG, GIF, WebP allowed.' }, 400);
 
       // Process with sharp: EXIF rotation + keep date + strip GPS + resize
       let processedBuffer = buffer;
@@ -1148,7 +1473,9 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
             if (dateMatch) {
               captureDate = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T${dateMatch[4]}:${dateMatch[5]}:${dateMatch[6]}.000Z`;
             }
-          } catch { /* date extraction failed */ }
+          } catch {
+            /* date extraction failed */
+          }
         }
         processedBuffer = await sharp(buffer)
           .rotate()
@@ -1157,7 +1484,9 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
           .withMetadata({ orientation: undefined })
           .toBuffer();
         ext = '.jpg';
-      } catch { /* sharp not available */ }
+      } catch {
+        /* sharp not available */
+      }
 
       const filename = `${crypto.randomUUID()}${ext}`;
       fs.writeFileSync(path.join(ROUTINE_UPLOADS, filename), processedBuffer);
@@ -1165,29 +1494,51 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       // Create log entry — use EXIF capture date if available, otherwise now
       const now = new Date().toISOString();
       const loggedAt = captureDate || now;
-      const photoData = JSON.stringify({ url: `/api/routine/photo/${filename}`, tag, notes, captureDate: captureDate || undefined });
-      const result = sqlite.prepare(
-        'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)'
-      ).run('photo', loggedAt, photoData, 'manual', now);
-      const log = sqlite.prepare('SELECT * FROM routine_logs WHERE id = ?').get((result as any).lastInsertRowid);
+      const photoData = JSON.stringify({
+        url: `/api/routine/photo/${filename}`,
+        tag,
+        notes,
+        captureDate: captureDate || undefined,
+      });
+      const result = sqlite
+        .prepare(
+          'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('photo', loggedAt, photoData, 'manual', now);
+      const log = sqlite
+        .prepare('SELECT * FROM routine_logs WHERE id = ?')
+        .get((result as any).lastInsertRowid);
       return c.json(log, 201);
-    } catch { return c.json({ error: 'Upload failed' }, 500); }
+    } catch {
+      return c.json({ error: 'Upload failed' }, 500);
+    }
   });
 
   // GET /api/routine/photo/:filename — serve routine photo
   app.get('/api/routine/photo/:filename', (c) => {
-    if (!isForgeAuthorized(c, { mode: 'read' })) return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'read' }))
+      return c.json({ error: 'Forge is private to Gorn and Sable' }, 403);
     const filename = c.req.param('filename').replace(/[^a-zA-Z0-9._-]/g, '');
     const filePath = path.join(ROUTINE_UPLOADS, filename);
     if (!fs.existsSync(filePath)) return c.json({ error: 'Not found' }, 404);
     const ext = path.extname(filename).toLowerCase();
-    const mime = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
-    return new Response(fs.readFileSync(filePath), { headers: { 'Content-Type': mime, 'Cache-Control': 'public, max-age=86400' } });
+    const mime =
+      ext === '.jpg' || ext === '.jpeg'
+        ? 'image/jpeg'
+        : ext === '.png'
+          ? 'image/png'
+          : ext === '.webp'
+            ? 'image/webp'
+            : 'image/jpeg';
+    return new Response(fs.readFileSync(filePath), {
+      headers: { 'Content-Type': mime, 'Cache-Control': 'public, max-age=86400' },
+    });
   });
 
   // POST /api/routine/import/alpha-progression — import Alpha Progression CSV (T#389)
   app.post('/api/routine/import/alpha-progression', async (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge access denied' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge access denied' }, 403);
 
     try {
       const formData = await c.req.formData();
@@ -1195,7 +1546,10 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       if (!file) return c.json({ error: 'No file provided' }, 400);
 
       const text = await file.text();
-      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const lines = text
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
 
       const sessions: any[] = [];
       let currentSession: any = null;
@@ -1206,7 +1560,7 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       for (const line of lines) {
         // Session header: "Workout Name";"date";"duration"
         if (line.startsWith('"') && line.includes('";"')) {
-          const parts = line.split('";').map(s => s.replace(/^"|"$/g, ''));
+          const parts = line.split('";').map((s) => s.replace(/^"|"$/g, ''));
           if (parts.length >= 3 && parts[1].match(/\d{4}-\d{2}-\d{2}/)) {
             if (currentSession) {
               if (currentExercise) currentSession.exercises.push(currentExercise);
@@ -1273,9 +1627,11 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
       // Check for existing imports in this date range (dedup)
       const existingDates = new Set<string>();
-      const existingRows = sqlite.prepare(
-        "SELECT logged_at FROM routine_logs WHERE type = 'workout' AND source = 'alpha-progression' AND deleted_at IS NULL"
-      ).all() as any[];
+      const existingRows = sqlite
+        .prepare(
+          "SELECT logged_at FROM routine_logs WHERE type = 'workout' AND source = 'alpha-progression' AND deleted_at IS NULL",
+        )
+        .all() as any[];
       for (const row of existingRows) existingDates.add(row.logged_at);
 
       // Filter out sessions that already exist (by date)
@@ -1292,12 +1648,19 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
           sessions: sessions.length,
           new_sessions: newSessions.length,
           duplicates: duplicateCount,
-          date_range: sessions.length > 0 ? {
-            from: sessions[sessions.length - 1].date,
-            to: sessions[0].date,
-          } : null,
+          date_range:
+            sessions.length > 0
+              ? {
+                  from: sessions[sessions.length - 1].date,
+                  to: sessions[0].date,
+                }
+              : null,
           total_exercises: newSessions.reduce((sum: number, s: any) => sum + s.exercises.length, 0),
-          total_sets: newSessions.reduce((sum: number, s: any) => sum + s.exercises.reduce((esum: number, e: any) => esum + e.sets.length, 0), 0),
+          total_sets: newSessions.reduce(
+            (sum: number, s: any) =>
+              sum + s.exercises.reduce((esum: number, e: any) => esum + e.sets.length, 0),
+            0,
+          ),
           sample: newSessions.slice(0, 3),
         });
       }
@@ -1305,7 +1668,7 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       // Import: insert only new sessions
       const now = new Date().toISOString();
       const insert = sqlite.prepare(
-        'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)',
       );
       let imported = 0;
       for (const session of newSessions) {
@@ -1322,12 +1685,19 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       return c.json({
         imported,
         duplicates: duplicateCount,
-        date_range: newSessions.length > 0 ? {
-          from: newSessions[newSessions.length - 1].date,
-          to: newSessions[0].date,
-        } : null,
+        date_range:
+          newSessions.length > 0
+            ? {
+                from: newSessions[newSessions.length - 1].date,
+                to: newSessions[0].date,
+              }
+            : null,
         total_exercises: newSessions.reduce((sum: number, s: any) => sum + s.exercises.length, 0),
-        total_sets: newSessions.reduce((sum: number, s: any) => sum + s.exercises.reduce((esum: number, e: any) => esum + e.sets.length, 0), 0),
+        total_sets: newSessions.reduce(
+          (sum: number, s: any) =>
+            sum + s.exercises.reduce((esum: number, e: any) => esum + e.sets.length, 0),
+          0,
+        ),
       });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Import failed' }, 500);
@@ -1336,7 +1706,8 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   // POST /api/routine/import/alpha-measurements — import Alpha Progression Measurements CSV (T#392)
   app.post('/api/routine/import/alpha-measurements', async (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge access denied' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge access denied' }, 403);
 
     try {
       const formData = await c.req.formData();
@@ -1344,7 +1715,10 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       if (!file) return c.json({ error: 'No file provided' }, 400);
 
       const text = await file.text();
-      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const lines = text
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
 
       const entries: { type: string; date: string; value: number; unit: string }[] = [];
       let currentType = '';
@@ -1378,23 +1752,25 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
       // Dedup: check existing entries
       const existingDates = new Map<string, Set<string>>();
-      const existingRows = sqlite.prepare(
-        "SELECT type, logged_at FROM routine_logs WHERE type IN ('weight', 'bodyfat') AND source = 'alpha-progression' AND deleted_at IS NULL"
-      ).all() as any[];
+      const existingRows = sqlite
+        .prepare(
+          "SELECT type, logged_at FROM routine_logs WHERE type IN ('weight', 'bodyfat') AND source = 'alpha-progression' AND deleted_at IS NULL",
+        )
+        .all() as any[];
       for (const row of existingRows) {
         if (!existingDates.has(row.type)) existingDates.set(row.type, new Set());
         existingDates.get(row.type)!.add(row.logged_at);
       }
 
-      const newEntries = entries.filter(e => {
+      const newEntries = entries.filter((e) => {
         const loggedAt = new Date(e.date).toISOString();
         return !existingDates.get(e.type)?.has(loggedAt);
       });
       const duplicateCount = entries.length - newEntries.length;
 
       const preview = c.req.query('preview') === 'true';
-      const bodyfatCount = newEntries.filter(e => e.type === 'bodyfat').length;
-      const weightCount = newEntries.filter(e => e.type === 'weight').length;
+      const bodyfatCount = newEntries.filter((e) => e.type === 'bodyfat').length;
+      const weightCount = newEntries.filter((e) => e.type === 'weight').length;
 
       if (preview) {
         return c.json({
@@ -1403,17 +1779,20 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
           duplicates: duplicateCount,
           bodyfat: bodyfatCount,
           weight: weightCount,
-          date_range: entries.length > 0 ? {
-            from: entries[entries.length - 1].date,
-            to: entries[0].date,
-          } : null,
+          date_range:
+            entries.length > 0
+              ? {
+                  from: entries[entries.length - 1].date,
+                  to: entries[0].date,
+                }
+              : null,
         });
       }
 
       // Import
       const now = new Date().toISOString();
       const insert = sqlite.prepare(
-        'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)',
       );
       let imported = 0;
       for (const entry of newEntries) {
@@ -1422,11 +1801,22 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
           value: entry.value,
           unit: entry.unit === '%' ? '%' : 'kg',
         });
-        insert.run(entry.type === 'weight' ? 'weight' : 'bodyfat', loggedAt, data, 'alpha-progression', now);
+        insert.run(
+          entry.type === 'weight' ? 'weight' : 'bodyfat',
+          loggedAt,
+          data,
+          'alpha-progression',
+          now,
+        );
         imported++;
       }
 
-      return c.json({ imported, duplicates: duplicateCount, bodyfat: bodyfatCount, weight: weightCount });
+      return c.json({
+        imported,
+        duplicates: duplicateCount,
+        bodyfat: bodyfatCount,
+        weight: weightCount,
+      });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Import failed' }, 500);
     }
@@ -1437,7 +1827,8 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   // Query: ?days=7 (default window, max 90).
   // Dedupes on hevy workout id stored in data.hevy_id.
   app.post('/api/routine/hevy/sync', async (c) => {
-    if (!isForgeAuthorized(c, { mode: 'write' })) return c.json({ error: 'Forge access denied' }, 403);
+    if (!isForgeAuthorized(c, { mode: 'write' }))
+      return c.json({ error: 'Forge access denied' }, 403);
 
     const token = process.env.HEVY_API_TOKEN;
     if (!token) return c.json({ error: 'HEVY_API_TOKEN not configured on server' }, 500);
@@ -1453,16 +1844,22 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       const pageSize = 10;
       while (true) {
         const url = `https://api.hevyapp.com/v1/workouts?page=${page}&pageSize=${pageSize}`;
-        const resp = await fetch(url, { headers: { 'api-key': token, 'accept': 'application/json' } });
-        if (!resp.ok) return c.json({ error: `Hevy API ${resp.status}: ${await resp.text()}` }, 502);
-        const body = await resp.json() as any;
+        const resp = await fetch(url, {
+          headers: { 'api-key': token, accept: 'application/json' },
+        });
+        if (!resp.ok)
+          return c.json({ error: `Hevy API ${resp.status}: ${await resp.text()}` }, 502);
+        const body = (await resp.json()) as any;
         const workouts = body.workouts || [];
         if (workouts.length === 0) break;
 
         let hitOld = false;
         for (const w of workouts) {
           const startMs = new Date(w.start_time).getTime();
-          if (startMs < sinceMs) { hitOld = true; continue; }
+          if (startMs < sinceMs) {
+            hitOld = true;
+            continue;
+          }
           fetched.push(w);
         }
         if (hitOld || page >= (body.page_count || 1) || page >= 10) break;
@@ -1471,25 +1868,32 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
       // Existing hevy-source workouts — dedupe set on hevy_id.
       const existingIds = new Set<string>();
-      const existingRows = sqlite.prepare(
-        "SELECT data FROM routine_logs WHERE type = 'workout' AND source = 'hevy' AND deleted_at IS NULL"
-      ).all() as any[];
+      const existingRows = sqlite
+        .prepare(
+          "SELECT data FROM routine_logs WHERE type = 'workout' AND source = 'hevy' AND deleted_at IS NULL",
+        )
+        .all() as any[];
       for (const row of existingRows) {
         try {
           const d = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
           if (d?.hevy_id) existingIds.add(d.hevy_id);
-        } catch { /* skip malformed */ }
+        } catch {
+          /* skip malformed */
+        }
       }
 
       const insert = sqlite.prepare(
-        'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)',
       );
       let inserted = 0;
       let skipped = 0;
       const nowIso = new Date().toISOString();
 
       for (const w of fetched) {
-        if (existingIds.has(w.id)) { skipped++; continue; }
+        if (existingIds.has(w.id)) {
+          skipped++;
+          continue;
+        }
 
         // Map Hevy → Forge workout shape.
         const startMs = new Date(w.start_time).getTime();
@@ -1523,7 +1927,9 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
                 if (t === 'normal' || t === 'warmup' || t === 'dropset' || t === 'failure') {
                   set.type = t;
                 } else {
-                  console.warn(`[hevy-sync T#711] dropping unknown set.type="${s.type}" on workout ${w.id} exercise ${idx + 1} set ${sIdx + 1}`);
+                  console.warn(
+                    `[hevy-sync T#711] dropping unknown set.type="${s.type}" on workout ${w.id} exercise ${idx + 1} set ${sIdx + 1}`,
+                  );
                 }
               }
               return set;
@@ -1595,7 +2001,7 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     // Parse body
     let workoutId: string;
     try {
-      const body = await c.req.json() as any;
+      const body = (await c.req.json()) as any;
       workoutId = String(body.workoutId || '');
       if (!workoutId) {
         console.warn('[Hevy webhook] missing workoutId in body');
@@ -1616,7 +2022,7 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     console.log(`[Hevy webhook] received workoutId=${workoutId}`);
 
     // Async sync — respond 200 immediately, fetch + insert in background
-    syncSingleHevyWorkout(workoutId).catch(err => {
+    syncSingleHevyWorkout(workoutId).catch((err) => {
       console.error(`[Hevy webhook] async sync failed for ${workoutId}:`, err);
     });
 
@@ -1634,27 +2040,35 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   async function syncSingleHevyWorkout(workoutId: string): Promise<void> {
     const apiToken = process.env.HEVY_API_TOKEN;
     if (!apiToken) {
-      console.error(`[Hevy webhook sync] HEVY_API_TOKEN not configured — cannot fetch ${workoutId}`);
+      console.error(
+        `[Hevy webhook sync] HEVY_API_TOKEN not configured — cannot fetch ${workoutId}`,
+      );
       return;
     }
 
     // Check dedupe first — same workoutId webhook re-fires are no-op
-    const existing = sqlite.prepare(
-      "SELECT id FROM routine_logs WHERE type = 'workout' AND source = 'hevy' AND deleted_at IS NULL AND json_extract(data, '$.hevy_id') = ? LIMIT 1"
-    ).get(workoutId) as any;
+    const existing = sqlite
+      .prepare(
+        "SELECT id FROM routine_logs WHERE type = 'workout' AND source = 'hevy' AND deleted_at IS NULL AND json_extract(data, '$.hevy_id') = ? LIMIT 1",
+      )
+      .get(workoutId) as any;
     if (existing) {
-      console.log(`[Hevy webhook sync] workoutId=${workoutId} already exists as routine_log id=${existing.id}, skipping`);
+      console.log(
+        `[Hevy webhook sync] workoutId=${workoutId} already exists as routine_log id=${existing.id}, skipping`,
+      );
       return;
     }
 
     // Fetch the workout from Hevy
     const url = `https://api.hevyapp.com/v1/workouts/${workoutId}`;
-    const resp = await fetch(url, { headers: { 'api-key': apiToken, 'accept': 'application/json' } });
+    const resp = await fetch(url, { headers: { 'api-key': apiToken, accept: 'application/json' } });
     if (!resp.ok) {
-      console.error(`[Hevy webhook sync] Hevy API ${resp.status} for ${workoutId}: ${await resp.text()}`);
+      console.error(
+        `[Hevy webhook sync] Hevy API ${resp.status} for ${workoutId}: ${await resp.text()}`,
+      );
       return;
     }
-    const w = await resp.json() as any;
+    const w = (await resp.json()) as any;
     // Hevy single-workout endpoint may wrap in { workout: ... } — handle both shapes
     const workout = w.workout || w;
     if (!workout || !workout.id) {
@@ -1689,7 +2103,9 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
             if (t === 'normal' || t === 'warmup' || t === 'dropset' || t === 'failure') {
               set.type = t;
             } else {
-              console.warn(`[hevy-webhook T#711] dropping unknown set.type="${s.type}" on workout ${workout.id} exercise ${idx + 1} set ${sIdx + 1}`);
+              console.warn(
+                `[hevy-webhook T#711] dropping unknown set.type="${s.type}" on workout ${workout.id} exercise ${idx + 1} set ${sIdx + 1}`,
+              );
             }
           }
           return set;
@@ -1711,14 +2127,26 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       duration,
       exercises,
       hevy_id: workout.id,
-      notes: typeof workout.description === 'string' && workout.description.trim() ? workout.description : undefined,
+      notes:
+        typeof workout.description === 'string' && workout.description.trim()
+          ? workout.description
+          : undefined,
     };
 
-    sqlite.prepare(
-      'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run('workout', new Date(workout.start_time).toISOString(), JSON.stringify(data), 'hevy', new Date().toISOString());
+    sqlite
+      .prepare(
+        'INSERT INTO routine_logs (type, logged_at, data, source, created_at) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(
+        'workout',
+        new Date(workout.start_time).toISOString(),
+        JSON.stringify(data),
+        'hevy',
+        new Date().toISOString(),
+      );
 
-    console.log(`[Hevy webhook sync] inserted workoutId=${workoutId} title="${data.title}" exercises=${exercises.length}`);
+    console.log(
+      `[Hevy webhook sync] inserted workoutId=${workoutId} title="${data.title}" exercises=${exercises.length}`,
+    );
   }
-
 }

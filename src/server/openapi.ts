@@ -7,7 +7,16 @@ export const healthRoute = createRoute({
   summary: 'Server health check',
   responses: {
     200: {
-      content: { 'application/json': { schema: z.object({ status: z.string(), server: z.string(), port: z.number(), oracleV2: z.string() }) } },
+      content: {
+        'application/json': {
+          schema: z.object({
+            status: z.string(),
+            server: z.string(),
+            port: z.number(),
+            oracleV2: z.string(),
+          }),
+        },
+      },
       description: 'Server is healthy',
     },
   },
@@ -34,7 +43,8 @@ export const authStatusRoute = createRoute({
           }),
         },
       },
-      description: 'Auth status response (owner branch carries hasPassword/localBypass/isLocal; guest branch carries guestName/guestUsername)',
+      description:
+        'Auth status response (owner branch carries hasPassword/localBypass/isLocal; guest branch carries guestName/guestUsername)',
     },
   },
 });
@@ -70,15 +80,21 @@ export const authLoginRoute = createRoute({
       description: 'Login successful',
     },
     400: {
-      content: { 'application/json': { schema: z.object({ success: z.literal(false), error: z.string() }) } },
+      content: {
+        'application/json': { schema: z.object({ success: z.literal(false), error: z.string() }) },
+      },
       description: 'Missing password or no password configured',
     },
     401: {
-      content: { 'application/json': { schema: z.object({ success: z.literal(false), error: z.string() }) } },
+      content: {
+        'application/json': { schema: z.object({ success: z.literal(false), error: z.string() }) },
+      },
       description: 'Invalid credentials',
     },
     429: {
-      content: { 'application/json': { schema: z.object({ success: z.literal(false), error: z.string() }) } },
+      content: {
+        'application/json': { schema: z.object({ success: z.literal(false), error: z.string() }) },
+      },
       description: 'Rate limited',
     },
   },
@@ -111,11 +127,13 @@ export const emojiListRoute = createRoute({
       content: {
         'application/json': {
           schema: z.object({
-            emoji: z.array(z.object({
-              emoji: z.string(),
-              added_by: z.string().nullable(),
-              created_at: z.number(),
-            })),
+            emoji: z.array(
+              z.object({
+                emoji: z.string(),
+                added_by: z.string().nullable(),
+                created_at: z.number(),
+              }),
+            ),
             total: z.number(),
           }),
         },
@@ -287,17 +305,19 @@ export const queueListRoute = createRoute({
       content: {
         'application/json': {
           schema: z.object({
-            items: z.array(z.object({
-              thread_id: z.number(),
-              title: z.string(),
-              thread_status: z.string().nullable(),
-              queue_status: z.string().nullable(),
-              tagged_by: z.string().nullable(),
-              tagged_at: z.string().nullable(),
-              summary: z.string().nullable(),
-              message_count: z.number(),
-              created_at: z.string(),
-            })),
+            items: z.array(
+              z.object({
+                thread_id: z.number(),
+                title: z.string(),
+                thread_status: z.string().nullable(),
+                queue_status: z.string().nullable(),
+                tagged_by: z.string().nullable(),
+                tagged_at: z.string().nullable(),
+                summary: z.string().nullable(),
+                message_count: z.number(),
+                created_at: z.string(),
+              }),
+            ),
             total: z.number(),
           }),
         },
@@ -410,20 +430,22 @@ export const supersedeListRoute = createRoute({
       content: {
         'application/json': {
           schema: z.object({
-            supersessions: z.array(z.object({
-              id: z.number(),
-              old_path: z.string(),
-              old_id: z.string().nullable(),
-              old_title: z.string().nullable(),
-              old_type: z.string().nullable(),
-              new_path: z.string().nullable(),
-              new_id: z.string().nullable(),
-              new_title: z.string().nullable(),
-              reason: z.string().nullable(),
-              superseded_at: z.string(),
-              superseded_by: z.string().nullable(),
-              project: z.string().nullable(),
-            })),
+            supersessions: z.array(
+              z.object({
+                id: z.number(),
+                old_path: z.string(),
+                old_id: z.string().nullable(),
+                old_title: z.string().nullable(),
+                old_type: z.string().nullable(),
+                new_path: z.string().nullable(),
+                new_id: z.string().nullable(),
+                new_title: z.string().nullable(),
+                reason: z.string().nullable(),
+                superseded_at: z.string(),
+                superseded_by: z.string().nullable(),
+                project: z.string().nullable(),
+              }),
+            ),
             total: z.number(),
             limit: z.number(),
             offset: z.number(),
@@ -450,16 +472,20 @@ export const supersedeChainRoute = createRoute({
       content: {
         'application/json': {
           schema: z.object({
-            superseded_by: z.array(z.object({
-              new_path: z.string().nullable(),
-              reason: z.string().nullable(),
-              superseded_at: z.string(),
-            })),
-            supersedes: z.array(z.object({
-              old_path: z.string(),
-              reason: z.string().nullable(),
-              superseded_at: z.string(),
-            })),
+            superseded_by: z.array(
+              z.object({
+                new_path: z.string().nullable(),
+                reason: z.string().nullable(),
+                superseded_at: z.string(),
+              }),
+            ),
+            supersedes: z.array(
+              z.object({
+                old_path: z.string(),
+                reason: z.string().nullable(),
+                superseded_at: z.string(),
+              }),
+            ),
           }),
         },
       },
@@ -535,7 +561,8 @@ export const remoteStatusRoute = createRoute({
           }),
         },
       },
-      description: 'Whether a beast window is linked into the remote tmux session and which beast (if any)',
+      description:
+        'Whether a beast window is linked into the remote tmux session and which beast (if any)',
     },
   },
 });
@@ -620,25 +647,27 @@ export const packListRoute = createRoute({
       content: {
         'application/json': {
           schema: z.object({
-            beasts: z.array(z.object({
-              name: z.string(),
-              displayName: z.string(),
-              animal: z.string(),
-              avatarUrl: z.string().nullable(),
-              bio: z.string().nullable(),
-              interests: z.string().nullable(),
-              themeColor: z.string().nullable(),
-              role: z.string().nullable(),
-              birthdate: z.string().nullable(),
-              sex: z.string().nullable(),
-              restStatus: z.string().nullable(),
-              createdAt: z.number(),
-              updatedAt: z.number(),
-              online: z.boolean(),
-              status: z.string(),
-              contextPct: z.number().nullable(),
-              sessionName: z.string(),
-            })),
+            beasts: z.array(
+              z.object({
+                name: z.string(),
+                displayName: z.string(),
+                animal: z.string(),
+                avatarUrl: z.string().nullable(),
+                bio: z.string().nullable(),
+                interests: z.string().nullable(),
+                themeColor: z.string().nullable(),
+                role: z.string().nullable(),
+                birthdate: z.string().nullable(),
+                sex: z.string().nullable(),
+                restStatus: z.string().nullable(),
+                createdAt: z.number(),
+                updatedAt: z.number(),
+                online: z.boolean(),
+                status: z.string(),
+                contextPct: z.number().nullable(),
+                sessionName: z.string(),
+              }),
+            ),
             owner: z.object({
               name: z.string(),
               online: z.boolean(),
@@ -674,7 +703,6 @@ export const packSpinnerVerbsRoute = createRoute({
     },
   },
 });
-
 
 export const OPENAPI_INFO = {
   openapi: '3.0.0' as const,

@@ -13,26 +13,25 @@ import type { DashboardSummary, DashboardActivity, DashboardGrowth } from './typ
  */
 export function handleDashboardSummary(): DashboardSummary {
   // Document counts
-  const totalDocsResult = db.select({ count: sql<number>`count(*)` })
-    .from(oracleDocuments)
-    .get();
+  const totalDocsResult = db.select({ count: sql<number>`count(*)` }).from(oracleDocuments).get();
   const totalDocs = totalDocsResult?.count || 0;
 
-  const byTypeResults = db.select({
-    type: oracleDocuments.type,
-    count: sql<number>`count(*)`
-  })
+  const byTypeResults = db
+    .select({
+      type: oracleDocuments.type,
+      count: sql<number>`count(*)`,
+    })
     .from(oracleDocuments)
     .groupBy(oracleDocuments.type)
     .all();
 
   // Concept counts - need to parse JSON concepts from all documents
-  const conceptsResult = db.select({ concepts: oracleDocuments.concepts })
+  const conceptsResult = db
+    .select({ concepts: oracleDocuments.concepts })
     .from(oracleDocuments)
-    .where(and(
-      sql`${oracleDocuments.concepts} IS NOT NULL`,
-      sql`${oracleDocuments.concepts} != '[]'`
-    ))
+    .where(
+      and(sql`${oracleDocuments.concepts} IS NOT NULL`, sql`${oracleDocuments.concepts} != '[]'`),
+    )
     .all();
 
   const conceptCounts = new Map<string, number>();
@@ -59,7 +58,8 @@ export function handleDashboardSummary(): DashboardSummary {
   let learnings7d = 0;
 
   try {
-    const searchResult = db.select({ count: sql<number>`count(*)` })
+    const searchResult = db
+      .select({ count: sql<number>`count(*)` })
       .from(searchLog)
       .where(gt(searchLog.createdAt, sevenDaysAgo))
       .get();
@@ -67,7 +67,8 @@ export function handleDashboardSummary(): DashboardSummary {
   } catch {}
 
   try {
-    const learnResult = db.select({ count: sql<number>`count(*)` })
+    const learnResult = db
+      .select({ count: sql<number>`count(*)` })
       .from(learnLog)
       .where(gt(learnLog.createdAt, sevenDaysAgo))
       .get();
@@ -75,29 +76,30 @@ export function handleDashboardSummary(): DashboardSummary {
   } catch {}
 
   // Health status
-  const lastIndexedResult = db.select({ lastIndexed: sql<number | null>`max(${oracleDocuments.indexedAt})` })
+  const lastIndexedResult = db
+    .select({ lastIndexed: sql<number | null>`max(${oracleDocuments.indexedAt})` })
     .from(oracleDocuments)
     .get();
 
   return {
     documents: {
       total: totalDocs,
-      by_type: byTypeResults.reduce((acc, row) => ({ ...acc, [row.type]: row.count }), {})
+      by_type: byTypeResults.reduce((acc, row) => ({ ...acc, [row.type]: row.count }), {}),
     },
     concepts: {
       total: conceptCounts.size,
-      top: topConcepts
+      top: topConcepts,
     },
     activity: {
       searches_7d: searches7d,
-      learnings_7d: learnings7d
+      learnings_7d: learnings7d,
     },
     health: {
       fts_status: totalDocs > 0 ? 'healthy' : 'empty',
       last_indexed: lastIndexedResult?.lastIndexed
         ? new Date(lastIndexedResult.lastIndexed).toISOString()
-        : null
-    }
+        : null,
+    },
   };
 }
 
@@ -110,50 +112,52 @@ export function handleDashboardActivity(days: number = 7): DashboardActivity {
   // Recent searches
   let searches: DashboardActivity['searches'] = [];
   try {
-    const rows = db.select({
-      query: searchLog.query,
-      type: searchLog.type,
-      resultsCount: searchLog.resultsCount,
-      searchTimeMs: searchLog.searchTimeMs,
-      createdAt: searchLog.createdAt
-    })
+    const rows = db
+      .select({
+        query: searchLog.query,
+        type: searchLog.type,
+        resultsCount: searchLog.resultsCount,
+        searchTimeMs: searchLog.searchTimeMs,
+        createdAt: searchLog.createdAt,
+      })
       .from(searchLog)
       .where(gt(searchLog.createdAt, since))
       .orderBy(desc(searchLog.createdAt))
       .limit(20)
       .all();
 
-    searches = rows.map(row => ({
+    searches = rows.map((row) => ({
       query: row.query.substring(0, 100),
       type: row.type,
       results_count: row.resultsCount,
       search_time_ms: row.searchTimeMs,
-      created_at: new Date(row.createdAt).toISOString()
+      created_at: new Date(row.createdAt).toISOString(),
     }));
   } catch {}
 
   // Recent learnings
   let learnings: DashboardActivity['learnings'] = [];
   try {
-    const rows = db.select({
-      documentId: learnLog.documentId,
-      patternPreview: learnLog.patternPreview,
-      source: learnLog.source,
-      concepts: learnLog.concepts,
-      createdAt: learnLog.createdAt
-    })
+    const rows = db
+      .select({
+        documentId: learnLog.documentId,
+        patternPreview: learnLog.patternPreview,
+        source: learnLog.source,
+        concepts: learnLog.concepts,
+        createdAt: learnLog.createdAt,
+      })
       .from(learnLog)
       .where(gt(learnLog.createdAt, since))
       .orderBy(desc(learnLog.createdAt))
       .limit(20)
       .all();
 
-    learnings = rows.map(row => ({
+    learnings = rows.map((row) => ({
       document_id: row.documentId,
       pattern_preview: row.patternPreview,
       source: row.source,
       concepts: JSON.parse(row.concepts || '[]'),
-      created_at: new Date(row.createdAt).toISOString()
+      created_at: new Date(row.createdAt).toISOString(),
     }));
   } catch {}
 
@@ -167,7 +171,7 @@ export function handleDashboardGrowth(period: string = 'week'): DashboardGrowth 
   const daysMap: Record<string, number> = {
     week: 7,
     month: 30,
-    quarter: 90
+    quarter: 90,
   };
   const days = daysMap[period] || 7;
 
@@ -180,23 +184,19 @@ export function handleDashboardGrowth(period: string = 'week'): DashboardGrowth 
     const date = new Date(dayStart).toISOString().split('T')[0];
 
     // Documents created that day
-    const docsResult = db.select({ count: sql<number>`count(*)` })
+    const docsResult = db
+      .select({ count: sql<number>`count(*)` })
       .from(oracleDocuments)
-      .where(and(
-        gte(oracleDocuments.createdAt, dayStart),
-        lt(oracleDocuments.createdAt, dayEnd)
-      ))
+      .where(and(gte(oracleDocuments.createdAt, dayStart), lt(oracleDocuments.createdAt, dayEnd)))
       .get();
 
     // Searches that day
     let searchCount = 0;
     try {
-      const searchResult = db.select({ count: sql<number>`count(*)` })
+      const searchResult = db
+        .select({ count: sql<number>`count(*)` })
         .from(searchLog)
-        .where(and(
-          gte(searchLog.createdAt, dayStart),
-          lt(searchLog.createdAt, dayEnd)
-        ))
+        .where(and(gte(searchLog.createdAt, dayStart), lt(searchLog.createdAt, dayEnd)))
         .get();
       searchCount = searchResult?.count || 0;
     } catch {}
@@ -204,7 +204,7 @@ export function handleDashboardGrowth(period: string = 'week'): DashboardGrowth 
     data.push({
       date,
       documents: docsResult?.count || 0,
-      searches: searchCount
+      searches: searchCount,
     });
   }
 

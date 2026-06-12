@@ -28,11 +28,7 @@ function sortPair(a: string, b: string): [string, string] {
  * Sanitize text for tmux injection.
  */
 function sanitizeForTmux(text: string, maxLen: number = 200): string {
-  return text
-    .replace(/\n/g, ' ')
-    .replace(/"/g, "'")
-    .replace(/\\/g, '\\\\')
-    .slice(0, maxLen);
+  return text.replace(/\n/g, ' ').replace(/"/g, "'").replace(/\\/g, '\\\\').slice(0, maxLen);
 }
 
 // ============================================================================
@@ -47,12 +43,10 @@ export function getOrCreateConversation(name1: string, name2: string): DmConvers
   const now = Date.now();
 
   // Try to find existing
-  const existing = db.select()
+  const existing = db
+    .select()
     .from(dmConversations)
-    .where(and(
-      eq(dmConversations.participant1, p1),
-      eq(dmConversations.participant2, p2),
-    ))
+    .where(and(eq(dmConversations.participant1, p1), eq(dmConversations.participant2, p2)))
     .get();
 
   if (existing) {
@@ -66,12 +60,16 @@ export function getOrCreateConversation(name1: string, name2: string): DmConvers
   }
 
   // Create new
-  const result = db.insert(dmConversations).values({
-    participant1: p1,
-    participant2: p2,
-    createdAt: now,
-    updatedAt: now,
-  }).returning({ id: dmConversations.id }).get();
+  const result = db
+    .insert(dmConversations)
+    .values({
+      participant1: p1,
+      participant2: p2,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning({ id: dmConversations.id })
+    .get();
 
   return {
     id: result.id,
@@ -101,12 +99,16 @@ export function sendDm(
   const now = Date.now();
 
   // Insert message
-  const result = db.insert(dmMessages).values({
-    conversationId: conversation.id,
-    sender: fromLower,
-    content,
-    createdAt: now,
-  }).returning({ id: dmMessages.id }).get();
+  const result = db
+    .insert(dmMessages)
+    .values({
+      conversationId: conversation.id,
+      sender: fromLower,
+      content,
+      createdAt: now,
+    })
+    .returning({ id: dmMessages.id })
+    .get();
 
   // Update conversation timestamp
   db.update(dmConversations)
@@ -138,7 +140,9 @@ function notifyDmRecipient(from: string, to: string, content: string): boolean {
   const isGuestDm = from.startsWith('[Guest] ');
   const guestUsername = isGuestDm ? from.slice(8) : null;
   const dmLabel = isGuestDm ? `[DM [Guest] from ${guestUsername}]` : `[DM from ${from}]`;
-  const replyHint = isGuestDm ? `Use /dm to read. use /dm ${guestUsername} <message> to reply.` : `Use /dm to read and /dm ${from} <message> to reply.`;
+  const replyHint = isGuestDm
+    ? `Use /dm to read. use /dm ${guestUsername} <message> to reply.`
+    : `Use /dm to read and /dm ${from} <message> to reply.`;
   const message = `${dmLabel}: ${preview}...\n\n${replyHint}`;
 
   try {
@@ -155,22 +159,26 @@ export function listConversations(
   oracleName: string,
   limit: number = 20,
   offset: number = 0,
-): { conversations: Array<{
-  id: number;
-  with: string;
-  lastMessage: string;
-  lastSender: string;
-  lastAt: number;
-  unreadCount: number;
-  createdAt: number;
-}>; total: number } {
+): {
+  conversations: Array<{
+    id: number;
+    with: string;
+    lastMessage: string;
+    lastSender: string;
+    lastAt: number;
+    unreadCount: number;
+    createdAt: number;
+  }>;
+  total: number;
+} {
   const name = oracleName.toLowerCase();
 
   // Find all conversations where this oracle is a participant
-  const allConvs = db.select()
+  const allConvs = db
+    .select()
     .from(dmConversations)
     .where(
-      sql`${dmConversations.participant1} = ${name} OR ${dmConversations.participant2} = ${name}`
+      sql`${dmConversations.participant1} = ${name} OR ${dmConversations.participant2} = ${name}`,
     )
     .orderBy(desc(dmConversations.updatedAt))
     .all();
@@ -178,11 +186,12 @@ export function listConversations(
   const total = allConvs.length;
   const paged = allConvs.slice(offset, offset + limit);
 
-  const conversations = paged.map(conv => {
+  const conversations = paged.map((conv) => {
     const other = conv.participant1 === name ? conv.participant2 : conv.participant1;
 
     // Get last message
-    const lastMsg = db.select()
+    const lastMsg = db
+      .select()
       .from(dmMessages)
       .where(eq(dmMessages.conversationId, conv.id))
       .orderBy(desc(dmMessages.createdAt))
@@ -190,13 +199,16 @@ export function listConversations(
       .get();
 
     // Count unread (messages from the other person that I haven't read)
-    const unreadResult = db.select({ count: sql<number>`count(*)` })
+    const unreadResult = db
+      .select({ count: sql<number>`count(*)` })
       .from(dmMessages)
-      .where(and(
-        eq(dmMessages.conversationId, conv.id),
-        eq(dmMessages.sender, other),
-        isNull(dmMessages.readAt),
-      ))
+      .where(
+        and(
+          eq(dmMessages.conversationId, conv.id),
+          eq(dmMessages.sender, other),
+          isNull(dmMessages.readAt),
+        ),
+      )
       .get();
 
     return {
@@ -222,27 +234,32 @@ export function getMessages(
   limit: number = 50,
   offset: number = 0,
   order: 'asc' | 'desc' = 'asc',
-): { conversationId: number | null; participants: [string, string]; messages: DmMessage[]; total: number } {
+): {
+  conversationId: number | null;
+  participants: [string, string];
+  messages: DmMessage[];
+  total: number;
+} {
   const [p1, p2] = sortPair(name1, name2);
 
-  const conv = db.select()
+  const conv = db
+    .select()
     .from(dmConversations)
-    .where(and(
-      eq(dmConversations.participant1, p1),
-      eq(dmConversations.participant2, p2),
-    ))
+    .where(and(eq(dmConversations.participant1, p1), eq(dmConversations.participant2, p2)))
     .get();
 
   if (!conv) {
     return { conversationId: null, participants: [p1, p2], messages: [], total: 0 };
   }
 
-  const countResult = db.select({ count: sql<number>`count(*)` })
+  const countResult = db
+    .select({ count: sql<number>`count(*)` })
     .from(dmMessages)
     .where(eq(dmMessages.conversationId, conv.id))
     .get();
 
-  const rows = db.select()
+  const rows = db
+    .select()
     .from(dmMessages)
     .where(eq(dmMessages.conversationId, conv.id))
     .orderBy(order === 'desc' ? desc(dmMessages.createdAt) : dmMessages.createdAt)
@@ -253,7 +270,7 @@ export function getMessages(
   return {
     conversationId: conv.id,
     participants: [p1, p2],
-    messages: rows.map(r => ({
+    messages: rows.map((r) => ({
       id: r.id,
       conversationId: r.conversationId,
       sender: r.sender,
@@ -268,17 +285,18 @@ export function getMessages(
 /**
  * Mark all messages from `other` to `reader` as read.
  */
-export function markRead(reader: string, other: string): { markedRead: number; conversationId: number | null } {
+export function markRead(
+  reader: string,
+  other: string,
+): { markedRead: number; conversationId: number | null } {
   const [p1, p2] = sortPair(reader, other);
   const readerLower = reader.toLowerCase();
   const otherLower = other.toLowerCase();
 
-  const conv = db.select()
+  const conv = db
+    .select()
     .from(dmConversations)
-    .where(and(
-      eq(dmConversations.participant1, p1),
-      eq(dmConversations.participant2, p2),
-    ))
+    .where(and(eq(dmConversations.participant1, p1), eq(dmConversations.participant2, p2)))
     .get();
 
   if (!conv) {
@@ -286,13 +304,16 @@ export function markRead(reader: string, other: string): { markedRead: number; c
   }
 
   const now = Date.now();
-  const result = db.update(dmMessages)
+  const result = db
+    .update(dmMessages)
     .set({ readAt: now })
-    .where(and(
-      eq(dmMessages.conversationId, conv.id),
-      eq(dmMessages.sender, otherLower),
-      isNull(dmMessages.readAt),
-    ))
+    .where(
+      and(
+        eq(dmMessages.conversationId, conv.id),
+        eq(dmMessages.sender, otherLower),
+        isNull(dmMessages.readAt),
+      ),
+    )
     .run();
 
   return {
@@ -304,15 +325,16 @@ export function markRead(reader: string, other: string): { markedRead: number; c
 /**
  * Mark ALL unread messages in a conversation as read (for observer/god-view).
  */
-export function markAllRead(name1: string, name2: string): { markedRead: number; conversationId: number | null } {
+export function markAllRead(
+  name1: string,
+  name2: string,
+): { markedRead: number; conversationId: number | null } {
   const [p1, p2] = sortPair(name1, name2);
 
-  const conv = db.select()
+  const conv = db
+    .select()
     .from(dmConversations)
-    .where(and(
-      eq(dmConversations.participant1, p1),
-      eq(dmConversations.participant2, p2),
-    ))
+    .where(and(eq(dmConversations.participant1, p1), eq(dmConversations.participant2, p2)))
     .get();
 
   if (!conv) {
@@ -320,12 +342,10 @@ export function markAllRead(name1: string, name2: string): { markedRead: number;
   }
 
   const now = Date.now();
-  const result = db.update(dmMessages)
+  const result = db
+    .update(dmMessages)
     .set({ readAt: now })
-    .where(and(
-      eq(dmMessages.conversationId, conv.id),
-      isNull(dmMessages.readAt),
-    ))
+    .where(and(eq(dmMessages.conversationId, conv.id), isNull(dmMessages.readAt)))
     .run();
 
   return {
@@ -351,39 +371,41 @@ export function getDashboard(limit: number = 50): {
   totalConversations: number;
   totalMessages: number;
 } {
-  const allConvs = db.select()
+  const allConvs = db
+    .select()
     .from(dmConversations)
     .orderBy(desc(dmConversations.updatedAt))
     .limit(limit)
     .all();
 
-  const totalConvsResult = db.select({ count: sql<number>`count(*)` })
-    .from(dmConversations)
-    .get();
+  const totalConvsResult = db.select({ count: sql<number>`count(*)` }).from(dmConversations).get();
 
-  const totalMsgsResult = db.select({ count: sql<number>`count(*)` })
-    .from(dmMessages)
-    .get();
+  const totalMsgsResult = db.select({ count: sql<number>`count(*)` }).from(dmMessages).get();
 
-  const conversations = allConvs.map(conv => {
+  const conversations = allConvs.map((conv) => {
     // Message count
-    const msgCount = db.select({ count: sql<number>`count(*)` })
+    const msgCount = db
+      .select({ count: sql<number>`count(*)` })
       .from(dmMessages)
       .where(eq(dmMessages.conversationId, conv.id))
       .get();
 
     // Unread count — only messages NOT sent by gorn (messages from beasts to gorn)
-    const unreadCount = db.select({ count: sql<number>`count(*)` })
+    const unreadCount = db
+      .select({ count: sql<number>`count(*)` })
       .from(dmMessages)
-      .where(and(
-        eq(dmMessages.conversationId, conv.id),
-        isNull(dmMessages.readAt),
-        sql`${dmMessages.sender} != 'gorn'`,
-      ))
+      .where(
+        and(
+          eq(dmMessages.conversationId, conv.id),
+          isNull(dmMessages.readAt),
+          sql`${dmMessages.sender} != 'gorn'`,
+        ),
+      )
       .get();
 
     // Last message
-    const lastMsg = db.select()
+    const lastMsg = db
+      .select()
       .from(dmMessages)
       .where(eq(dmMessages.conversationId, conv.id))
       .orderBy(desc(dmMessages.createdAt))

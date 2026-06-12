@@ -16,8 +16,8 @@ export type Role = 'owner' | 'beast' | 'guest';
  * Based on Talon's endpoint audit (thread #420, msg #5759).
  */
 interface AllowlistEntry {
-  method: string;       // HTTP method or '*' for any
-  pattern: RegExp;      // URL path pattern
+  method: string; // HTTP method or '*' for any
+  pattern: RegExp; // URL path pattern
 }
 
 const GUEST_ALLOWLIST: AllowlistEntry[] = [
@@ -58,8 +58,8 @@ const GUEST_ALLOWLIST: AllowlistEntry[] = [
  * Check if a request is allowed for a guest.
  */
 function isGuestAllowed(method: string, path: string): boolean {
-  return GUEST_ALLOWLIST.some(entry =>
-    (entry.method === '*' || entry.method === method) && entry.pattern.test(path)
+  return GUEST_ALLOWLIST.some(
+    (entry) => (entry.method === '*' || entry.method === method) && entry.pattern.test(path),
   );
 }
 
@@ -88,7 +88,10 @@ export function rbacMiddleware() {
       const path = c.req.path;
 
       if (!isGuestAllowed(method, path)) {
-        return c.json({ error: 'Forbidden', message: 'Guests do not have access to this resource' }, 403);
+        return c.json(
+          { error: 'Forbidden', message: 'Guests do not have access to this resource' },
+          403,
+        );
       }
     }
 
@@ -100,5 +103,5 @@ export function rbacMiddleware() {
  * Get the allowlist for testing/introspection.
  */
 export function getGuestAllowlist(): { method: string; pattern: string }[] {
-  return GUEST_ALLOWLIST.map(e => ({ method: e.method, pattern: e.pattern.source }));
+  return GUEST_ALLOWLIST.map((e) => ({ method: e.method, pattern: e.pattern.source }));
 }

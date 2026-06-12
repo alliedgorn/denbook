@@ -1,7 +1,14 @@
 import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { Database } from 'bun:sqlite';
-import { listTraces, getTrace, getTraceChain, linkTraces, unlinkTraces, getTraceLinkedChain } from './handler.ts';
+import {
+  listTraces,
+  getTrace,
+  getTraceChain,
+  linkTraces,
+  unlinkTraces,
+  getTraceLinkedChain,
+} from './handler.ts';
 
 // ============================================================================
 // Trace routes — Phase 2.4 of Library #102 (T#782)
@@ -12,7 +19,11 @@ interface TraceHelpers {
   isTrustedRequest: (c: Context) => boolean;
 }
 
-export function registerTraceRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: TraceHelpers): void {
+export function registerTraceRoutes(
+  app: OpenAPIHono,
+  sqliteDb: Database,
+  helpers: TraceHelpers,
+): void {
   const { hasSessionAuth, isTrustedRequest } = helpers;
   const sqlite: Database = sqliteDb;
 
@@ -28,7 +39,7 @@ export function registerTraceRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       status: status as 'raw' | 'reviewed' | 'distilled' | undefined,
       project: project || undefined,
       limit,
-      offset
+      offset,
     });
 
     return c.json(result);
@@ -47,7 +58,7 @@ export function registerTraceRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.get('/api/traces/:id/chain', (c) => {
     const traceId = c.req.param('id');
-    const direction = c.req.query('direction') as 'up' | 'down' | 'both' || 'both';
+    const direction = (c.req.query('direction') as 'up' | 'down' | 'both') || 'both';
 
     const chain = getTraceChain(traceId, direction);
     return c.json(chain);
@@ -107,6 +118,4 @@ export function registerTraceRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       return c.json({ error: 'Failed to get linked chain' }, 500);
     }
   });
-
-
 }

@@ -2,7 +2,11 @@ import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { Database } from 'bun:sqlite';
 import type { Role } from '../server/rbac.ts';
-import { checkGuestPostRate, checkGuestContentLength, scanForInjection } from '../server/guest-safety.ts';
+import {
+  checkGuestPostRate,
+  checkGuestContentLength,
+  scanForInjection,
+} from '../server/guest-safety.ts';
 import { logSecurityEvent } from '../server/security-logger.ts';
 import { searchIndexUpsert } from '../search/routes.ts';
 import { handleThreadMessage, getFullThread, updateThreadStatus } from './handler.ts';
@@ -23,8 +27,19 @@ interface ForumHelpers {
   getSupportedEmoji: () => Set<string>;
 }
 
-export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: ForumHelpers): void {
-  const { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast, withRetry, getSupportedEmoji } = helpers;
+export function registerForumRoutes(
+  app: OpenAPIHono,
+  sqliteDb: Database,
+  helpers: ForumHelpers,
+): void {
+  const {
+    hasSessionAuth,
+    requireBeastIdentity,
+    isTrustedRequest,
+    wsBroadcast,
+    withRetry,
+    getSupportedEmoji,
+  } = helpers;
   const sqlite: Database = sqliteDb;
   let SUPPORTED_EMOJI: Set<string> = getSupportedEmoji();
 
@@ -38,20 +53,31 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       // T#718 — derive beast from auth, reject body.beast mismatch
       const caller = requireBeastIdentity(c);
       if (!caller) {
-        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+        return c.json(
+          { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+          401,
+        );
       }
       if (body.beast && body.beast.toLowerCase() !== caller) {
-        return c.json({ error: 'Identity spoof blocked. body.beast must match authenticated caller or be omitted.' }, 403);
+        return c.json(
+          {
+            error:
+              'Identity spoof blocked. body.beast must match authenticated caller or be omitted.',
+          },
+          403,
+        );
       }
       const beast = caller;
       const now = Date.now();
-      sqlite.prepare(`
+      sqlite
+        .prepare(`
         INSERT INTO forum_read_status (beast_name, thread_id, last_read_message_id, updated_at)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(beast_name, thread_id) DO UPDATE SET
           last_read_message_id = MAX(last_read_message_id, excluded.last_read_message_id),
           updated_at = excluded.updated_at
-      `).run(beast, threadId, messageId, now);
+      `)
+        .run(beast, threadId, messageId, now);
       return c.json({ success: true });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
@@ -60,7 +86,8 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.get('/api/forum/unread/:beast', (c) => {
     const beast = c.req.param('beast');
-    const rows = sqlite.prepare(`
+    const rows = sqlite
+      .prepare(`
       SELECT t.id as thread_id, t.title,
              COUNT(m.id) as total_messages,
              COALESCE(r.last_read_message_id, 0) as last_read,
@@ -73,11 +100,12 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       GROUP BY t.id
       HAVING unread_count > 0
       ORDER BY unread_count DESC
-    `).all(beast, beast) as any[];
+    `)
+      .all(beast, beast) as any[];
 
     return c.json({
       beast,
-      threads: rows.map(r => ({
+      threads: rows.map((r) => ({
         thread_id: r.thread_id,
         title: r.title,
         unread_count: r.unread_count,
@@ -88,15 +116,18 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.get('/api/forum/file/:filename', (c) => {
     const filename = c.req.param('filename');
-    if (filename.includes('..') || filename.includes('/')) return c.json({ error: 'Invalid filename' }, 400);
+    if (filename.includes('..') || filename.includes('/'))
+      return c.json({ error: 'Invalid filename' }, 400);
     return c.redirect(`/api/f/${filename}`, 301);
   });
 
   app.get('/api/message/:id/attachments', (c) => {
     const messageId = parseInt(c.req.param('id'), 10);
-    const rows = sqlite.prepare('SELECT * FROM forum_attachments WHERE message_id = ? ORDER BY created_at').all(messageId) as any[];
+    const rows = sqlite
+      .prepare('SELECT * FROM forum_attachments WHERE message_id = ? ORDER BY created_at')
+      .all(messageId) as any[];
     return c.json({
-      attachments: rows.map(r => ({
+      attachments: rows.map((r) => ({
         id: r.id,
         filename: r.filename,
         original_name: r.original_name,
@@ -115,10 +146,19 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       // T#718 — derive beast from auth
       const caller = requireBeastIdentity(c);
       if (!caller) {
-        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+        return c.json(
+          { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+          401,
+        );
       }
       if (body.beast && body.beast.toLowerCase() !== caller) {
-        return c.json({ error: 'Identity spoof blocked. body.beast must match authenticated caller or be omitted.' }, 403);
+        return c.json(
+          {
+            error:
+              'Identity spoof blocked. body.beast must match authenticated caller or be omitted.',
+          },
+          403,
+        );
       }
       const beast = caller;
       const muted = body.muted !== false;
@@ -133,16 +173,19 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.get('/api/forum/muted/:beast', (c) => {
     const beast = c.req.param('beast').toLowerCase();
-    const rows = sqlite.prepare(
-      'SELECT thread_id FROM forum_notification_prefs WHERE beast_name = ? AND (muted = 1 OR level = ?)'
-    ).all(beast, 'muted') as any[];
-    return c.json({ beast, muted_threads: rows.map(r => r.thread_id) });
+    const rows = sqlite
+      .prepare(
+        'SELECT thread_id FROM forum_notification_prefs WHERE beast_name = ? AND (muted = 1 OR level = ?)',
+      )
+      .all(beast, 'muted') as any[];
+    return c.json({ beast, muted_threads: rows.map((r) => r.thread_id) });
   });
 
   app.post('/api/forum/subscribe', async (c) => {
     try {
       const body = await c.req.json();
-      if (!body.beast || !body.threadId) return c.json({ error: 'beast and threadId required' }, 400);
+      if (!body.beast || !body.threadId)
+        return c.json({ error: 'beast and threadId required' }, 400);
       const level = body.level || 'full';
       if (!['full', 'summary', 'muted'].includes(level)) {
         return c.json({ error: 'level must be full, summary, or muted' }, 400);
@@ -175,10 +218,12 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     const subs = getThreadSubscribers(threadId);
 
     // Enrich with beast profile data
-    const subscribers = subs.map(s => {
-      const profile = sqlite.prepare(
-        'SELECT display_name, animal, avatar_url, theme_color FROM beast_profiles WHERE name = ?'
-      ).get(s.beast_name) as any;
+    const subscribers = subs.map((s) => {
+      const profile = sqlite
+        .prepare(
+          'SELECT display_name, animal, avatar_url, theme_color FROM beast_profiles WHERE name = ?',
+        )
+        .get(s.beast_name) as any;
       return {
         name: s.beast_name,
         display_name: profile?.display_name || s.beast_name,
@@ -204,8 +249,14 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       }
       // Block internal/private hostnames
       const hostname = parsed.hostname.toLowerCase();
-      if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' ||
-          hostname === '0.0.0.0' || hostname.endsWith('.local') || hostname.endsWith('.internal')) {
+      if (
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '::1' ||
+        hostname === '0.0.0.0' ||
+        hostname.endsWith('.local') ||
+        hostname.endsWith('.internal')
+      ) {
         return c.json({ error: 'Internal URLs not allowed' }, 400);
       }
       // Resolve DNS and block private IP ranges
@@ -214,14 +265,19 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         const ips = await resolve4(hostname);
         for (const ip of ips) {
           const parts = ip.split('.').map(Number);
-          if (parts[0] === 10 || parts[0] === 127 ||
-              (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-              (parts[0] === 192 && parts[1] === 168) ||
-              (parts[0] === 169 && parts[1] === 254)) {
+          if (
+            parts[0] === 10 ||
+            parts[0] === 127 ||
+            (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+            (parts[0] === 192 && parts[1] === 168) ||
+            (parts[0] === 169 && parts[1] === 254)
+          ) {
             return c.json({ error: 'Internal URLs not allowed' }, 400);
           }
         }
-      } catch { /* DNS resolution failed — let fetch handle it */ }
+      } catch {
+        /* DNS resolution failed — let fetch handle it */
+      }
     } catch {
       return c.json({ error: 'Invalid URL' }, 400);
     }
@@ -236,11 +292,18 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
       // Extract basic meta tags
       const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-      const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
-        || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
-      const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
-      const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
-      const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i);
+      const descMatch =
+        html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+        html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
+      const ogTitleMatch = html.match(
+        /<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i,
+      );
+      const ogDescMatch = html.match(
+        /<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i,
+      );
+      const ogImageMatch = html.match(
+        /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i,
+      );
 
       return c.json({
         url,
@@ -255,17 +318,19 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.get('/api/forum/activity', (c) => {
     const limit = parseInt(c.req.query('limit') || '30');
-    const rows = sqlite.prepare(`
+    const rows = sqlite
+      .prepare(`
       SELECT m.id, m.thread_id, m.role, m.content, m.author, m.created_at,
              t.title as thread_title, t.category
       FROM forum_messages m
       JOIN forum_threads t ON m.thread_id = t.id
       ORDER BY m.created_at DESC
       LIMIT ?
-    `).all(limit) as any[];
+    `)
+      .all(limit) as any[];
 
     return c.json({
-      activity: rows.map(r => ({
+      activity: rows.map((r) => ({
         message_id: r.id,
         thread_id: r.thread_id,
         thread_title: r.thread_title,
@@ -282,7 +347,8 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   app.get('/api/forum/mentions/:beast', (c) => {
     const beast = c.req.param('beast').toLowerCase();
     const limit = parseInt(c.req.query('limit') || '30');
-    const rows = sqlite.prepare(`
+    const rows = sqlite
+      .prepare(`
       SELECT m.id, m.thread_id, m.content, m.author, m.created_at,
              t.title as thread_title
       FROM forum_messages m
@@ -290,11 +356,12 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       WHERE LOWER(m.content) LIKE ?
       ORDER BY m.created_at DESC
       LIMIT ?
-    `).all(`%@${beast}%`, limit) as any[];
+    `)
+      .all(`%@${beast}%`, limit) as any[];
 
     return c.json({
       beast,
-      mentions: rows.map(r => ({
+      mentions: rows.map((r) => ({
         message_id: r.id,
         thread_id: r.thread_id,
         thread_title: r.thread_title,
@@ -320,23 +387,33 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       JOIN forum_threads t ON m.thread_id = t.id
       WHERE m.content LIKE ?`;
     const msgParams: any[] = [`%${q}%`];
-    if (author) { msgQuery += ' AND LOWER(m.author) LIKE ?'; msgParams.push(`%${author.toLowerCase()}%`); }
-    if (category) { msgQuery += ' AND t.category = ?'; msgParams.push(category); }
+    if (author) {
+      msgQuery += ' AND LOWER(m.author) LIKE ?';
+      msgParams.push(`%${author.toLowerCase()}%`);
+    }
+    if (category) {
+      msgQuery += ' AND t.category = ?';
+      msgParams.push(category);
+    }
     msgQuery += ' ORDER BY m.created_at DESC LIMIT ?';
     msgParams.push(limit);
     const messages = sqlite.prepare(msgQuery).all(...msgParams) as any[];
 
     // Search threads by title (with optional category filter)
-    let threadQuery = 'SELECT id, title, status, category, created_at FROM forum_threads WHERE title LIKE ?';
+    let threadQuery =
+      'SELECT id, title, status, category, created_at FROM forum_threads WHERE title LIKE ?';
     const threadParams: any[] = [`%${q}%`];
-    if (category) { threadQuery += ' AND category = ?'; threadParams.push(category); }
+    if (category) {
+      threadQuery += ' AND category = ?';
+      threadParams.push(category);
+    }
     threadQuery += ' ORDER BY updated_at DESC LIMIT ?';
     threadParams.push(limit);
     const threads = sqlite.prepare(threadQuery).all(...threadParams) as any[];
 
     return c.json({
       query: q,
-      messages: messages.map(m => ({
+      messages: messages.map((m) => ({
         id: m.id,
         thread_id: m.thread_id,
         thread_title: m.thread_title,
@@ -345,7 +422,7 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         author: m.author,
         created_at: new Date(m.created_at).toISOString(),
       })),
-      threads: threads.map(t => ({
+      threads: threads.map((t) => ({
         id: t.id,
         title: t.title,
         status: t.status,
@@ -364,32 +441,53 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     const offset = parseInt(c.req.query('offset') || '0');
     const role = (c.get as any)('role') as Role | undefined;
 
-    let query = 'SELECT *, (SELECT COUNT(*) FROM forum_messages WHERE thread_id = forum_threads.id) as msg_count FROM forum_threads WHERE deleted_at IS NULL';
+    let query =
+      'SELECT *, (SELECT COUNT(*) FROM forum_messages WHERE thread_id = forum_threads.id) as msg_count FROM forum_threads WHERE deleted_at IS NULL';
     const params: any[] = [];
-    if (status) { query += ' AND status = ?'; params.push(status); }
-    if (category) { query += ' AND category = ?'; params.push(category); }
+    if (status) {
+      query += ' AND status = ?';
+      params.push(status);
+    }
+    if (category) {
+      query += ' AND category = ?';
+      params.push(category);
+    }
     // Guests only see public threads; owner can filter by visibility
-    if (role === 'guest') { query += " AND visibility = 'public'"; }
-    else if (visibility === 'public' || visibility === 'internal') { query += ' AND visibility = ?'; params.push(visibility); }
+    if (role === 'guest') {
+      query += " AND visibility = 'public'";
+    } else if (visibility === 'public' || visibility === 'internal') {
+      query += ' AND visibility = ?';
+      params.push(visibility);
+    }
     query += ' ORDER BY COALESCE(pinned, 0) DESC, updated_at DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
 
     const rows = sqlite.prepare(query).all(...params) as any[];
     let countQuery = 'SELECT COUNT(*) as total FROM forum_threads WHERE deleted_at IS NULL';
     const countParams: any[] = [];
-    if (status) { countQuery += ' AND status = ?'; countParams.push(status); }
-    if (category) { countQuery += ' AND category = ?'; countParams.push(category); }
-    if (role === 'guest') { countQuery += " AND visibility = 'public'"; }
-    else if (visibility === 'public' || visibility === 'internal') { countQuery += ' AND visibility = ?'; countParams.push(visibility); }
+    if (status) {
+      countQuery += ' AND status = ?';
+      countParams.push(status);
+    }
+    if (category) {
+      countQuery += ' AND category = ?';
+      countParams.push(category);
+    }
+    if (role === 'guest') {
+      countQuery += " AND visibility = 'public'";
+    } else if (visibility === 'public' || visibility === 'internal') {
+      countQuery += ' AND visibility = ?';
+      countParams.push(visibility);
+    }
     const total = (sqlite.prepare(countQuery).get(...countParams) as any)?.total || 0;
 
     return c.json({
-      threads: rows.map(t => ({
+      threads: rows.map((t) => ({
         id: t.id,
         title: t.title,
         status: t.status || 'active',
         category: t.category || 'discussion',
-        pinned: !!(t.pinned),
+        pinned: !!t.pinned,
         message_count: t.msg_count || 0,
         created_at: new Date(t.created_at).toISOString(),
         created_by: t.created_by || null,
@@ -416,7 +514,9 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         if (!data.thread_id) {
           return c.json({ error: 'Guests cannot create new threads' }, 403);
         }
-        const threadRow = sqlite.prepare('SELECT visibility FROM forum_threads WHERE id = ?').get(data.thread_id) as any;
+        const threadRow = sqlite
+          .prepare('SELECT visibility FROM forum_threads WHERE id = ?')
+          .get(data.thread_id) as any;
         if (!threadRow || threadRow.visibility !== 'public') {
           return c.json({ error: 'Guests can only post in public threads' }, 403);
         }
@@ -454,49 +554,84 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         // T#718 — Beast/owner path: derive author from auth, reject client-asserted mismatch
         const caller = requireBeastIdentity(c);
         if (!caller) {
-          return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+          return c.json(
+            {
+              error: 'Beast identity required — bearer-token or owner session',
+              requiresAuth: true,
+            },
+            401,
+          );
         }
         if (data.author && data.author.toLowerCase() !== caller) {
-          return c.json({ error: 'Author impersonation blocked. body.author must match authenticated caller or be omitted.' }, 403);
+          return c.json(
+            {
+              error:
+                'Author impersonation blocked. body.author must match authenticated caller or be omitted.',
+            },
+            403,
+          );
         }
         data.author = caller;
       }
 
       // Block posting to deleted threads
       if (data.thread_id) {
-        const threadCheck = sqlite.prepare('SELECT deleted_at FROM forum_threads WHERE id = ?').get(data.thread_id) as any;
+        const threadCheck = sqlite
+          .prepare('SELECT deleted_at FROM forum_threads WHERE id = ?')
+          .get(data.thread_id) as any;
         if (threadCheck?.deleted_at) {
           return c.json({ error: 'Cannot post to a deleted thread' }, 410);
         }
       }
 
-      const result = await withRetry(() => handleThreadMessage({
-        message: data.message,
-        threadId: data.thread_id,
-        title: data.title,
-        role: data.role || 'human',
-        author: data.author,
-      }));
+      const result = await withRetry(() =>
+        handleThreadMessage({
+          message: data.message,
+          threadId: data.thread_id,
+          title: data.title,
+          role: data.role || 'human',
+          author: data.author,
+        }),
+      );
       // Set visibility on new thread creation if specified
       if (!data.thread_id && result.threadId && data.visibility) {
         const vis = data.visibility === 'public' ? 'public' : 'internal';
-        sqlite.prepare('UPDATE forum_threads SET visibility = ? WHERE id = ?').run(vis, result.threadId);
+        sqlite
+          .prepare('UPDATE forum_threads SET visibility = ? WHERE id = ?')
+          .run(vis, result.threadId);
       }
       // Store reply_to_id and author_role if applicable
       if (result.messageId) {
         if (data.reply_to_id) {
-          sqlite.prepare('UPDATE forum_messages SET reply_to_id = ? WHERE id = ?')
+          sqlite
+            .prepare('UPDATE forum_messages SET reply_to_id = ? WHERE id = ?')
             .run(data.reply_to_id, result.messageId);
         }
         // Set author_role for prompt injection defense (Spec #32, T#557)
-        const authorRole = role === 'guest' ? 'guest' : (role === 'owner' ? 'owner' : 'beast');
-        sqlite.prepare('UPDATE forum_messages SET author_role = ? WHERE id = ?')
+        const authorRole = role === 'guest' ? 'guest' : role === 'owner' ? 'owner' : 'beast';
+        sqlite
+          .prepare('UPDATE forum_messages SET author_role = ? WHERE id = ?')
           .run(authorRole, result.messageId);
       }
       // Index forum message for search (T#347)
       if (result.messageId && result.threadId) {
-        const threadTitle = data.title || (sqlite.prepare('SELECT title FROM forum_threads WHERE id = ?').get(result.threadId) as any)?.title || '';
-        searchIndexUpsert('forum', result.messageId, threadTitle, data.message, data.author, new Date().toISOString(), `/forum?thread=${result.threadId}`);
+        const threadTitle =
+          data.title ||
+          (
+            sqlite
+              .prepare('SELECT title FROM forum_threads WHERE id = ?')
+              .get(result.threadId) as any
+          )?.title ||
+          '';
+        searchIndexUpsert(
+          'forum',
+          result.messageId,
+          threadTitle,
+          data.message,
+          data.author,
+          new Date().toISOString(),
+          `/forum?thread=${result.threadId}`,
+        );
       }
       // Push WebSocket event
       wsBroadcast('new_message', {
@@ -513,9 +648,12 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         notified: result.notified,
       });
     } catch (error) {
-      return c.json({
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }, 500);
+      return c.json(
+        {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        500,
+      );
     }
   });
 
@@ -540,7 +678,9 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     // Guests can only view public threads
     const role = (c.get as any)('role') as Role | undefined;
     if (role === 'guest') {
-      const threadRow = sqlite.prepare('SELECT visibility FROM forum_threads WHERE id = ?').get(threadId) as any;
+      const threadRow = sqlite
+        .prepare('SELECT visibility FROM forum_threads WHERE id = ?')
+        .get(threadId) as any;
       if (!threadRow || threadRow.visibility !== 'public') {
         return c.json({ error: 'Thread not found' }, 404);
       }
@@ -552,20 +692,28 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         title: threadData.thread.title,
         status: threadData.thread.status,
         created_at: new Date(threadData.thread.createdAt).toISOString(),
-        issue_url: threadData.thread.issueUrl
+        issue_url: threadData.thread.issueUrl,
       },
-      messages: threadData.messages.map(m => {
+      messages: threadData.messages.map((m) => {
         // Get reply_to_id from raw SQL (not in Drizzle schema)
-        const raw = sqlite.prepare('SELECT reply_to_id FROM forum_messages WHERE id = ?').get(m.id) as any;
+        const raw = sqlite
+          .prepare('SELECT reply_to_id FROM forum_messages WHERE id = ?')
+          .get(m.id) as any;
         // Get reactions for this message
-        const reactionRows = sqlite.prepare(
-          'SELECT emoji, GROUP_CONCAT(beast_name) as beasts, COUNT(*) as count FROM forum_reactions WHERE message_id = ? GROUP BY emoji'
-        ).all(m.id) as any[];
+        const reactionRows = sqlite
+          .prepare(
+            'SELECT emoji, GROUP_CONCAT(beast_name) as beasts, COUNT(*) as count FROM forum_reactions WHERE message_id = ? GROUP BY emoji',
+          )
+          .all(m.id) as any[];
         // Resolve guest avatar URL from guest_accounts (T#602)
         let authorAvatarUrl: string | null = null;
         if (m.author?.startsWith('[Guest]')) {
           const guestName = m.author.replace('[Guest] ', '').replace('[Guest]', '').trim();
-          const guest = sqlite.prepare('SELECT avatar_url FROM guest_accounts WHERE LOWER(display_name) = ? OR LOWER(username) = ?').get(guestName.toLowerCase(), guestName.toLowerCase()) as any;
+          const guest = sqlite
+            .prepare(
+              'SELECT avatar_url FROM guest_accounts WHERE LOWER(display_name) = ? OR LOWER(username) = ?',
+            )
+            .get(guestName.toLowerCase(), guestName.toLowerCase()) as any;
           authorAvatarUrl = guest?.avatar_url || null;
         }
         return {
@@ -578,7 +726,11 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
           principles_found: m.principlesFound,
           patterns_found: m.patternsFound,
           created_at: new Date(m.createdAt).toISOString(),
-          reactions: reactionRows.map(r => ({ emoji: r.emoji, beasts: r.beasts.split(','), count: r.count })),
+          reactions: reactionRows.map((r) => ({
+            emoji: r.emoji,
+            beasts: r.beasts.split(','),
+            count: r.count,
+          })),
         };
       }),
       total: threadData.total,
@@ -595,14 +747,25 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       // T#718 — derive beast from auth, reject client-asserted mismatch
       const caller = requireBeastIdentity(c);
       if (!caller) {
-        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+        return c.json(
+          { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+          401,
+        );
       }
       if (body.beast && body.beast.toLowerCase() !== caller) {
-        return c.json({ error: 'Identity spoof blocked. body.beast must match authenticated caller or be omitted.' }, 403);
+        return c.json(
+          {
+            error:
+              'Identity spoof blocked. body.beast must match authenticated caller or be omitted.',
+          },
+          403,
+        );
       }
 
       // Get current content
-      const current = sqlite.prepare('SELECT content, author FROM forum_messages WHERE id = ?').get(messageId) as any;
+      const current = sqlite
+        .prepare('SELECT content, author FROM forum_messages WHERE id = ?')
+        .get(messageId) as any;
       if (!current) return c.json({ error: 'Message not found' }, 404);
 
       // Restrict edits to original author only (or Gorn)
@@ -614,16 +777,23 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
       // Save original to edit history (Nothing is Deleted)
       const now = Date.now();
-      sqlite.prepare(`
+      sqlite
+        .prepare(`
         INSERT INTO forum_message_edits (message_id, original_content, edited_by, created_at)
         VALUES (?, ?, ?, ?)
-      `).run(messageId, current.content, caller, now);
+      `)
+        .run(messageId, current.content, caller, now);
 
       // Update message
-      sqlite.prepare('UPDATE forum_messages SET content = ?, edited_at = ? WHERE id = ?')
+      sqlite
+        .prepare('UPDATE forum_messages SET content = ?, edited_at = ? WHERE id = ?')
         .run(body.content, now, messageId);
 
-      return c.json({ success: true, message_id: messageId, edited_at: new Date(now).toISOString() });
+      return c.json({
+        success: true,
+        message_id: messageId,
+        edited_at: new Date(now).toISOString(),
+      });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
     }
@@ -641,43 +811,61 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       return c.json({ error: 'Only Gorn can delete forum messages' }, 403);
     }
 
-    const msg = sqlite.prepare('SELECT id, thread_id, author, content, deleted_at FROM forum_messages WHERE id = ?').get(messageId) as any;
+    const msg = sqlite
+      .prepare('SELECT id, thread_id, author, content, deleted_at FROM forum_messages WHERE id = ?')
+      .get(messageId) as any;
     if (!msg) return c.json({ error: 'Message not found' }, 404);
     if (msg.deleted_at) return c.json({ error: 'Message already deleted' }, 400);
 
     // Soft delete — Nothing is Deleted principle
     const now = new Date().toISOString();
     try {
-      sqlite.prepare('UPDATE forum_messages SET deleted_at = ?, deleted_by = ? WHERE id = ?')
+      sqlite
+        .prepare('UPDATE forum_messages SET deleted_at = ?, deleted_by = ? WHERE id = ?')
         .run(now, 'gorn', messageId);
     } catch (error) {
       return c.json({ error: 'Database error during deletion' }, 500);
     }
 
     // Audit trail
-    const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+    const ip =
+      c.req.header('x-real-ip') ||
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+      'local';
     logSecurityEvent({
       eventType: 'message_delete',
       severity: 'warning',
       actor: 'gorn',
       actorType: 'owner',
       target: `message:${messageId}`,
-      details: { thread_id: msg.thread_id, author: msg.author, content_preview: msg.content?.slice(0, 100) },
+      details: {
+        thread_id: msg.thread_id,
+        author: msg.author,
+        content_preview: msg.content?.slice(0, 100),
+      },
       ipSource: ip,
       requestId: (c.get as any)('requestId'),
     });
 
-    return c.json({ deleted: messageId, thread_id: msg.thread_id, deleted_at: now, deleted_by: 'gorn', soft: true });
+    return c.json({
+      deleted: messageId,
+      thread_id: msg.thread_id,
+      deleted_at: now,
+      deleted_by: 'gorn',
+      soft: true,
+    });
   });
 
   app.get('/api/message/:id/history', (c) => {
     const messageId = parseInt(c.req.param('id'), 10);
-    const rows = sqlite.prepare(
-      'SELECT id, original_content, edited_by, created_at FROM forum_message_edits WHERE message_id = ? ORDER BY created_at DESC'
-    ).all(messageId) as any[];
+    const rows = sqlite
+      .prepare(
+        'SELECT id, original_content, edited_by, created_at FROM forum_message_edits WHERE message_id = ? ORDER BY created_at DESC',
+      )
+      .all(messageId) as any[];
     return c.json({
       message_id: messageId,
-      edits: rows.map(r => ({
+      edits: rows.map((r) => ({
         id: r.id,
         original_content: r.original_content,
         edited_by: r.edited_by,
@@ -688,7 +876,9 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   });
 
   app.openapi(emojiListRoute, (c) => {
-    const rows = sqlite.prepare('SELECT emoji, added_by, created_at FROM emoji_whitelist ORDER BY created_at').all() as any[];
+    const rows = sqlite
+      .prepare('SELECT emoji, added_by, created_at FROM emoji_whitelist ORDER BY created_at')
+      .all() as any[];
     return c.json({ emoji: rows, total: rows.length }, 200);
   });
 
@@ -701,7 +891,11 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     const beast = data.beast || data.added_by || (hasSessionAuth(c) ? 'gorn' : '');
     if (!beast && !isTrustedRequest(c)) return c.json({ error: 'beast required' }, 400);
     const now = Date.now();
-    sqlite.prepare('INSERT OR IGNORE INTO emoji_whitelist (emoji, added_by, created_at) VALUES (?, ?, ?)').run(data.emoji, beast, now);
+    sqlite
+      .prepare(
+        'INSERT OR IGNORE INTO emoji_whitelist (emoji, added_by, created_at) VALUES (?, ?, ?)',
+      )
+      .run(data.emoji, beast, now);
     SUPPORTED_EMOJI = getSupportedEmoji();
     return c.json({ added: data.emoji, by: beast, total: SUPPORTED_EMOJI.size }, 200);
   }) as any);
@@ -735,9 +929,13 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         body.beast = `[Guest] ${guestUsername}`;
 
         // Thread visibility check — guests can only react to messages in public threads
-        const msg = sqlite.prepare('SELECT thread_id FROM forum_messages WHERE id = ?').get(messageId) as any;
+        const msg = sqlite
+          .prepare('SELECT thread_id FROM forum_messages WHERE id = ?')
+          .get(messageId) as any;
         if (msg) {
-          const thread = sqlite.prepare('SELECT visibility FROM forum_threads WHERE id = ?').get(msg.thread_id) as any;
+          const thread = sqlite
+            .prepare('SELECT visibility FROM forum_threads WHERE id = ?')
+            .get(msg.thread_id) as any;
           if (thread && thread.visibility && thread.visibility !== 'public') {
             return c.json({ error: 'Guests cannot react to messages in private threads' }, 403);
           }
@@ -746,43 +944,76 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         // T#718 — Beast/owner path: derive from auth, reject client-asserted mismatch
         const caller = requireBeastIdentity(c);
         if (!caller) {
-          return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+          return c.json(
+            {
+              error: 'Beast identity required — bearer-token or owner session',
+              requiresAuth: true,
+            },
+            401,
+          );
         }
         if (body.beast && body.beast.toLowerCase() !== caller) {
-          return c.json({ error: 'Identity spoof blocked. body.beast must match authenticated caller or be omitted.' }, 403);
+          return c.json(
+            {
+              error:
+                'Identity spoof blocked. body.beast must match authenticated caller or be omitted.',
+            },
+            403,
+          );
         }
         body.beast = caller;
       }
       if (!SUPPORTED_EMOJI.has(body.emoji)) {
-        return c.json({ error: `Unsupported emoji. Supported: ${[...SUPPORTED_EMOJI].join(' ')}` }, 400);
+        return c.json(
+          { error: `Unsupported emoji. Supported: ${[...SUPPORTED_EMOJI].join(' ')}` },
+          400,
+        );
       }
       const now = Date.now();
-      sqlite.prepare(`
+      sqlite
+        .prepare(`
         INSERT OR IGNORE INTO forum_reactions (message_id, beast_name, emoji, created_at)
         VALUES (?, ?, ?, ?)
-      `).run(messageId, body.beast.toLowerCase(), body.emoji, now);
-      wsBroadcast('reaction', { message_id: messageId, beast: body.beast, emoji: body.emoji, action: 'add' });
+      `)
+        .run(messageId, body.beast.toLowerCase(), body.emoji, now);
+      wsBroadcast('reaction', {
+        message_id: messageId,
+        beast: body.beast,
+        emoji: body.emoji,
+        action: 'add',
+      });
 
       // Notify the message author about the reaction
       try {
-        const msg = sqlite.prepare('SELECT author, thread_id FROM forum_messages WHERE id = ?').get(messageId) as any;
+        const msg = sqlite
+          .prepare('SELECT author, thread_id FROM forum_messages WHERE id = ?')
+          .get(messageId) as any;
         if (msg?.author) {
           const msgAuthor = msg.author.split('@')[0].toLowerCase();
           const reactor = body.beast.toLowerCase();
           // Don't notify yourself
-          if (msgAuthor !== reactor && msgAuthor !== 'gorn' && msgAuthor !== 'human' && msgAuthor !== 'user') {
-            const thread = sqlite.prepare('SELECT title FROM forum_threads WHERE id = ?').get(msg.thread_id) as any;
+          if (
+            msgAuthor !== reactor &&
+            msgAuthor !== 'gorn' &&
+            msgAuthor !== 'human' &&
+            msgAuthor !== 'user'
+          ) {
+            const thread = sqlite
+              .prepare('SELECT title FROM forum_threads WHERE id = ?')
+              .get(msg.thread_id) as any;
             const { notifyMentioned } = await import('./mentions.ts');
             notifyMentioned(
               [msgAuthor],
               msg.thread_id,
               thread?.title || 'thread',
               reactor,
-              `${body.emoji} reacted to your message`
+              `${body.emoji} reacted to your message`,
             );
           }
         }
-      } catch { /* notification failure is non-critical */ }
+      } catch {
+        /* notification failure is non-critical */
+      }
 
       return c.json({ success: true, message_id: messageId, emoji: body.emoji });
     } catch (error) {
@@ -808,16 +1039,36 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
         // T#718 — Beast/owner path: derive from auth
         const caller = requireBeastIdentity(c);
         if (!caller) {
-          return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+          return c.json(
+            {
+              error: 'Beast identity required — bearer-token or owner session',
+              requiresAuth: true,
+            },
+            401,
+          );
         }
         if (body.beast && body.beast.toLowerCase() !== caller) {
-          return c.json({ error: 'Identity spoof blocked. body.beast must match authenticated caller or be omitted.' }, 403);
+          return c.json(
+            {
+              error:
+                'Identity spoof blocked. body.beast must match authenticated caller or be omitted.',
+            },
+            403,
+          );
         }
         body.beast = caller;
       }
-      sqlite.prepare('DELETE FROM forum_reactions WHERE message_id = ? AND beast_name = ? AND emoji = ?')
+      sqlite
+        .prepare(
+          'DELETE FROM forum_reactions WHERE message_id = ? AND beast_name = ? AND emoji = ?',
+        )
         .run(messageId, body.beast.toLowerCase(), body.emoji);
-      wsBroadcast('reaction', { message_id: messageId, beast: body.beast, emoji: body.emoji, action: 'remove' });
+      wsBroadcast('reaction', {
+        message_id: messageId,
+        beast: body.beast,
+        emoji: body.emoji,
+        action: 'remove',
+      });
       return c.json({ success: true });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
@@ -826,12 +1077,14 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.get('/api/message/:id/reactions', (c) => {
     const messageId = parseInt(c.req.param('id'), 10);
-    const rows = sqlite.prepare(
-      'SELECT emoji, GROUP_CONCAT(beast_name) as beasts, COUNT(*) as count FROM forum_reactions WHERE message_id = ? GROUP BY emoji'
-    ).all(messageId) as any[];
+    const rows = sqlite
+      .prepare(
+        'SELECT emoji, GROUP_CONCAT(beast_name) as beasts, COUNT(*) as count FROM forum_reactions WHERE message_id = ? GROUP BY emoji',
+      )
+      .all(messageId) as any[];
     return c.json({
       message_id: messageId,
-      reactions: rows.map(r => ({ emoji: r.emoji, beasts: r.beasts.split(','), count: r.count })),
+      reactions: rows.map((r) => ({ emoji: r.emoji, beasts: r.beasts.split(','), count: r.count })),
     });
   });
 
@@ -843,7 +1096,9 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       if (!data.category || !allowed.includes(data.category)) {
         return c.json({ error: `Invalid category. Allowed: ${allowed.join(', ')}` }, 400);
       }
-      sqlite.prepare('UPDATE forum_threads SET category = ? WHERE id = ?').run(data.category, threadId);
+      sqlite
+        .prepare('UPDATE forum_threads SET category = ? WHERE id = ?')
+        .run(data.category, threadId);
       return c.json({ success: true, thread_id: threadId, category: data.category });
     } catch (e) {
       return c.json({ error: 'Invalid JSON' }, 400);
@@ -859,7 +1114,9 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       if (locked) {
         sqlite.prepare('UPDATE forum_threads SET status = ? WHERE id = ?').run('locked', threadId);
       } else {
-        sqlite.prepare("UPDATE forum_threads SET status = ? WHERE id = ? AND status = 'locked'").run('active', threadId);
+        sqlite
+          .prepare("UPDATE forum_threads SET status = ? WHERE id = ? AND status = 'locked'")
+          .run('active', threadId);
       }
       return c.json({ success: true, thread_id: threadId, locked: !!locked });
     } catch (e) {
@@ -899,7 +1156,9 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       if (!title) return c.json({ error: 'title required (after sanitization)' }, 400);
       sqlite.prepare('UPDATE forum_threads SET title = ? WHERE id = ?').run(title, threadId);
       return c.json({ success: true, thread_id: threadId, title });
-    } catch { return c.json({ error: 'Invalid JSON' }, 400); }
+    } catch {
+      return c.json({ error: 'Invalid JSON' }, 400);
+    }
   });
 
   app.patch('/api/thread/:id/visibility', async (c) => {
@@ -912,19 +1171,35 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       if (data.visibility !== 'public' && data.visibility !== 'internal') {
         return c.json({ error: "visibility must be 'public' or 'internal'" }, 400);
       }
-      sqlite.prepare('UPDATE forum_threads SET visibility = ? WHERE id = ?').run(data.visibility, threadId);
+      sqlite
+        .prepare('UPDATE forum_threads SET visibility = ? WHERE id = ?')
+        .run(data.visibility, threadId);
 
       // T#629: Notify all Beasts when a thread becomes public
       if (data.visibility === 'public') {
         try {
-          const thread = sqlite.prepare('SELECT title, created_by FROM forum_threads WHERE id = ?').get(threadId) as any;
+          const thread = sqlite
+            .prepare('SELECT title, created_by FROM forum_threads WHERE id = ?')
+            .get(threadId) as any;
           if (thread) {
             const { getOracleRegistry, notifyMentioned } = await import('./mentions.ts');
             const registry = getOracleRegistry();
-            const allBeasts = Object.keys(registry).filter(name => name !== 'gorn' && name !== (thread.created_by || '').toLowerCase());
-            notifyMentioned(allBeasts, threadId, thread.title, thread.created_by || 'unknown', `New public thread: ${thread.title}`, undefined, new Set(allBeasts));
+            const allBeasts = Object.keys(registry).filter(
+              (name) => name !== 'gorn' && name !== (thread.created_by || '').toLowerCase(),
+            );
+            notifyMentioned(
+              allBeasts,
+              threadId,
+              thread.title,
+              thread.created_by || 'unknown',
+              `New public thread: ${thread.title}`,
+              undefined,
+              new Set(allBeasts),
+            );
           }
-        } catch { /* best effort */ }
+        } catch {
+          /* best effort */
+        }
       }
 
       return c.json({ success: true, thread_id: threadId, visibility: data.visibility });
@@ -958,9 +1233,11 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       return c.json({ error: 'Only the thread creator or Gorn can delete a thread' }, 403);
     }
     // Soft delete — set deleted_at timestamp (Nothing is Deleted)
-    sqlite.prepare("UPDATE forum_threads SET deleted_at = datetime('now'), status = 'deleted' WHERE id = ?").run(id);
+    sqlite
+      .prepare(
+        "UPDATE forum_threads SET deleted_at = datetime('now'), status = 'deleted' WHERE id = ?",
+      )
+      .run(id);
     return c.json({ deleted: id, title: existing.title, soft: true });
   });
-
-
 }

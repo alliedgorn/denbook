@@ -22,17 +22,26 @@ const ALLOWED_EXTENSIONS: Record<string, { mime: string; category: string }> = {
   '.csv': { mime: 'text/csv', category: 'document' },
   '.json': { mime: 'application/json', category: 'document' },
   '.doc': { mime: 'application/msword', category: 'document' },
-  '.docx': { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', category: 'document' },
+  '.docx': {
+    mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    category: 'document',
+  },
   '.xls': { mime: 'application/vnd.ms-excel', category: 'document' },
-  '.xlsx': { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', category: 'document' },
+  '.xlsx': {
+    mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    category: 'document',
+  },
   '.ppt': { mime: 'application/vnd.ms-powerpoint', category: 'document' },
-  '.pptx': { mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', category: 'document' },
+  '.pptx': {
+    mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    category: 'document',
+  },
   '.zip': { mime: 'application/zip', category: 'archive' },
 };
 
 // Allowed image types by magic bytes
 const IMAGE_MAGIC: Record<string, { ext: string; mime: string }> = {
-  'ffd8ff': { ext: '.jpg', mime: 'image/jpeg' },
+  ffd8ff: { ext: '.jpg', mime: 'image/jpeg' },
   '89504e47': { ext: '.png', mime: 'image/png' },
   '47494638': { ext: '.gif', mime: 'image/gif' },
   '52494646': { ext: '.webp', mime: 'image/webp' }, // RIFF header for WebP
@@ -60,10 +69,18 @@ interface FilesHelpers {
 }
 
 export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers: FilesHelpers) {
-  const { hasSessionAuth, isTrustedRequest, isLocalNetwork, verifySessionToken, uploadsDir: UPLOADS_DIR, sessionCookieName: SESSION_COOKIE_NAME } = helpers;
+  const {
+    hasSessionAuth,
+    isTrustedRequest,
+    isLocalNetwork,
+    verifySessionToken,
+    uploadsDir: UPLOADS_DIR,
+    sessionCookieName: SESSION_COOKIE_NAME,
+  } = helpers;
 
   app.post('/api/upload', async (c) => {
-    if (!hasSessionAuth(c) && !isTrustedRequest(c)) return c.json({ error: 'Authentication required' }, 403);
+    if (!hasSessionAuth(c) && !isTrustedRequest(c))
+      return c.json({ error: 'Authentication required' }, 403);
     try {
       const formData = await c.req.formData();
       const file = formData.get('file') as File;
@@ -97,19 +114,25 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       // For images: validate via magic bytes (existing behavior)
       // For non-images: validate via extension allowlist
       if (!isImage && !allowed) {
-        return c.json({ error: `File type '${ext}' not allowed. Allowed: ${Object.keys(ALLOWED_EXTENSIONS).join(', ')}` }, 400);
+        return c.json(
+          {
+            error: `File type '${ext}' not allowed. Allowed: ${Object.keys(ALLOWED_EXTENSIONS).join(', ')}`,
+          },
+          400,
+        );
       }
 
       // Size limits
       const sizeLimit = isImage ? MAX_IMAGE_SIZE : MAX_FILE_SIZE;
-      if (file.size > sizeLimit) return c.json({ error: `File too large. Max ${sizeLimit / 1024 / 1024}MB` }, 400);
+      if (file.size > sizeLimit)
+        return c.json({ error: `File too large. Max ${sizeLimit / 1024 / 1024}MB` }, 400);
 
       const buffer = Buffer.from(await file.arrayBuffer());
       if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
       let processedBuffer = buffer;
-      let finalExt = isImage ? (imageType!.ext) : ext;
-      let finalMime = isImage ? (imageType!.mime) : (allowed?.mime || 'application/octet-stream');
+      let finalExt = isImage ? imageType!.ext : ext;
+      let finalMime = isImage ? imageType!.mime : allowed?.mime || 'application/octet-stream';
 
       // Image processing: resize, EXIF strip (existing behavior)
       if (isImage) {
@@ -139,7 +162,9 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
               .withMetadata({ orientation: undefined })
               .toBuffer();
           }
-        } catch { /* sharp not available — save original */ }
+        } catch {
+          /* sharp not available — save original */
+        }
       }
 
       const filename = `${crypto.randomUUID()}${finalExt}`;
@@ -147,19 +172,40 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       fs.writeFileSync(filePath, processedBuffer);
 
       const now = Date.now();
-      const category = isImage ? 'image' : (allowed?.category || 'other');
+      const category = isImage ? 'image' : allowed?.category || 'other';
 
       // Insert into files table (T#382)
-      const result = sqlite.prepare(`
+      const result = sqlite
+        .prepare(`
         INSERT INTO files (filename, original_name, mime_type, size_bytes, uploaded_by, context, context_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(filename, file.name, finalMime, processedBuffer.length, beast || null, context, contextId ? Number(contextId) : null, now);
+      `)
+        .run(
+          filename,
+          file.name,
+          finalMime,
+          processedBuffer.length,
+          beast || null,
+          context,
+          contextId ? Number(contextId) : null,
+          now,
+        );
 
       // Also insert into forum_attachments for backwards compatibility
-      sqlite.prepare(`
+      sqlite
+        .prepare(`
         INSERT INTO forum_attachments (message_id, filename, original_name, mime_type, size_bytes, uploaded_by, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(contextId ? Number(contextId) : null, filename, file.name, finalMime, processedBuffer.length, beast || null, now);
+      `)
+        .run(
+          contextId ? Number(contextId) : null,
+          filename,
+          file.name,
+          finalMime,
+          processedBuffer.length,
+          beast || null,
+          now,
+        );
 
       return c.json({
         id: (result as any).lastInsertRowid,
@@ -190,10 +236,19 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     if (type) {
       const typeExts: Record<string, string[]> = {
         image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
-        document: ['application/pdf', 'text/plain', 'text/markdown', 'text/csv', 'application/json',
-          'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+        document: [
+          'application/pdf',
+          'text/plain',
+          'text/markdown',
+          'text/csv',
+          'application/json',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-powerpoint',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        ],
         archive: ['application/zip'],
       };
       const mimes = typeExts[type];
@@ -202,14 +257,24 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         params.push(...mimes);
       }
     }
-    if (uploadedBy) { where += ' AND uploaded_by = ?'; params.push(uploadedBy); }
-    if (context) { where += ' AND context = ?'; params.push(context); }
+    if (uploadedBy) {
+      where += ' AND uploaded_by = ?';
+      params.push(uploadedBy);
+    }
+    if (context) {
+      where += ' AND context = ?';
+      params.push(context);
+    }
 
-    const total = (sqlite.prepare(`SELECT COUNT(*) as c FROM files WHERE ${where}`).get(...params) as any)?.c || 0;
-    const files = sqlite.prepare(`SELECT * FROM files WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset) as any[];
+    const total =
+      (sqlite.prepare(`SELECT COUNT(*) as c FROM files WHERE ${where}`).get(...params) as any)?.c ||
+      0;
+    const files = sqlite
+      .prepare(`SELECT * FROM files WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+      .all(...params, limit, offset) as any[];
 
     return c.json({
-      files: files.map(f => ({
+      files: files.map((f) => ({
         ...f,
         url: `/api/files/${f.id}/download`,
         is_image: f.mime_type.startsWith('image/'),
@@ -223,8 +288,13 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // GET /api/files/stats — storage statistics (must be before :id)
   app.get('/api/files/stats', (c) => {
-    const total = sqlite.prepare('SELECT COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as total_size FROM files WHERE deleted_at IS NULL').get() as any;
-    const byType = sqlite.prepare(`
+    const total = sqlite
+      .prepare(
+        'SELECT COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as total_size FROM files WHERE deleted_at IS NULL',
+      )
+      .get() as any;
+    const byType = sqlite
+      .prepare(`
       SELECT
         CASE
           WHEN mime_type LIKE 'image/%' THEN 'image'
@@ -238,15 +308,24 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         COALESCE(SUM(size_bytes), 0) as total_size
       FROM files WHERE deleted_at IS NULL
       GROUP BY category
-    `).all() as any[];
-    const byContext = sqlite.prepare('SELECT context, COUNT(*) as count FROM files WHERE deleted_at IS NULL GROUP BY context').all() as any[];
+    `)
+      .all() as any[];
+    const byContext = sqlite
+      .prepare(
+        'SELECT context, COUNT(*) as count FROM files WHERE deleted_at IS NULL GROUP BY context',
+      )
+      .all() as any[];
 
-    const archived = sqlite.prepare(
-      'SELECT COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as total_size FROM files WHERE archived_at IS NOT NULL'
-    ).get() as any;
-    const pendingArchive = sqlite.prepare(
-      'SELECT COUNT(*) as count FROM files WHERE deleted_at IS NOT NULL AND archived_at IS NULL'
-    ).get() as any;
+    const archived = sqlite
+      .prepare(
+        'SELECT COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as total_size FROM files WHERE archived_at IS NOT NULL',
+      )
+      .get() as any;
+    const pendingArchive = sqlite
+      .prepare(
+        'SELECT COUNT(*) as count FROM files WHERE deleted_at IS NOT NULL AND archived_at IS NULL',
+      )
+      .get() as any;
 
     return c.json({
       total_files: total.count,
@@ -264,7 +343,9 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const role = (c.get as any)('role');
     if (role !== 'owner') return c.json({ error: 'Owner access only' }, 403);
     const id = parseInt(c.req.param('id'), 10);
-    const file = sqlite.prepare('SELECT * FROM files WHERE id = ? AND deleted_at IS NULL').get(id) as any;
+    const file = sqlite
+      .prepare('SELECT * FROM files WHERE id = ? AND deleted_at IS NULL')
+      .get(id) as any;
     if (!file) return c.json({ error: 'File not found' }, 404);
     return c.json({
       ...file,
@@ -279,7 +360,9 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const role = (c.get as any)('role');
     if (role !== 'owner') return c.json({ error: 'Owner access only' }, 403);
     const id = parseInt(c.req.param('id'), 10);
-    const file = sqlite.prepare('SELECT * FROM files WHERE id = ? AND deleted_at IS NULL').get(id) as any;
+    const file = sqlite
+      .prepare('SELECT * FROM files WHERE id = ? AND deleted_at IS NULL')
+      .get(id) as any;
     if (!file) return c.json({ error: 'File not found' }, 404);
 
     const filePath = path.join(UPLOADS_DIR, file.filename);
@@ -297,7 +380,10 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const isImage = safeImageTypes.has(file.mime_type);
 
     c.header('Content-Type', isImage ? file.mime_type : 'application/octet-stream');
-    c.header('Content-Disposition', isImage ? 'inline' : `attachment; filename="${file.original_name.replace(/"/g, '_')}"`);
+    c.header(
+      'Content-Disposition',
+      isImage ? 'inline' : `attachment; filename="${file.original_name.replace(/"/g, '_')}"`,
+    );
     if (!isImage) c.header('Content-Security-Policy', 'sandbox');
     c.header('Cache-Control', 'public, max-age=31536000, immutable');
     c.header('ETag', etag);
@@ -318,16 +404,21 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
     const hash = c.req.param('hash');
     // Validate: alphanumeric, hyphens, dots — no path traversal
-    if (hash.includes('..') || hash.includes('/')) return c.json({ error: 'Invalid file hash' }, 400);
+    if (hash.includes('..') || hash.includes('/'))
+      return c.json({ error: 'Invalid file hash' }, 400);
     if (!/^[\w.-]+$/.test(hash)) return c.json({ error: 'Invalid file hash' }, 400);
 
     // Try files table first, then fall back to disk (legacy avatar files)
-    const file = sqlite.prepare('SELECT * FROM files WHERE filename = ? AND deleted_at IS NULL').get(hash) as any;
+    const file = sqlite
+      .prepare('SELECT * FROM files WHERE filename = ? AND deleted_at IS NULL')
+      .get(hash) as any;
     const filePath = path.join(UPLOADS_DIR, hash);
 
     // If not in active files, check if it was soft-deleted — return 404 rather than serving it from disk
     if (!file) {
-      const deleted = sqlite.prepare('SELECT id FROM files WHERE filename = ? AND deleted_at IS NOT NULL').get(hash);
+      const deleted = sqlite
+        .prepare('SELECT id FROM files WHERE filename = ? AND deleted_at IS NOT NULL')
+        .get(hash);
       if (deleted) return c.json({ error: 'File not found' }, 404);
     }
 
@@ -345,13 +436,23 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
     // Determine mime type from files table or extension
     const ext = hash.split('.').pop()?.toLowerCase() || '';
-    const extMimeMap: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' };
+    const extMimeMap: Record<string, string> = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      svg: 'image/svg+xml',
+    };
     const mimeType = file?.mime_type || extMimeMap[ext] || 'application/octet-stream';
     const isImage = safeImageTypes.has(mimeType);
     const originalName = file?.original_name || hash;
 
     c.header('Content-Type', isImage ? mimeType : 'application/octet-stream');
-    c.header('Content-Disposition', isImage ? 'inline' : `attachment; filename="${originalName.replace(/"/g, '_')}"`);
+    c.header(
+      'Content-Disposition',
+      isImage ? 'inline' : `attachment; filename="${originalName.replace(/"/g, '_')}"`,
+    );
     if (!isImage) c.header('Content-Security-Policy', 'sandbox');
     // private — browser can cache, but CDN/reverse proxy (Caddy) must not
     c.header('Cache-Control', 'private, max-age=86400');
@@ -363,7 +464,9 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
   // Only file uploader or owner can delete
   app.delete('/api/files/:id', (c) => {
     const id = parseInt(c.req.param('id'), 10);
-    const file = sqlite.prepare('SELECT * FROM files WHERE id = ? AND deleted_at IS NULL').get(id) as any;
+    const file = sqlite
+      .prepare('SELECT * FROM files WHERE id = ? AND deleted_at IS NULL')
+      .get(id) as any;
     if (!file) return c.json({ error: 'File not found' }, 404);
 
     const role = (c.get as any)('role');

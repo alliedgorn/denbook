@@ -5,13 +5,27 @@ import type { Database } from 'bun:sqlite';
 interface LibraryHelpers {
   hasSessionAuth: (c: Context) => boolean;
   requireBeastIdentity: (c: Context) => string | null;
-  searchIndexUpsert: (sourceType: string, sourceId: number, title: string, content: string, author: string, createdAt: string, url?: string) => void;
+  searchIndexUpsert: (
+    sourceType: string,
+    sourceId: number,
+    title: string,
+    content: string,
+    author: string,
+    createdAt: string,
+    url?: string,
+  ) => void;
   searchIndexDelete: (sourceType: string, sourceId: number) => void;
   wsBroadcast: (event: string, data: any) => void;
 }
 
 export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helpers: LibraryHelpers) {
-  const { hasSessionAuth, requireBeastIdentity, searchIndexUpsert, searchIndexDelete, wsBroadcast } = helpers;
+  const {
+    hasSessionAuth,
+    requireBeastIdentity,
+    searchIndexUpsert,
+    searchIndexDelete,
+    wsBroadcast,
+  } = helpers;
 
   // --- Shelf CRUD ---
 
@@ -44,7 +58,9 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
     const shelf = sqlite.prepare('SELECT * FROM library_shelves WHERE id = ?').get(id) as any;
     if (!shelf) return c.json({ error: 'Shelf not found' }, 404);
     if (isGuest && shelf.visibility !== 'public') return c.json({ error: 'Shelf not found' }, 404);
-    const entryCount = (sqlite.prepare('SELECT COUNT(*) as c FROM library WHERE shelf_id = ?').get(id) as any).c;
+    const entryCount = (
+      sqlite.prepare('SELECT COUNT(*) as c FROM library WHERE shelf_id = ?').get(id) as any
+    ).c;
     return c.json({ ...shelf, entry_count: entryCount });
   });
 
@@ -56,25 +72,57 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
       // T#718 — derive author from auth, reject client-asserted mismatch
       const caller = requireBeastIdentity(c);
       if (!caller) {
-        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+        return c.json(
+          { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+          401,
+        );
       }
       const claimed = (c.req.query('as') || data.created_by || '').toLowerCase();
       if (claimed && claimed !== caller) {
-        return c.json({ error: 'Identity spoof blocked. ?as=/body.created_by must match authenticated caller or be omitted.' }, 403);
+        return c.json(
+          {
+            error:
+              'Identity spoof blocked. ?as=/body.created_by must match authenticated caller or be omitted.',
+          },
+          403,
+        );
       }
       const author = caller;
 
       // Check duplicate
-      const existing = sqlite.prepare('SELECT id FROM library_shelves WHERE name = ?').get(data.name.trim());
+      const existing = sqlite
+        .prepare('SELECT id FROM library_shelves WHERE name = ?')
+        .get(data.name.trim());
       if (existing) return c.json({ error: 'A shelf with this name already exists' }, 409);
 
       const now = new Date().toISOString();
-      const visibility = (data.visibility === 'public') ? 'public' : 'internal';
-      const result = sqlite.prepare(
-        'INSERT INTO library_shelves (name, description, icon, color, created_by, created_at, updated_at, visibility) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(data.name.trim(), data.description || null, data.icon || null, data.color || null, author, now, now, visibility);
-      const shelf = sqlite.prepare('SELECT * FROM library_shelves WHERE id = ?').get((result as any).lastInsertRowid) as any;
-      searchIndexUpsert('shelf', shelf.id, shelf.name, shelf.description || '', author, now, '/library');
+      const visibility = data.visibility === 'public' ? 'public' : 'internal';
+      const result = sqlite
+        .prepare(
+          'INSERT INTO library_shelves (name, description, icon, color, created_by, created_at, updated_at, visibility) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          data.name.trim(),
+          data.description || null,
+          data.icon || null,
+          data.color || null,
+          author,
+          now,
+          now,
+          visibility,
+        );
+      const shelf = sqlite
+        .prepare('SELECT * FROM library_shelves WHERE id = ?')
+        .get((result as any).lastInsertRowid) as any;
+      searchIndexUpsert(
+        'shelf',
+        shelf.id,
+        shelf.name,
+        shelf.description || '',
+        author,
+        now,
+        '/library',
+      );
       return c.json(shelf, 201);
     } catch (e: any) {
       return c.json({ error: e?.message || 'Invalid request' }, 400);
@@ -95,11 +143,14 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
       for (const field of allowed) {
         if (field in data) {
           if (field === 'name' && data.name?.trim()) {
-            const dup = sqlite.prepare('SELECT id FROM library_shelves WHERE name = ? AND id != ?').get(data.name.trim(), id);
+            const dup = sqlite
+              .prepare('SELECT id FROM library_shelves WHERE name = ? AND id != ?')
+              .get(data.name.trim(), id);
             if (dup) return c.json({ error: 'A shelf with this name already exists' }, 409);
           }
           if (field === 'visibility') {
-            if (!hasSessionAuth(c)) return c.json({ error: 'Only Gorn can change shelf visibility' }, 403);
+            if (!hasSessionAuth(c))
+              return c.json({ error: 'Only Gorn can change shelf visibility' }, 403);
             const val = data[field] === 'public' ? 'public' : 'internal';
             updates.push(`${field} = ?`);
             values.push(val);
@@ -113,9 +164,20 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
       updates.push('updated_at = ?');
       values.push(new Date().toISOString());
       values.push(id);
-      sqlite.prepare(`UPDATE library_shelves SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+      sqlite
+        .prepare(`UPDATE library_shelves SET ${updates.join(', ')} WHERE id = ?`)
+        .run(...values);
       const shelf = sqlite.prepare('SELECT * FROM library_shelves WHERE id = ?').get(id) as any;
-      if (shelf) searchIndexUpsert('shelf', id, shelf.name, shelf.description || '', shelf.created_by, shelf.created_at, '/library');
+      if (shelf)
+        searchIndexUpsert(
+          'shelf',
+          id,
+          shelf.name,
+          shelf.description || '',
+          shelf.created_by,
+          shelf.created_at,
+          '/library',
+        );
       return c.json(shelf);
     } catch {
       return c.json({ error: 'Invalid request' }, 400);
@@ -151,7 +213,7 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
 
     // T#623: guests only see entries in public shelves
     if (isGuest) {
-      query += ' INNER JOIN library_shelves s ON s.id = l.shelf_id AND s.visibility = \'public\'';
+      query += " INNER JOIN library_shelves s ON s.id = l.shelf_id AND s.visibility = 'public'";
     }
 
     query += ' WHERE 1=1';
@@ -190,14 +252,23 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
     const rows = sqlite.prepare(query).all(...params) as any[];
 
     return c.json({
-      entries: rows.map(r => ({
+      entries: rows.map((r) => ({
         id: r.id,
         title: r.title,
         content: r.content,
         type: r.type,
         category: r.type,
         author: r.author,
-        tags: (() => { try { const t = JSON.parse(r.tags || '[]'); return Array.isArray(t) ? t : []; } catch { return typeof r.tags === 'string' && r.tags ? r.tags.split(',').map((s: string) => s.trim()) : []; } })(),
+        tags: (() => {
+          try {
+            const t = JSON.parse(r.tags || '[]');
+            return Array.isArray(t) ? t : [];
+          } catch {
+            return typeof r.tags === 'string' && r.tags
+              ? r.tags.split(',').map((s: string) => s.trim())
+              : [];
+          }
+        })(),
         shelf_id: r.shelf_id || null,
         created_at: new Date(r.created_at).toISOString(),
         updated_at: new Date(r.updated_at).toISOString(),
@@ -226,15 +297,30 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
 
     return c.json({
       suggestions: [
-        ...shelves.map(s => ({ id: s.id, label: s.name, icon: s.icon, color: s.color, type: 'shelf' as const })),
-        ...entries.map(e => ({ id: e.id, label: e.title, type: 'entry' as const, entryType: e.type, author: e.author, shelf_id: e.shelf_id })),
+        ...shelves.map((s) => ({
+          id: s.id,
+          label: s.name,
+          icon: s.icon,
+          color: s.color,
+          type: 'shelf' as const,
+        })),
+        ...entries.map((e) => ({
+          id: e.id,
+          label: e.title,
+          type: 'entry' as const,
+          entryType: e.type,
+          author: e.author,
+          shelf_id: e.shelf_id,
+        })),
       ],
     });
   });
 
   // GET /api/library/types — list available types and counts (must be before /:id)
   app.get('/api/library/types', (c) => {
-    const rows = sqlite.prepare('SELECT type, COUNT(*) as count FROM library GROUP BY type ORDER BY count DESC').all() as any[];
+    const rows = sqlite
+      .prepare('SELECT type, COUNT(*) as count FROM library GROUP BY type ORDER BY count DESC')
+      .all() as any[];
     return c.json({ types: rows });
   });
 
@@ -246,7 +332,9 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
     if (!row) return c.json({ error: 'Entry not found' }, 404);
     // T#623: guests can only see entries in public shelves
     if (isGuest && row.shelf_id) {
-      const shelf = sqlite.prepare('SELECT visibility FROM library_shelves WHERE id = ?').get(row.shelf_id) as any;
+      const shelf = sqlite
+        .prepare('SELECT visibility FROM library_shelves WHERE id = ?')
+        .get(row.shelf_id) as any;
       if (!shelf || shelf.visibility !== 'public') return c.json({ error: 'Entry not found' }, 404);
     } else if (isGuest && !row.shelf_id) {
       return c.json({ error: 'Entry not found' }, 404); // unshelved entries hidden from guests
@@ -275,10 +363,19 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
       // T#718 — derive author from auth, reject client-asserted mismatch
       const caller = requireBeastIdentity(c);
       if (!caller) {
-        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+        return c.json(
+          { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+          401,
+        );
       }
       if (data.author && data.author.toLowerCase() !== caller) {
-        return c.json({ error: 'Author impersonation blocked. body.author must match authenticated caller or be omitted.' }, 403);
+        return c.json(
+          {
+            error:
+              'Author impersonation blocked. body.author must match authenticated caller or be omitted.',
+          },
+          403,
+        );
       }
       const author = caller;
 
@@ -288,13 +385,23 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
       const now = Date.now();
 
       const shelfId = data.shelf_id ? Number(data.shelf_id) : null;
-      if (!shelfId) return c.json({ error: 'shelf_id required — every entry must belong to a shelf' }, 400);
-      const result = sqlite.prepare(
-        'INSERT INTO library (title, content, type, author, tags, shelf_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(data.title, data.content, type, author, tags, shelfId, now, now);
+      if (!shelfId)
+        return c.json({ error: 'shelf_id required — every entry must belong to a shelf' }, 400);
+      const result = sqlite
+        .prepare(
+          'INSERT INTO library (title, content, type, author, tags, shelf_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(data.title, data.content, type, author, tags, shelfId, now, now);
 
       const newId = (result as any).lastInsertRowid;
-      searchIndexUpsert('library', newId, data.title, data.content, author, new Date(now).toISOString());
+      searchIndexUpsert(
+        'library',
+        newId,
+        data.title,
+        data.content,
+        author,
+        new Date(now).toISOString(),
+      );
       return c.json({ id: newId, title: data.title, type, author }, 201);
     } catch (e) {
       return c.json({ error: 'Invalid JSON' }, 400);
@@ -310,19 +417,47 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
       const updates: string[] = ['updated_at = ?'];
       const params: any[] = [now];
 
-      if (data.title) { updates.push('title = ?'); params.push(data.title); }
-      if (data.content) { updates.push('content = ?'); params.push(data.content); }
-      if (data.type) { updates.push('type = ?'); params.push(data.type); }
-      if (data.tags) { updates.push('tags = ?'); params.push(JSON.stringify(data.tags)); }
-      if ('shelf_id' in data) { updates.push('shelf_id = ?'); params.push(data.shelf_id || null); }
+      if (data.title) {
+        updates.push('title = ?');
+        params.push(data.title);
+      }
+      if (data.content) {
+        updates.push('content = ?');
+        params.push(data.content);
+      }
+      if (data.type) {
+        updates.push('type = ?');
+        params.push(data.type);
+      }
+      if (data.tags) {
+        updates.push('tags = ?');
+        params.push(JSON.stringify(data.tags));
+      }
+      if ('shelf_id' in data) {
+        updates.push('shelf_id = ?');
+        params.push(data.shelf_id || null);
+      }
 
       params.push(id);
       sqlite.prepare(`UPDATE library SET ${updates.join(', ')} WHERE id = ?`).run(...params);
 
       const updated = sqlite.prepare('SELECT * FROM library WHERE id = ?').get(id) as any;
       if (updated) {
-        searchIndexUpsert('library', id, updated.title, updated.content, updated.author, new Date(updated.created_at).toISOString());
-        if (updated.tags) { try { updated.tags = JSON.parse(updated.tags); } catch { updated.tags = []; } }
+        searchIndexUpsert(
+          'library',
+          id,
+          updated.title,
+          updated.content,
+          updated.author,
+          new Date(updated.created_at).toISOString(),
+        );
+        if (updated.tags) {
+          try {
+            updated.tags = JSON.parse(updated.tags);
+          } catch {
+            updated.tags = [];
+          }
+        }
       }
       return c.json(updated);
     } catch (e) {
@@ -335,11 +470,17 @@ export function registerLibraryRoutes(app: OpenAPIHono, sqlite: Database, helper
     // T#718 — derive requester from auth, reject client-asserted mismatch
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     const claimedAs = c.req.query('as')?.toLowerCase();
     if (claimedAs && claimedAs !== caller) {
-      return c.json({ error: 'Identity spoof blocked. ?as= must match authenticated caller or be omitted.' }, 403);
+      return c.json(
+        { error: 'Identity spoof blocked. ?as= must match authenticated caller or be omitted.' },
+        403,
+      );
     }
     const requester = caller;
     if (requester !== 'gorn' && requester !== 'pip') {

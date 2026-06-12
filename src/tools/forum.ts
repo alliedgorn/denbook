@@ -49,45 +49,70 @@ export interface OracleThreadUpdateInput {
 
 export const threadToolDef = {
   name: 'oracle_thread',
-  description: 'Send a message to an Oracle discussion thread. Creates a new thread or continues an existing one. Oracle auto-responds from knowledge base. Use for multi-turn consultations.',
+  description:
+    'Send a message to an Oracle discussion thread. Creates a new thread or continues an existing one. Oracle auto-responds from knowledge base. Use for multi-turn consultations.',
   inputSchema: {
     type: 'object',
     properties: {
       message: { type: 'string', description: 'Your question or message' },
-      threadId: { type: 'number', description: 'Thread ID to continue (omit to create new thread)' },
-      title: { type: 'string', description: 'Title for new thread (defaults to first 50 chars of message)' },
-      role: { type: 'string', enum: ['human', 'claude'], description: 'Who is sending (default: human)', default: 'human' },
-      model: { type: 'string', description: 'Model name for Claude calls (e.g., "opus", "sonnet")' },
+      threadId: {
+        type: 'number',
+        description: 'Thread ID to continue (omit to create new thread)',
+      },
+      title: {
+        type: 'string',
+        description: 'Title for new thread (defaults to first 50 chars of message)',
+      },
+      role: {
+        type: 'string',
+        enum: ['human', 'claude'],
+        description: 'Who is sending (default: human)',
+        default: 'human',
+      },
+      model: {
+        type: 'string',
+        description: 'Model name for Claude calls (e.g., "opus", "sonnet")',
+      },
     },
-    required: ['message']
-  }
+    required: ['message'],
+  },
 };
 
 export const threadsToolDef = {
   name: 'oracle_threads',
-  description: 'List Oracle discussion threads. Filter by status to find pending questions or active discussions.',
+  description:
+    'List Oracle discussion threads. Filter by status to find pending questions or active discussions.',
   inputSchema: {
     type: 'object',
     properties: {
-      status: { type: 'string', enum: ['active', 'answered', 'pending', 'closed'], description: 'Filter by thread status' },
-      limit: { type: 'number', description: 'Maximum threads to return (default: 20)', default: 20 },
+      status: {
+        type: 'string',
+        enum: ['active', 'answered', 'pending', 'closed'],
+        description: 'Filter by thread status',
+      },
+      limit: {
+        type: 'number',
+        description: 'Maximum threads to return (default: 20)',
+        default: 20,
+      },
       offset: { type: 'number', description: 'Pagination offset', default: 0 },
     },
-    required: []
-  }
+    required: [],
+  },
 };
 
 export const threadReadToolDef = {
   name: 'oracle_thread_read',
-  description: 'Read full message history from a thread. Use to review context before continuing a conversation.',
+  description:
+    'Read full message history from a thread. Use to review context before continuing a conversation.',
   inputSchema: {
     type: 'object',
     properties: {
       threadId: { type: 'number', description: 'Thread ID to read' },
       limit: { type: 'number', description: 'Maximum messages to return (default: all)' },
     },
-    required: ['threadId']
-  }
+    required: ['threadId'],
+  },
 };
 
 export const threadUpdateToolDef = {
@@ -97,10 +122,14 @@ export const threadUpdateToolDef = {
     type: 'object',
     properties: {
       threadId: { type: 'number', description: 'Thread ID to update' },
-      status: { type: 'string', enum: ['active', 'closed', 'answered', 'pending'], description: 'New status for the thread' },
+      status: {
+        type: 'string',
+        enum: ['active', 'closed', 'answered', 'pending'],
+        description: 'New status for the thread',
+      },
     },
-    required: ['threadId', 'status']
-  }
+    required: ['threadId', 'status'],
+  },
 };
 
 /** All forum tool definitions for ListTools */
@@ -125,20 +154,28 @@ export async function handleThread(input: OracleThreadInput): Promise<ToolRespon
   });
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        thread_id: result.threadId,
-        message_id: result.messageId,
-        status: result.status,
-        oracle_response: result.oracleResponse ? {
-          content: result.oracleResponse.content,
-          principles_found: result.oracleResponse.principlesFound,
-          patterns_found: result.oracleResponse.patternsFound,
-        } : null,
-        issue_url: result.issueUrl,
-      }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            thread_id: result.threadId,
+            message_id: result.messageId,
+            status: result.status,
+            oracle_response: result.oracleResponse
+              ? {
+                  content: result.oracleResponse.content,
+                  principles_found: result.oracleResponse.principlesFound,
+                  patterns_found: result.oracleResponse.patternsFound,
+                }
+              : null,
+            issue_url: result.issueUrl,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
   };
 }
 
@@ -149,7 +186,7 @@ export async function handleThreads(input: OracleThreadsInput): Promise<ToolResp
     offset: input.offset || 0,
   });
 
-  const threadsWithCounts = result.threads.map(thread => {
+  const threadsWithCounts = result.threads.map((thread) => {
     const { messages } = getMessages(thread.id);
     const lastMessage = messages[messages.length - 1];
     return {
@@ -164,10 +201,12 @@ export async function handleThreads(input: OracleThreadsInput): Promise<ToolResp
   });
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({ threads: threadsWithCounts, total: result.total }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({ threads: threadsWithCounts, total: result.total }, null, 2),
+      },
+    ],
   };
 }
 
@@ -175,7 +214,7 @@ export async function handleThreadRead(input: OracleThreadReadInput): Promise<To
   const threadData = getFullThread(input.threadId);
   if (!threadData) throw new Error(`Thread ${input.threadId} not found`);
 
-  let messages = threadData.messages.map(m => ({
+  let messages = threadData.messages.map((m) => ({
     id: m.id,
     role: m.role,
     author: m.author,
@@ -188,16 +227,22 @@ export async function handleThreadRead(input: OracleThreadReadInput): Promise<To
   }
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        thread_id: threadData.thread.id,
-        title: threadData.thread.title,
-        status: threadData.thread.status,
-        message_count: threadData.messages.length,
-        messages,
-      }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            thread_id: threadData.thread.id,
+            title: threadData.thread.title,
+            status: threadData.thread.status,
+            message_count: threadData.messages.length,
+            messages,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
   };
 }
 
@@ -208,14 +253,20 @@ export async function handleThreadUpdate(input: OracleThreadUpdateInput): Promis
   const threadData = getFullThread(input.threadId);
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        success: true,
-        thread_id: input.threadId,
-        status: input.status,
-        title: threadData?.thread.title,
-      }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            success: true,
+            thread_id: input.threadId,
+            status: input.status,
+            title: threadData?.thread.title,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
   };
 }

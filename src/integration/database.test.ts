@@ -3,28 +3,28 @@
  * Tests denbook database operations with Drizzle ORM
  * Uses isolated test database with proper migrations
  */
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { Database } from "bun:sqlite";
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { eq, isNull, sql } from "drizzle-orm";
-import { existsSync, mkdirSync, rmSync, readFileSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
+import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import { Database } from 'bun:sqlite';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { eq, isNull, sql } from 'drizzle-orm';
+import { existsSync, mkdirSync, rmSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 
 // Import schema
-import * as schema from "../db/schema";
+import * as schema from '../db/schema';
 
 // Test database (separate from production)
-const TEST_DB_PATH = join(homedir(), ".oracle", "test-integration.db");
-const PROJECT_ROOT = join(import.meta.dir, "../..");
+const TEST_DB_PATH = join(homedir(), '.oracle', 'test-integration.db');
+const PROJECT_ROOT = join(import.meta.dir, '../..');
 
 let sqlite: Database;
 let db: ReturnType<typeof drizzle>;
 
-describe("Database Integration (Drizzle ORM)", () => {
+describe('Database Integration (Drizzle ORM)', () => {
   beforeAll(async () => {
     // Ensure directory exists
-    const dir = join(homedir(), ".oracle");
+    const dir = join(homedir(), '.oracle');
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
@@ -38,23 +38,23 @@ describe("Database Integration (Drizzle ORM)", () => {
     db = drizzle(sqlite, { schema });
 
     // Apply migrations from migration files
-    const migrationsDir = join(PROJECT_ROOT, "src/db/migrations");
+    const migrationsDir = join(PROJECT_ROOT, 'src/db/migrations');
     const migrationFiles = [
-      "0000_unknown_viper.sql",
-      "0001_chunky_dark_phoenix.sql",
-      "0002_mixed_rhodey.sql",
-      "0003_rapid_strong_guy.sql",
-      "0004_warm_mesmero.sql",
-      "0005_add_schedule.sql",
-      "0006_magenta_screwball.sql",
+      '0000_unknown_viper.sql',
+      '0001_chunky_dark_phoenix.sql',
+      '0002_mixed_rhodey.sql',
+      '0003_rapid_strong_guy.sql',
+      '0004_warm_mesmero.sql',
+      '0005_add_schedule.sql',
+      '0006_magenta_screwball.sql',
     ];
 
     for (const file of migrationFiles) {
       const sqlPath = join(migrationsDir, file);
       if (existsSync(sqlPath)) {
-        const sql = readFileSync(sqlPath, "utf-8");
+        const sql = readFileSync(sqlPath, 'utf-8');
         // Execute each statement separately (split by --)
-        const statements = sql.split("--> statement-breakpoint").filter(s => s.trim());
+        const statements = sql.split('--> statement-breakpoint').filter((s) => s.trim());
         for (const stmt of statements) {
           if (stmt.trim()) {
             try {
@@ -89,15 +89,15 @@ describe("Database Integration (Drizzle ORM)", () => {
   // ===================
   // Document Operations (Drizzle)
   // ===================
-  describe("Document Operations (Drizzle ORM)", () => {
+  describe('Document Operations (Drizzle ORM)', () => {
     const now = Date.now();
 
-    test("INSERT document with Drizzle", async () => {
+    test('INSERT document with Drizzle', async () => {
       await db.insert(schema.oracleDocuments).values({
-        id: "drizzle_doc_1",
-        type: "learning",
-        sourceFile: "/test/drizzle.md",
-        concepts: JSON.stringify(["drizzle", "orm", "test"]),
+        id: 'drizzle_doc_1',
+        type: 'learning',
+        sourceFile: '/test/drizzle.md',
+        concepts: JSON.stringify(['drizzle', 'orm', 'test']),
         createdAt: now,
         updatedAt: now,
         indexedAt: now,
@@ -106,19 +106,19 @@ describe("Database Integration (Drizzle ORM)", () => {
       const docs = await db
         .select()
         .from(schema.oracleDocuments)
-        .where(eq(schema.oracleDocuments.id, "drizzle_doc_1"));
+        .where(eq(schema.oracleDocuments.id, 'drizzle_doc_1'));
 
       expect(docs.length).toBe(1);
-      expect(docs[0].type).toBe("learning");
-      expect(docs[0].sourceFile).toBe("/test/drizzle.md");
+      expect(docs[0].type).toBe('learning');
+      expect(docs[0].sourceFile).toBe('/test/drizzle.md');
     });
 
-    test("SELECT by type with Drizzle", async () => {
+    test('SELECT by type with Drizzle', async () => {
       await db.insert(schema.oracleDocuments).values({
-        id: "drizzle_doc_2",
-        type: "principle",
-        sourceFile: "/test/principle.md",
-        concepts: JSON.stringify(["core", "oracle"]),
+        id: 'drizzle_doc_2',
+        type: 'principle',
+        sourceFile: '/test/principle.md',
+        concepts: JSON.stringify(['core', 'oracle']),
         createdAt: now,
         updatedAt: now,
         indexedAt: now,
@@ -127,18 +127,18 @@ describe("Database Integration (Drizzle ORM)", () => {
       const learnings = await db
         .select()
         .from(schema.oracleDocuments)
-        .where(eq(schema.oracleDocuments.type, "learning"));
+        .where(eq(schema.oracleDocuments.type, 'learning'));
 
       expect(learnings.length).toBeGreaterThanOrEqual(1);
-      expect(learnings.every((d) => d.type === "learning")).toBe(true);
+      expect(learnings.every((d) => d.type === 'learning')).toBe(true);
     });
 
-    test("Supersede document (Nothing is Deleted)", async () => {
+    test('Supersede document (Nothing is Deleted)', async () => {
       await db.insert(schema.oracleDocuments).values({
-        id: "drizzle_doc_3",
-        type: "learning",
-        sourceFile: "/test/updated.md",
-        concepts: JSON.stringify(["updated"]),
+        id: 'drizzle_doc_3',
+        type: 'learning',
+        sourceFile: '/test/updated.md',
+        concepts: JSON.stringify(['updated']),
         createdAt: now,
         updatedAt: now,
         indexedAt: now,
@@ -147,22 +147,22 @@ describe("Database Integration (Drizzle ORM)", () => {
       await db
         .update(schema.oracleDocuments)
         .set({
-          supersededBy: "drizzle_doc_3",
+          supersededBy: 'drizzle_doc_3',
           supersededAt: Date.now(),
-          supersededReason: "Updated with new information",
+          supersededReason: 'Updated with new information',
         })
-        .where(eq(schema.oracleDocuments.id, "drizzle_doc_1"));
+        .where(eq(schema.oracleDocuments.id, 'drizzle_doc_1'));
 
       const oldDoc = await db
         .select()
         .from(schema.oracleDocuments)
-        .where(eq(schema.oracleDocuments.id, "drizzle_doc_1"));
+        .where(eq(schema.oracleDocuments.id, 'drizzle_doc_1'));
 
-      expect(oldDoc[0].supersededBy).toBe("drizzle_doc_3");
-      expect(oldDoc[0].supersededReason).toBe("Updated with new information");
+      expect(oldDoc[0].supersededBy).toBe('drizzle_doc_3');
+      expect(oldDoc[0].supersededReason).toBe('Updated with new information');
     });
 
-    test("Filter non-superseded documents", async () => {
+    test('Filter non-superseded documents', async () => {
       const activeDocs = await db
         .select()
         .from(schema.oracleDocuments)
@@ -172,23 +172,23 @@ describe("Database Integration (Drizzle ORM)", () => {
       expect(activeDocs.every((d) => d.supersededBy === null)).toBe(true);
     });
 
-    test("Project filtering with universal docs", async () => {
+    test('Project filtering with universal docs', async () => {
       await db.insert(schema.oracleDocuments).values({
-        id: "proj_doc_1",
-        type: "learning",
-        sourceFile: "/proj/a.md",
-        concepts: JSON.stringify(["project-specific"]),
+        id: 'proj_doc_1',
+        type: 'learning',
+        sourceFile: '/proj/a.md',
+        concepts: JSON.stringify(['project-specific']),
         createdAt: now,
         updatedAt: now,
         indexedAt: now,
-        project: "github.com/test/project",
+        project: 'github.com/test/project',
       });
 
       await db.insert(schema.oracleDocuments).values({
-        id: "universal_doc",
-        type: "principle",
-        sourceFile: "/core/universal.md",
-        concepts: JSON.stringify(["universal"]),
+        id: 'universal_doc',
+        type: 'principle',
+        sourceFile: '/core/universal.md',
+        concepts: JSON.stringify(['universal']),
         createdAt: now,
         updatedAt: now,
         indexedAt: now,
@@ -199,10 +199,10 @@ describe("Database Integration (Drizzle ORM)", () => {
         .select()
         .from(schema.oracleDocuments)
         .where(
-          sql`${schema.oracleDocuments.project} = ${"github.com/test/project"} OR ${schema.oracleDocuments.project} IS NULL`
+          sql`${schema.oracleDocuments.project} = ${'github.com/test/project'} OR ${schema.oracleDocuments.project} IS NULL`,
         );
 
-      const hasProjectDocs = docs.some((d) => d.project === "github.com/test/project");
+      const hasProjectDocs = docs.some((d) => d.project === 'github.com/test/project');
       const hasUniversalDocs = docs.some((d) => d.project === null);
 
       expect(hasProjectDocs).toBe(true);
@@ -213,33 +213,37 @@ describe("Database Integration (Drizzle ORM)", () => {
   // ===================
   // Search Logging (Drizzle)
   // ===================
-  describe("Search Logging (Drizzle ORM)", () => {
+  describe('Search Logging (Drizzle ORM)', () => {
     const now = Date.now();
 
-    test("LOG search query", async () => {
+    test('LOG search query', async () => {
       await db.insert(schema.searchLog).values({
-        query: "oracle philosophy",
-        type: "all",
-        mode: "hybrid",
+        query: 'oracle philosophy',
+        type: 'all',
+        mode: 'hybrid',
         resultsCount: 5,
         searchTimeMs: 42,
         createdAt: now,
-        project: "test-project",
-        results: JSON.stringify([{ id: "doc1", score: 0.9 }]),
+        project: 'test-project',
+        results: JSON.stringify([{ id: 'doc1', score: 0.9 }]),
       });
 
       const logs = await db
         .select()
         .from(schema.searchLog)
-        .where(eq(schema.searchLog.query, "oracle philosophy"));
+        .where(eq(schema.searchLog.query, 'oracle philosophy'));
 
       expect(logs.length).toBe(1);
-      expect(logs[0].mode).toBe("hybrid");
+      expect(logs[0].mode).toBe('hybrid');
     });
 
-    test("AGGREGATE search stats", async () => {
-      await db.insert(schema.searchLog).values({ query: "test1", resultsCount: 3, searchTimeMs: 20, createdAt: now });
-      await db.insert(schema.searchLog).values({ query: "test2", resultsCount: 7, searchTimeMs: 35, createdAt: now });
+    test('AGGREGATE search stats', async () => {
+      await db
+        .insert(schema.searchLog)
+        .values({ query: 'test1', resultsCount: 3, searchTimeMs: 20, createdAt: now });
+      await db
+        .insert(schema.searchLog)
+        .values({ query: 'test2', resultsCount: 7, searchTimeMs: 35, createdAt: now });
 
       const stats = await db
         .select({
@@ -256,18 +260,21 @@ describe("Database Integration (Drizzle ORM)", () => {
   // ===================
   // Forum Operations (Drizzle)
   // ===================
-  describe("Forum Operations (Drizzle ORM)", () => {
+  describe('Forum Operations (Drizzle ORM)', () => {
     let threadId: number;
     const now = Date.now();
 
-    test("CREATE thread", async () => {
-      const result = await db.insert(schema.forumThreads).values({
-        title: "Test Drizzle Thread",
-        createdBy: "user",
-        status: "active",
-        createdAt: now,
-        updatedAt: now,
-      }).returning({ id: schema.forumThreads.id });
+    test('CREATE thread', async () => {
+      const result = await db
+        .insert(schema.forumThreads)
+        .values({
+          title: 'Test Drizzle Thread',
+          createdBy: 'user',
+          status: 'active',
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: schema.forumThreads.id });
 
       threadId = result[0].id;
 
@@ -276,16 +283,16 @@ describe("Database Integration (Drizzle ORM)", () => {
         .from(schema.forumThreads)
         .where(eq(schema.forumThreads.id, threadId));
 
-      expect(threads[0].title).toBe("Test Drizzle Thread");
-      expect(threads[0].status).toBe("active");
+      expect(threads[0].title).toBe('Test Drizzle Thread');
+      expect(threads[0].status).toBe('active');
     });
 
-    test("ADD message to thread", async () => {
+    test('ADD message to thread', async () => {
       await db.insert(schema.forumMessages).values({
         threadId,
-        role: "human",
-        content: "Test message via Drizzle",
-        author: "user",
+        role: 'human',
+        content: 'Test message via Drizzle',
+        author: 'user',
         createdAt: Date.now(),
       });
 
@@ -295,13 +302,13 @@ describe("Database Integration (Drizzle ORM)", () => {
         .where(eq(schema.forumMessages.threadId, threadId));
 
       expect(messages.length).toBe(1);
-      expect(messages[0].content).toBe("Test message via Drizzle");
+      expect(messages[0].content).toBe('Test message via Drizzle');
     });
 
-    test("UPDATE thread status", async () => {
+    test('UPDATE thread status', async () => {
       await db
         .update(schema.forumThreads)
-        .set({ status: "answered", updatedAt: Date.now() })
+        .set({ status: 'answered', updatedAt: Date.now() })
         .where(eq(schema.forumThreads.id, threadId));
 
       const threads = await db
@@ -309,25 +316,25 @@ describe("Database Integration (Drizzle ORM)", () => {
         .from(schema.forumThreads)
         .where(eq(schema.forumThreads.id, threadId));
 
-      expect(threads[0].status).toBe("answered");
+      expect(threads[0].status).toBe('answered');
     });
   });
 
   // ===================
   // Trace Logging (Drizzle)
   // ===================
-  describe("Trace Logging (Drizzle ORM)", () => {
-    test("LOG trace session", async () => {
+  describe('Trace Logging (Drizzle ORM)', () => {
+    test('LOG trace session', async () => {
       const traceId = `trace_${Date.now()}`;
       const now = Date.now();
 
       await db.insert(schema.traceLog).values({
         traceId,
-        query: "oracle patterns",
-        queryType: "general",
-        foundFiles: JSON.stringify(["/path/to/file.md"]),
-        foundCommits: JSON.stringify([{ hash: "abc123", message: "test" }]),
-        status: "raw",
+        query: 'oracle patterns',
+        queryType: 'general',
+        foundFiles: JSON.stringify(['/path/to/file.md']),
+        foundCommits: JSON.stringify([{ hash: 'abc123', message: 'test' }]),
+        status: 'raw',
         createdAt: now,
         updatedAt: now,
       });
@@ -338,31 +345,41 @@ describe("Database Integration (Drizzle ORM)", () => {
         .where(eq(schema.traceLog.traceId, traceId));
 
       expect(traces.length).toBe(1);
-      expect(traces[0].query).toBe("oracle patterns");
+      expect(traces[0].query).toBe('oracle patterns');
     });
   });
 
   // ===================
   // FTS5 (Raw SQL)
   // ===================
-  describe("FTS5 Full-Text Search (Raw SQL)", () => {
+  describe('FTS5 Full-Text Search (Raw SQL)', () => {
     beforeAll(() => {
-      sqlite.exec(`INSERT INTO oracle_fts (id, content, concepts) VALUES ('fts_1', 'The Oracle philosophy emphasizes patterns', 'oracle,philosophy')`);
-      sqlite.exec(`INSERT INTO oracle_fts (id, content, concepts) VALUES ('fts_2', 'Integration testing with Drizzle ORM', 'testing,drizzle')`);
+      sqlite.exec(
+        `INSERT INTO oracle_fts (id, content, concepts) VALUES ('fts_1', 'The Oracle philosophy emphasizes patterns', 'oracle,philosophy')`,
+      );
+      sqlite.exec(
+        `INSERT INTO oracle_fts (id, content, concepts) VALUES ('fts_2', 'Integration testing with Drizzle ORM', 'testing,drizzle')`,
+      );
     });
 
-    test("FTS5 MATCH query", () => {
-      const results = sqlite.query("SELECT id, content FROM oracle_fts WHERE oracle_fts MATCH ?").all("oracle") as any[];
+    test('FTS5 MATCH query', () => {
+      const results = sqlite
+        .query('SELECT id, content FROM oracle_fts WHERE oracle_fts MATCH ?')
+        .all('oracle') as any[];
       expect(results.length).toBeGreaterThanOrEqual(1);
     });
 
-    test("FTS5 with porter stemming", () => {
-      const results = sqlite.query("SELECT id FROM oracle_fts WHERE oracle_fts MATCH ?").all("tests") as any[];
+    test('FTS5 with porter stemming', () => {
+      const results = sqlite
+        .query('SELECT id FROM oracle_fts WHERE oracle_fts MATCH ?')
+        .all('tests') as any[];
       expect(results.length).toBeGreaterThanOrEqual(1);
     });
 
-    test("FTS5 concept column search", () => {
-      const results = sqlite.query("SELECT id FROM oracle_fts WHERE oracle_fts MATCH 'concepts:philosophy'").all() as any[];
+    test('FTS5 concept column search', () => {
+      const results = sqlite
+        .query("SELECT id FROM oracle_fts WHERE oracle_fts MATCH 'concepts:philosophy'")
+        .all() as any[];
       expect(results.length).toBeGreaterThanOrEqual(1);
     });
   });

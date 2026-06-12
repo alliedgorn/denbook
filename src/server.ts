@@ -8,7 +8,13 @@
 import { type Context, type Next } from 'hono';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
-import { healthRoute, authStatusRoute, authLoginRoute, authLogoutRoute, OPENAPI_INFO } from './server/openapi.ts';
+import {
+  healthRoute,
+  authStatusRoute,
+  authLoginRoute,
+  authLogoutRoute,
+  OPENAPI_INFO,
+} from './server/openapi.ts';
 import { cors } from 'hono/cors';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { createHmac, timingSafeEqual } from 'crypto';
@@ -25,12 +31,7 @@ import {
 import { getVaultPsiRoot } from './vault/handler.ts';
 
 // Config constants (no DB dependency)
-import {
-  PORT,
-  ORACLE_DATA_DIR,
-  REPO_ROOT,
-  DB_PATH,
-} from './config.ts';
+import { PORT, ORACLE_DATA_DIR, REPO_ROOT, DB_PATH } from './config.ts';
 
 import { eq, desc, gt, sql } from 'drizzle-orm';
 import {
@@ -62,7 +63,7 @@ import {
   handleSimilar,
   handleMap,
   handleMap3d,
-  handleVectorStats
+  handleVectorStats,
 } from './server/handlers.ts';
 
 import { handleRead } from './tools/read.ts';
@@ -70,7 +71,7 @@ import { handleRead } from './tools/read.ts';
 import {
   handleDashboardSummary,
   handleDashboardActivity,
-  handleDashboardGrowth
+  handleDashboardGrowth,
 } from './server/dashboard.ts';
 
 import { handleContext } from './server/context.ts';
@@ -85,7 +86,6 @@ import {
   updateThreadStatus,
   addMessage,
 } from './forum/handler.ts';
-
 
 import { enqueueNotification } from './notify.ts';
 import { rbacMiddleware, getGuestAllowlist } from './server/rbac.ts';
@@ -105,7 +105,12 @@ import { registerGuestRoutes } from './guest/routes.ts';
 import { registerLibraryRoutes } from './library/routes.ts';
 import { registerRiskRoutes } from './risk/routes.ts';
 import { registerTelegramRoutes } from './telegram/routes.ts';
-import { registerSearchRoutes, initSearch, searchIndexUpsert, searchIndexDelete } from './search/routes.ts';
+import {
+  registerSearchRoutes,
+  initSearch,
+  searchIndexUpsert,
+  searchIndexDelete,
+} from './search/routes.ts';
 import { registerSchedulerRoutes, initScheduler } from './scheduler/routes.ts';
 import { initDaemons, registerDaemonRoutes } from './daemons/routes.ts';
 import { registerBoardRoutes } from './board/routes.ts';
@@ -145,10 +150,7 @@ import {
   initGuestSafetyMigrations,
 } from './server/guest-safety.ts';
 
-import {
-  logSecurityEvent,
-  generateRequestId,
-} from './server/security-logger.ts';
+import { logSecurityEvent, generateRequestId } from './server/security-logger.ts';
 
 import {
   createToken,
@@ -168,15 +170,12 @@ import {
   getTraceChain,
   linkTraces,
   unlinkTraces,
-  getTraceLinkedChain
+  getTraceLinkedChain,
 } from './trace/handler.ts';
 
 // Reset stale indexing status on startup using Drizzle
 try {
-  db.update(indexingStatus)
-    .set({ isIndexing: 0 })
-    .where(eq(indexingStatus.id, 1))
-    .run();
+  db.update(indexingStatus).set({ isIndexing: 0 }).where(eq(indexingStatus.id, 1)).run();
   console.log('🔮 Reset indexing status on startup');
 } catch (e) {
   // Table might not exist yet - that's fine
@@ -188,9 +187,10 @@ async function withRetry<T>(fn: () => T | Promise<T>, maxRetries = 3, delayMs = 
     try {
       return await fn();
     } catch (err: any) {
-      const isBusy = err?.message?.includes('SQLITE_BUSY') || err?.message?.includes('database is locked');
+      const isBusy =
+        err?.message?.includes('SQLITE_BUSY') || err?.message?.includes('database is locked');
       if (isBusy && attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, delayMs * (attempt + 1)));
         continue;
       }
       throw err;
@@ -203,15 +203,25 @@ async function withRetry<T>(fn: () => T | Promise<T>, maxRetries = 3, delayMs = 
 configure({ dataDir: ORACLE_DATA_DIR, pidFileName: 'oracle-http.pid' });
 
 // Write PID file for process tracking
-writePidFile({ pid: process.pid, port: Number(PORT), startedAt: new Date().toISOString(), name: 'oracle-http' });
+writePidFile({
+  pid: process.pid,
+  port: Number(PORT),
+  startedAt: new Date().toISOString(),
+  name: 'oracle-http',
+});
 
 // Register graceful shutdown handlers
 registerSignalHandlers(async () => {
   console.log('\n🔮 Shutting down gracefully...');
   await performGracefulShutdown({
     resources: [
-      { close: () => { closeDb(); return Promise.resolve(); } }
-    ]
+      {
+        close: () => {
+          closeDb();
+          return Promise.resolve();
+        },
+      },
+    ],
   });
   removePidFile();
   console.log('👋 Oracle Nightly HTTP Server stopped.');
@@ -245,22 +255,31 @@ const ARCHIVE_DIR = path.join(ORACLE_DATA_DIR, 'uploads', 'archive');
 // HELP_ENDPOINTS imported from ./knowledge/routes.ts (T#806 extraction; T#811 hotfix)
 function findSimilarPaths(requested: string): string[] {
   const reqParts = requested.toLowerCase().split('/').filter(Boolean);
-  const paths = HELP_ENDPOINTS.map(e => e.path);
+  const paths = HELP_ENDPOINTS.map((e) => e.path);
   const uniquePaths = [...new Set(paths)];
-  const scored = uniquePaths.map(p => {
-    const parts = p.toLowerCase().split('/').filter(Boolean);
-    let score = 0;
-    for (const rp of reqParts) {
-      if (rp === 'api') continue;
-      for (const pp of parts) {
-        if (pp.startsWith(':')) continue;
-        if (pp === rp) { score += 3; break; }
-        if (pp.includes(rp) || rp.includes(pp)) { score += 1; break; }
+  const scored = uniquePaths
+    .map((p) => {
+      const parts = p.toLowerCase().split('/').filter(Boolean);
+      let score = 0;
+      for (const rp of reqParts) {
+        if (rp === 'api') continue;
+        for (const pp of parts) {
+          if (pp.startsWith(':')) continue;
+          if (pp === rp) {
+            score += 3;
+            break;
+          }
+          if (pp.includes(rp) || rp.includes(pp)) {
+            score += 1;
+            break;
+          }
+        }
       }
-    }
-    return { path: p, score };
-  }).filter(s => s.score > 0).sort((a, b) => b.score - a.score);
-  return scored.slice(0, 3).map(s => s.path);
+      return { path: p, score };
+    })
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score);
+  return scored.slice(0, 3).map((s) => s.path);
 }
 
 app.notFound((c) => {
@@ -269,22 +288,29 @@ app.notFound((c) => {
     return c.text('Not Found', 404);
   }
   const suggestions = findSimilarPaths(reqPath);
-  return c.json({
-    error: 'Not Found',
-    path: reqPath,
-    method: c.req.method,
-    hint: suggestions.length > 0
-      ? `Did you mean: ${suggestions.join(', ')}?`
-      : 'Use GET /api/help to see all available endpoints, or GET /api/help?q=keyword to search.',
-    docs: '/api/help',
-  }, 404);
+  return c.json(
+    {
+      error: 'Not Found',
+      path: reqPath,
+      method: c.req.method,
+      hint:
+        suggestions.length > 0
+          ? `Did you mean: ${suggestions.join(', ')}?`
+          : 'Use GET /api/help to see all available endpoints, or GET /api/help?q=keyword to search.',
+      docs: '/api/help',
+    },
+    404,
+  );
 });
 
 // CORS middleware — restricted to known origins (T#502)
-app.use('*', cors({
-  origin: ['http://localhost:47778', 'http://127.0.0.1:47778', 'https://denbook.online'],
-  credentials: true,
-}));
+app.use(
+  '*',
+  cors({
+    origin: ['http://localhost:47778', 'http://127.0.0.1:47778', 'https://denbook.online'],
+    credentials: true,
+  }),
+);
 
 // Security headers middleware (T#502 — Talon audit finding, T#503 — CSP)
 app.use('*', async (c, next) => {
@@ -293,18 +319,21 @@ app.use('*', async (c, next) => {
   c.header('X-Frame-Options', 'DENY');
   c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
   c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  c.header('Content-Security-Policy', [
-    "default-src 'none'",
-    "script-src 'self' cdn.jsdelivr.net",
-    "style-src 'self' 'unsafe-inline' fonts.googleapis.com",
-    "font-src fonts.gstatic.com",
-    "img-src 'self' data: blob:",
-    "connect-src 'self' ws: wss:",
-    "object-src 'none'",
-    "frame-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-  ].join('; '));
+  c.header(
+    'Content-Security-Policy',
+    [
+      "default-src 'none'",
+      "script-src 'self' cdn.jsdelivr.net",
+      "style-src 'self' 'unsafe-inline' fonts.googleapis.com",
+      'font-src fonts.gstatic.com',
+      "img-src 'self' data: blob:",
+      "connect-src 'self' ws: wss:",
+      "object-src 'none'",
+      "frame-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join('; '),
+  );
 });
 
 // ============================================================================
@@ -325,27 +354,29 @@ export function isLocalNetwork(c: Context): boolean {
   const realIp = c.req.header('x-real-ip');
   const ip = forwarded?.split(',')[0]?.trim() || realIp || '127.0.0.1';
 
-  return ip === '127.0.0.1'
-      || ip === '::1'
-      || ip === 'localhost'
-      || ip.startsWith('192.168.')
-      || ip.startsWith('10.')
-      || ip.startsWith('172.16.')
-      || ip.startsWith('172.17.')
-      || ip.startsWith('172.18.')
-      || ip.startsWith('172.19.')
-      || ip.startsWith('172.20.')
-      || ip.startsWith('172.21.')
-      || ip.startsWith('172.22.')
-      || ip.startsWith('172.23.')
-      || ip.startsWith('172.24.')
-      || ip.startsWith('172.25.')
-      || ip.startsWith('172.26.')
-      || ip.startsWith('172.27.')
-      || ip.startsWith('172.28.')
-      || ip.startsWith('172.29.')
-      || ip.startsWith('172.30.')
-      || ip.startsWith('172.31.');
+  return (
+    ip === '127.0.0.1' ||
+    ip === '::1' ||
+    ip === 'localhost' ||
+    ip.startsWith('192.168.') ||
+    ip.startsWith('10.') ||
+    ip.startsWith('172.16.') ||
+    ip.startsWith('172.17.') ||
+    ip.startsWith('172.18.') ||
+    ip.startsWith('172.19.') ||
+    ip.startsWith('172.20.') ||
+    ip.startsWith('172.21.') ||
+    ip.startsWith('172.22.') ||
+    ip.startsWith('172.23.') ||
+    ip.startsWith('172.24.') ||
+    ip.startsWith('172.25.') ||
+    ip.startsWith('172.26.') ||
+    ip.startsWith('172.27.') ||
+    ip.startsWith('172.28.') ||
+    ip.startsWith('172.29.') ||
+    ip.startsWith('172.30.') ||
+    ip.startsWith('172.31.')
+  );
 }
 
 // Generate session token using HMAC-SHA256
@@ -355,9 +386,7 @@ export function generateSessionToken(role: Role = 'owner', data: string = ''): s
   const duration = role === 'guest' ? GUEST_SESSION_DURATION_MS : SESSION_DURATION_MS;
   const expires = Date.now() + duration;
   const payload = `${role}:${data}:${expires}`;
-  const signature = createHmac('sha256', SESSION_SECRET)
-    .update(payload)
-    .digest('hex');
+  const signature = createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
   return `${payload}:${signature}`;
 }
 
@@ -385,9 +414,7 @@ export function parseSessionToken(token: string): SessionInfo {
     const expires = parseInt(expiresStr, 10);
     if (isNaN(expires) || expires < Date.now()) return { valid: false };
 
-    const expectedSignature = createHmac('sha256', SESSION_SECRET)
-      .update(expiresStr)
-      .digest('hex');
+    const expectedSignature = createHmac('sha256', SESSION_SECRET).update(expiresStr).digest('hex');
 
     const sigBuf = Buffer.from(signature);
     const expectedBuf = Buffer.from(expectedSignature);
@@ -405,9 +432,7 @@ export function parseSessionToken(token: string): SessionInfo {
     if (role !== 'owner' && role !== 'guest') return { valid: false };
 
     const payload = `${role}:${data}:${expiresStr}`;
-    const expectedSignature = createHmac('sha256', SESSION_SECRET)
-      .update(payload)
-      .digest('hex');
+    const expectedSignature = createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
 
     const sigBuf = Buffer.from(signature);
     const expectedBuf = Buffer.from(expectedSignature);
@@ -483,7 +508,7 @@ app.use('/api/*', async (c, next) => {
     // shared-secret lives. Path-level allowlist (not pattern) keeps the surface narrow.
     '/api/webhooks/hevy',
   ];
-  if (publicPaths.some(p => path === p)) {
+  if (publicPaths.some((p) => path === p)) {
     return next();
   }
 
@@ -496,7 +521,13 @@ app.use('/api/*', async (c, next) => {
     if (result.valid) {
       // Decree #70 Req 8 — expired-grace tokens can ONLY reach /api/auth/rotate
       if (result.expiredGrace && path !== '/api/auth/rotate') {
-        return c.json({ error: 'Token expired — self-rotate available at POST /api/auth/rotate', code: 'expired_grace_rotate_only' }, 401);
+        return c.json(
+          {
+            error: 'Token expired — self-rotate available at POST /api/auth/rotate',
+            code: 'expired_grace_rotate_only',
+          },
+          401,
+        );
       }
       // Token validated — set actor identity and skip further auth
       c.set('actor' as any, result.beast);
@@ -531,7 +562,10 @@ app.use('/api/*', async (c, next) => {
       return next();
     } else {
       // Invalid/expired token — log and reject
-      const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+      const ip =
+        c.req.header('x-real-ip') ||
+        c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+        'local';
       logSecurityEvent({
         eventType: 'auth_failure',
         severity: 'warning',
@@ -568,7 +602,10 @@ app.use('/api/*', async (c, next) => {
         // Log guest API access
         logGuestAction(sqlite, guest.id, path, c.req.method);
       } else {
-        return c.json({ error: 'Unauthorized', message: 'Guest account not found', requiresAuth: true }, 401);
+        return c.json(
+          { error: 'Unauthorized', message: 'Guest account not found', requiresAuth: true },
+          401,
+        );
       }
     } else {
       c.set('role' as any, 'owner' as Role);
@@ -591,7 +628,13 @@ app.use('/api/*', rbacMiddleware());
 // Audit Logging Middleware (Task #72 — logs all mutating API requests)
 // ============================================================================
 
-const AUDIT_SKIP = ['/api/health', '/api/help', '/api/auth/status', '/api/auth/login', '/api/session/stats'];
+const AUDIT_SKIP = [
+  '/api/health',
+  '/api/help',
+  '/api/auth/status',
+  '/api/auth/login',
+  '/api/session/stats',
+];
 
 app.use('/api/*', async (c, next) => {
   const method = c.req.method;
@@ -603,23 +646,33 @@ app.use('/api/*', async (c, next) => {
 
   // Skip: GETs (except sensitive), static, health, WS
   const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
-  const isSensitiveGet = method === 'GET' && (path.includes('/dm/') || path.includes('/settings') || path.includes('/audit'));
+  const isSensitiveGet =
+    method === 'GET' &&
+    (path.includes('/dm/') || path.includes('/settings') || path.includes('/audit'));
   if (!isMutation && !isSensitiveGet) return next();
-  if (AUDIT_SKIP.some(p => path === p)) return next();
+  if (AUDIT_SKIP.some((p) => path === p)) return next();
 
   // Clone body BEFORE next() consumes it — extraction after next() fails on consumed streams
   let bodyData: Record<string, unknown> | null = null;
   if (isMutation) {
     try {
-      bodyData = await c.req.raw.clone().json().catch(() => null) as Record<string, unknown> | null;
-    } catch { /* body parse failed */ }
+      bodyData = (await c.req.raw
+        .clone()
+        .json()
+        .catch(() => null)) as Record<string, unknown> | null;
+    } catch {
+      /* body parse failed */
+    }
   }
 
   await next();
 
   // Log after handler completes
   try {
-    const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+    const ip =
+      c.req.header('x-real-ip') ||
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+      'local';
     // Actor extraction chain (T#718 — closes Bertus/Flint #10002 audit-attribution spoof gap):
     // 1. Bearer token identity (set by auth middleware — trusted)
     // 2. Session cookie → "gorn" (browser requests — trusted)
@@ -651,7 +704,9 @@ app.use('/api/*', async (c, next) => {
     }
     if (!actor) {
       // Path-identity routes — /api/dm/<beast>/... has the beast in the path itself
-      const pathMatch = path.match(/\/api\/(?:dm|schedules)\/(?!messages|dashboard|due|pending)([a-z][\w-]*)/i);
+      const pathMatch = path.match(
+        /\/api\/(?:dm|schedules)\/(?!messages|dashboard|due|pending)([a-z][\w-]*)/i,
+      );
       if (pathMatch) actor = pathMatch[1];
     }
 
@@ -664,7 +719,11 @@ app.use('/api/*', async (c, next) => {
         actor: actor || 'unknown',
         actorType: (actorType as any) || 'unknown',
         target: path,
-        details: { auth_method: 'legacy_as_param', as_param_value: asParam, deprecation: 'Use Bearer token auth' },
+        details: {
+          auth_method: 'legacy_as_param',
+          as_param_value: asParam,
+          deprecation: 'Use Bearer token auth',
+        },
         ipSource: ip,
         requestId,
       });
@@ -687,10 +746,23 @@ app.use('/api/*', async (c, next) => {
     const resourceType = parts[0] || null;
     const resourceId = parts[1] || null;
 
-    sqlite.prepare(
-      `INSERT INTO audit_log (actor, actor_type, action, resource_type, resource_id, ip_source, request_method, request_path, status_code, request_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(actor, actorType, `${method} ${path}`, resourceType, resourceId, ip, method, path, statusCode, requestId);
+    sqlite
+      .prepare(
+        `INSERT INTO audit_log (actor, actor_type, action, resource_type, resource_id, ip_source, request_method, request_path, status_code, request_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        actor,
+        actorType,
+        `${method} ${path}`,
+        resourceType,
+        resourceId,
+        ip,
+        method,
+        path,
+        statusCode,
+        requestId,
+      );
 
     // Auto-log 403 permission denials as security events
     if (statusCode === 403) {
@@ -705,7 +777,9 @@ app.use('/api/*', async (c, next) => {
         requestId,
       });
     }
-  } catch { /* never block requests for logging failures */ }
+  } catch {
+    /* never block requests for logging failures */
+  }
 });
 
 // ============================================================================
@@ -744,10 +818,14 @@ sqlite.exec(`CREATE TABLE IF NOT EXISTS telegram_messages (
   PRIMARY KEY (chat_id, id)
 )`);
 // Retention-shape-reserved index for future cleanup cron (Bertus #887 flag 2).
-sqlite.exec(`CREATE INDEX IF NOT EXISTS idx_telegram_messages_date_unix ON telegram_messages(date_unix)`);
+sqlite.exec(
+  `CREATE INDEX IF NOT EXISTS idx_telegram_messages_date_unix ON telegram_messages(date_unix)`,
+);
 
 export function getRateLimit(ip: string): { count: number; firstAttempt: number } | null {
-  const row = sqlite.prepare('SELECT count, first_attempt_at FROM login_rate_limits WHERE ip = ?').get(ip) as any;
+  const row = sqlite
+    .prepare('SELECT count, first_attempt_at FROM login_rate_limits WHERE ip = ?')
+    .get(ip) as any;
   if (!row) return null;
   return { count: row.count, firstAttempt: row.first_attempt_at };
 }
@@ -755,7 +833,6 @@ export function getRateLimit(ip: string): { count: number; firstAttempt: number 
 export function clearRateLimit(ip: string): void {
   sqlite.prepare('DELETE FROM login_rate_limits WHERE ip = ?').run(ip);
 }
-
 
 // ============================================================================
 // Settings Routes
@@ -768,7 +845,6 @@ registerSettingsRoutes(app, { getSetting, setSetting, logSecurityEvent });
 // API Routes
 // ============================================================================
 
-
 // Health check (OpenAPI — Spec #55 Phase 1 proof-of-pattern)
 app.openapi(healthRoute, (c) => {
   return c.json({ status: 'ok', server: 'oracle-nightly', port: PORT, oracleV2: 'connected' });
@@ -777,27 +853,32 @@ app.openapi(healthRoute, (c) => {
 // Knowledge / docs routes extracted to src/knowledge/routes.ts (T#806 P3-B)
 registerKnowledgeRoutes(app, sqlite, { repoRoot: REPO_ROOT });
 
-
 // ============================================================================
 // Dashboard Routes
 // ============================================================================
 
-
 // Guest routes extracted to src/guest/routes.ts (T#807 P3-C)
-registerGuestRoutes(app, sqlite, { wsBroadcast, withRetry, getTmuxStatus, normalizeAvatarUrl, uploadsDir: UPLOADS_DIR });
-
+registerGuestRoutes(app, sqlite, {
+  wsBroadcast,
+  withRetry,
+  getTmuxStatus,
+  normalizeAvatarUrl,
+  uploadsDir: UPLOADS_DIR,
+});
 
 // Session stats endpoint - tracks activity from DB (includes MCP usage)
 app.get('/api/session/stats', (c) => {
   const since = c.req.query('since');
   const sinceTime = since ? parseInt(since) : Date.now() - 24 * 60 * 60 * 1000; // Default 24h
 
-  const searches = db.select({ count: sql<number>`count(*)` })
+  const searches = db
+    .select({ count: sql<number>`count(*)` })
     .from(searchLog)
     .where(gt(searchLog.createdAt, sinceTime))
     .get();
 
-  const learnings = db.select({ count: sql<number>`count(*)` })
+  const learnings = db
+    .select({ count: sql<number>`count(*)` })
     .from(learnLog)
     .where(gt(learnLog.createdAt, sinceTime))
     .get();
@@ -805,7 +886,7 @@ app.get('/api/session/stats', (c) => {
   return c.json({
     searches: searches?.count || 0,
     learnings: learnings?.count || 0,
-    since: sinceTime
+    since: sinceTime,
   });
 });
 
@@ -823,23 +904,28 @@ function loadAllSpinnerVerbs(): Set<string> {
   const verbs = new Set<string>();
   const workspaceDir = '/home/gorn/workspace';
   try {
-    const dirs = fs.readdirSync(workspaceDir, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-      .map(d => d.name);
+    const dirs = fs
+      .readdirSync(workspaceDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
     for (const dir of dirs) {
       try {
         const configPath = path.join(workspaceDir, dir, '.claude', 'settings.local.json');
         const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
         const sv = config.spinnerVerbs;
         if (sv) {
-          const verbList = Array.isArray(sv) ? sv : (sv.verbs || []);
+          const verbList = Array.isArray(sv) ? sv : sv.verbs || [];
           for (const v of verbList) {
             if (typeof v === 'string') verbs.add(v);
           }
         }
-      } catch { /* skip dirs without config */ }
+      } catch {
+        /* skip dirs without config */
+      }
     }
-  } catch { /* workspace not readable */ }
+  } catch {
+    /* workspace not readable */
+  }
   return verbs;
 }
 
@@ -863,29 +949,39 @@ function normalizeAvatarUrl(url: string | null): string | null {
   // /api/files/ID/download -> look up filename from files table, rewrite to /api/f/
   const filesMatch = url.match(/^\/api\/files\/(\d+)\/download$/);
   if (filesMatch) {
-    const file = sqlite.prepare('SELECT filename FROM files WHERE id = ?').get(parseInt(filesMatch[1])) as any;
+    const file = sqlite
+      .prepare('SELECT filename FROM files WHERE id = ?')
+      .get(parseInt(filesMatch[1])) as any;
     if (file) return '/api/f/' + file.filename;
   }
   return url;
 }
 
 // Shared tmux status detection — used by both /api/pack and /api/guest/pack
-function getTmuxStatus(): { tmuxStatus: Map<string, 'processing' | 'idle' | 'waiting' | 'shell' | 'offline'>; contextPctMap: Map<string, number | null> } {
-  const tmuxStatus: Map<string, 'processing' | 'idle' | 'waiting' | 'shell' | 'offline'> = new Map();
+function getTmuxStatus(): {
+  tmuxStatus: Map<string, 'processing' | 'idle' | 'waiting' | 'shell' | 'offline'>;
+  contextPctMap: Map<string, number | null>;
+} {
+  const tmuxStatus: Map<string, 'processing' | 'idle' | 'waiting' | 'shell' | 'offline'> =
+    new Map();
   const contextPctMap: Map<string, number | null> = new Map();
   try {
-    const output = execSync(
-      'tmux list-sessions -F "#{session_name}" 2>/dev/null',
-      { timeout: 3000 }
-    ).toString().trim();
+    const output = execSync('tmux list-sessions -F "#{session_name}" 2>/dev/null', {
+      timeout: 3000,
+    })
+      .toString()
+      .trim();
     const sessions = output.split('\n').filter(Boolean);
 
     for (const session of sessions) {
       try {
         const cmd = execSync(
           `tmux list-panes -t ${JSON.stringify(session)} -F "#{pane_current_command}" 2>/dev/null`,
-          { timeout: 2000 }
-        ).toString().trim().split('\n')[0];
+          { timeout: 2000 },
+        )
+          .toString()
+          .trim()
+          .split('\n')[0];
 
         if (cmd !== 'claude') {
           tmuxStatus.set(session.toLowerCase(), 'shell');
@@ -919,7 +1015,10 @@ function getTmuxStatus(): { tmuxStatus: Map<string, 'processing' | 'idle' | 'wai
           // Find the last ❯ prompt line
           let promptIdx = -1;
           for (let i = lines.length - 1; i >= 0; i--) {
-            if (/^❯/.test(lines[i].trim())) { promptIdx = i; break; }
+            if (/^❯/.test(lines[i].trim())) {
+              promptIdx = i;
+              break;
+            }
           }
 
           // Check the 2 lines above the ❯ prompt (skip separator)
@@ -948,20 +1047,25 @@ function getTmuxStatus(): { tmuxStatus: Map<string, 'processing' | 'idle' | 'wai
           let contextPct: number | null = null;
           for (let i = lines.length - 1; i >= 0; i--) {
             const pctMatch = lines[i].match(/(\d+)%\s*\|/);
-            if (pctMatch) { contextPct = parseInt(pctMatch[1], 10); break; }
+            if (pctMatch) {
+              contextPct = parseInt(pctMatch[1], 10);
+              break;
+            }
           }
           contextPctMap.set(session.toLowerCase(), contextPct);
 
           // Detect waiting state — Claude is stuck at a permission/choice prompt
           // Only scan lines near the prompt (last 8 lines before ❯) to avoid false positives
           // from notification text or conversation content in the pane buffer
-          const promptArea = promptIdx > 0
-            ? lines.slice(Math.max(promptIdx - 8, 0), promptIdx).join('\n')
-            : '';
+          const promptArea =
+            promptIdx > 0 ? lines.slice(Math.max(promptIdx - 8, 0), promptIdx).join('\n') : '';
           // Match actual Claude permission UI: bordered choice boxes, (y/n) prompts
-          const isWaiting = promptArea.length > 0
-            && /Allow.*│|│.*Allow|Deny.*│|│.*Deny|Do you want to|trust this|Allow once|Always allow|\(y\/n\)|\(Y\/n\)/.test(promptArea)
-            && !isProcessing;
+          const isWaiting =
+            promptArea.length > 0 &&
+            /Allow.*│|│.*Allow|Deny.*│|│.*Deny|Do you want to|trust this|Allow once|Always allow|\(y\/n\)|\(Y\/n\)/.test(
+              promptArea,
+            ) &&
+            !isProcessing;
 
           if (isProcessing) {
             tmuxStatus.set(session.toLowerCase(), 'processing');
@@ -977,7 +1081,9 @@ function getTmuxStatus(): { tmuxStatus: Map<string, 'processing' | 'idle' | 'wai
         tmuxStatus.set(session.toLowerCase(), 'shell');
       }
     }
-  } catch { /* tmux not running */ }
+  } catch {
+    /* tmux not running */
+  }
 
   return { tmuxStatus, contextPctMap };
 }
@@ -1010,9 +1116,17 @@ registerRemoteRoutes(app, { isLocalNetwork, hasSessionAuth });
 // List all beast profiles
 
 // Migration: add sex column to beast_profiles (T#411)
-try { sqlite.prepare('ALTER TABLE beast_profiles ADD COLUMN sex TEXT DEFAULT NULL').run(); } catch { /* exists */ }
+try {
+  sqlite.prepare('ALTER TABLE beast_profiles ADD COLUMN sex TEXT DEFAULT NULL').run();
+} catch {
+  /* exists */
+}
 // T#658 — Norm #65 (Nap vs Rest) — scheduler-aware rest state
-try { sqlite.prepare("ALTER TABLE beast_profiles ADD COLUMN rest_status TEXT DEFAULT 'active'").run(); } catch { /* exists */ }
+try {
+  sqlite.prepare("ALTER TABLE beast_profiles ADD COLUMN rest_status TEXT DEFAULT 'active'").run();
+} catch {
+  /* exists */
+}
 
 // Get beast profile by name
 
@@ -1031,26 +1145,59 @@ try { sqlite.prepare("ALTER TABLE beast_profiles ADD COLUMN rest_status TEXT DEF
 // Get unread counts for a beast (T#618: excludes muted threads)
 
 // File archive columns (T#533)
-try { sqlite.prepare(`ALTER TABLE files ADD COLUMN archived_at INTEGER`).run(); } catch { /* exists */ }
-try { sqlite.prepare(`ALTER TABLE files ADD COLUMN archive_path TEXT`).run(); } catch { /* exists */ }
+try {
+  sqlite.prepare(`ALTER TABLE files ADD COLUMN archived_at INTEGER`).run();
+} catch {
+  /* exists */
+}
+try {
+  sqlite.prepare(`ALTER TABLE files ADD COLUMN archive_path TEXT`).run();
+} catch {
+  /* exists */
+}
 
 // UPLOADS_DIR moved up — needed by registerGuestRoutes + registerFilesRoutes (T#807 hotfix:
 // TDZ error if defined after first use).
 
 // Files + upload routes extracted to src/files/routes.ts (T#804 P3-E)
-registerFilesRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, isLocalNetwork, verifySessionToken, uploadsDir: UPLOADS_DIR, sessionCookieName: SESSION_COOKIE_NAME });
+registerFilesRoutes(app, sqlite, {
+  hasSessionAuth,
+  isTrustedRequest,
+  isLocalNetwork,
+  verifySessionToken,
+  uploadsDir: UPLOADS_DIR,
+  sessionCookieName: SESSION_COOKIE_NAME,
+});
 
 // (stats endpoint moved above :id routes)
 
 // Get attachments for a message
 
 // T#618: Inline migration — add level column to forum_notification_prefs
-try { sqlite.exec("ALTER TABLE forum_notification_prefs ADD COLUMN level TEXT NOT NULL DEFAULT 'full'"); } catch { /* exists */ }
-try { sqlite.exec("UPDATE forum_notification_prefs SET level = 'muted' WHERE muted = 1 AND level = 'full'"); } catch { /* ignore */ }
+try {
+  sqlite.exec("ALTER TABLE forum_notification_prefs ADD COLUMN level TEXT NOT NULL DEFAULT 'full'");
+} catch {
+  /* exists */
+}
+try {
+  sqlite.exec(
+    "UPDATE forum_notification_prefs SET level = 'muted' WHERE muted = 1 AND level = 'full'",
+  );
+} catch {
+  /* ignore */
+}
 
 // T#622: Inline migration — add deleted_at column to forum_messages for soft delete
-try { sqlite.exec("ALTER TABLE forum_messages ADD COLUMN deleted_at TEXT DEFAULT NULL"); } catch { /* exists */ }
-try { sqlite.exec("ALTER TABLE forum_messages ADD COLUMN deleted_by TEXT DEFAULT NULL"); } catch { /* exists */ }
+try {
+  sqlite.exec('ALTER TABLE forum_messages ADD COLUMN deleted_at TEXT DEFAULT NULL');
+} catch {
+  /* exists */
+}
+try {
+  sqlite.exec('ALTER TABLE forum_messages ADD COLUMN deleted_by TEXT DEFAULT NULL');
+} catch {
+  /* exists */
+}
 
 // Mute/unmute thread notifications for a beast (alias for subscribe with level muted/full)
 
@@ -1086,30 +1233,66 @@ try { sqlite.exec("ALTER TABLE forum_messages ADD COLUMN deleted_by TEXT DEFAULT
 // Add reaction to message
 // Emoji whitelist — DB-backed, any Beast can add (T#385)
 try {
-  sqlite.prepare(`CREATE TABLE IF NOT EXISTS emoji_whitelist (
+  sqlite
+    .prepare(`CREATE TABLE IF NOT EXISTS emoji_whitelist (
     emoji TEXT PRIMARY KEY,
     added_by TEXT,
     created_at INTEGER NOT NULL
-  )`).run();
-} catch { /* already exists */ }
+  )`)
+    .run();
+} catch {
+  /* already exists */
+}
 
 // Seed defaults if table is empty
-const emojiCount = (sqlite.prepare('SELECT COUNT(*) as c FROM emoji_whitelist').get() as any)?.c || 0;
+const emojiCount =
+  (sqlite.prepare('SELECT COUNT(*) as c FROM emoji_whitelist').get() as any)?.c || 0;
 if (emojiCount === 0) {
   const defaults = [
-    '👍', '👎', '❤️', '🔥', '👀', '✅', '❌',
-    '😂', '😢', '🤔', '💪', '🎉', '🙏', '👏', '💯',
-    '🚀', '⭐', '⚠️', '💡', '🏆', '🫡', '🤝',
-    '📦', '🐾', '🐴', '🐊', '🐻', '🦘', '🦁', '🦝', '🦦', '🐙', '🐦‍⬛',
+    '👍',
+    '👎',
+    '❤️',
+    '🔥',
+    '👀',
+    '✅',
+    '❌',
+    '😂',
+    '😢',
+    '🤔',
+    '💪',
+    '🎉',
+    '🙏',
+    '👏',
+    '💯',
+    '🚀',
+    '⭐',
+    '⚠️',
+    '💡',
+    '🏆',
+    '🫡',
+    '🤝',
+    '📦',
+    '🐾',
+    '🐴',
+    '🐊',
+    '🐻',
+    '🦘',
+    '🦁',
+    '🦝',
+    '🦦',
+    '🐙',
+    '🐦‍⬛',
   ];
-  const insert = sqlite.prepare('INSERT OR IGNORE INTO emoji_whitelist (emoji, added_by, created_at) VALUES (?, ?, ?)');
+  const insert = sqlite.prepare(
+    'INSERT OR IGNORE INTO emoji_whitelist (emoji, added_by, created_at) VALUES (?, ?, ?)',
+  );
   const now = Date.now();
   for (const e of defaults) insert.run(e, 'system', now);
 }
 
 function getSupportedEmoji(): Set<string> {
   const rows = sqlite.prepare('SELECT emoji FROM emoji_whitelist').all() as any[];
-  return new Set(rows.map(r => r.emoji));
+  return new Set(rows.map((r) => r.emoji));
 }
 
 // Cache — refreshed on add/remove
@@ -1122,7 +1305,6 @@ let SUPPORTED_EMOJI = getSupportedEmoji();
 // DELETE /api/forum/emojis/:emoji — remove emoji (Gorn only)
 
 // GET /api/reactions/supported — legacy endpoint
-
 
 // Remove reaction
 
@@ -1137,20 +1319,30 @@ let SUPPORTED_EMOJI = getSupportedEmoji();
 // Ensure queue columns exist
 try {
   sqlite.prepare('ALTER TABLE forum_threads ADD COLUMN queue_status TEXT DEFAULT NULL').run();
-} catch { /* column already exists */ }
+} catch {
+  /* column already exists */
+}
 try {
   sqlite.prepare('ALTER TABLE forum_threads ADD COLUMN queue_tagged_by TEXT DEFAULT NULL').run();
-} catch { /* column already exists */ }
+} catch {
+  /* column already exists */
+}
 try {
   sqlite.prepare('ALTER TABLE forum_threads ADD COLUMN queue_tagged_at INTEGER DEFAULT NULL').run();
-} catch { /* column already exists */ }
+} catch {
+  /* column already exists */
+}
 try {
   sqlite.prepare('ALTER TABLE forum_threads ADD COLUMN queue_summary TEXT DEFAULT NULL').run();
-} catch { /* column already exists */ }
+} catch {
+  /* column already exists */
+}
 
 try {
   sqlite.prepare('ALTER TABLE forum_threads ADD COLUMN deleted_at TEXT DEFAULT NULL').run();
-} catch { /* column already exists */ }
+} catch {
+  /* column already exists */
+}
 
 // Mindlink removed — replaced by Prowl (T#279/T#280)
 // DB table 'mindlinks' preserved for data migration to Prowl
@@ -1187,7 +1379,15 @@ import {
 } from './dm/handler.ts';
 
 // DM performance index — composite for sorted conversation queries
-try { sqlite.prepare('CREATE INDEX IF NOT EXISTS idx_dm_messages_conv_created ON dm_messages(conversation_id, created_at)').run(); } catch { /* exists */ }
+try {
+  sqlite
+    .prepare(
+      'CREATE INDEX IF NOT EXISTS idx_dm_messages_conv_created ON dm_messages(conversation_id, created_at)',
+    )
+    .run();
+} catch {
+  /* exists */
+}
 
 // DM Dashboard — accessible to authenticated users (auth middleware handles access)
 
@@ -1212,7 +1412,8 @@ try { sqlite.prepare('CREATE INDEX IF NOT EXISTS idx_dm_messages_conv_created ON
 
 // Create library table
 try {
-  sqlite.prepare(`CREATE TABLE IF NOT EXISTS library (
+  sqlite
+    .prepare(`CREATE TABLE IF NOT EXISTS library (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -1221,11 +1422,16 @@ try {
     tags TEXT DEFAULT '[]',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
-  )`).run();
-} catch { /* already exists */ }
+  )`)
+    .run();
+} catch {
+  /* already exists */
+}
 
 // Library Shelves table (T#330)
-try { sqlite.prepare(`
+try {
+  sqlite
+    .prepare(`
   CREATE TABLE IF NOT EXISTS library_shelves (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -1236,20 +1442,46 @@ try { sqlite.prepare(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
-`).run(); } catch { /* exists */ }
+`)
+    .run();
+} catch {
+  /* exists */
+}
 
 // Add shelf_id to library table
-try { sqlite.prepare(`ALTER TABLE library ADD COLUMN shelf_id INTEGER REFERENCES library_shelves(id) ON DELETE SET NULL`).run(); } catch { /* exists */ }
+try {
+  sqlite
+    .prepare(
+      `ALTER TABLE library ADD COLUMN shelf_id INTEGER REFERENCES library_shelves(id) ON DELETE SET NULL`,
+    )
+    .run();
+} catch {
+  /* exists */
+}
 // Index for efficient shelf filtering
-try { sqlite.prepare(`CREATE INDEX IF NOT EXISTS idx_library_shelf_id ON library(shelf_id)`).run(); } catch { /* exists */ }
+try {
+  sqlite.prepare(`CREATE INDEX IF NOT EXISTS idx_library_shelf_id ON library(shelf_id)`).run();
+} catch {
+  /* exists */
+}
 // T#623: Add visibility to shelves (public/internal, default internal)
-try { sqlite.prepare(`ALTER TABLE library_shelves ADD COLUMN visibility TEXT NOT NULL DEFAULT 'internal'`).run(); } catch { /* exists */ }
+try {
+  sqlite
+    .prepare(`ALTER TABLE library_shelves ADD COLUMN visibility TEXT NOT NULL DEFAULT 'internal'`)
+    .run();
+} catch {
+  /* exists */
+}
 
 // Library routes — extracted to src/library/routes.ts
 
 // Board routes (projects + tasks + task_comments + /api/board summary) — extracted to src/board/routes.ts (T#774)
-registerBoardRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast });
-
+registerBoardRoutes(app, sqlite, {
+  hasSessionAuth,
+  requireBeastIdentity,
+  isTrustedRequest,
+  wsBroadcast,
+});
 
 // ============================================================================
 // Beast Scheduler — Persistent schedules that survive sleep cycles
@@ -1257,7 +1489,8 @@ registerBoardRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, isTrust
 
 // Create beast_schedules table
 try {
-  sqlite.prepare(`CREATE TABLE IF NOT EXISTS beast_schedules (
+  sqlite
+    .prepare(`CREATE TABLE IF NOT EXISTS beast_schedules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     beast TEXT NOT NULL,
     task TEXT NOT NULL,
@@ -1270,26 +1503,66 @@ try {
     source TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
-  )`).run();
-  sqlite.prepare(`CREATE INDEX IF NOT EXISTS idx_beast_schedules_beast ON beast_schedules(beast)`).run();
-  sqlite.prepare(`CREATE INDEX IF NOT EXISTS idx_beast_schedules_due ON beast_schedules(next_due_at)`).run();
+  )`)
+    .run();
+  sqlite
+    .prepare(`CREATE INDEX IF NOT EXISTS idx_beast_schedules_beast ON beast_schedules(beast)`)
+    .run();
+  sqlite
+    .prepare(`CREATE INDEX IF NOT EXISTS idx_beast_schedules_due ON beast_schedules(next_due_at)`)
+    .run();
   // v2 columns
-  try { sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN last_triggered_at TEXT`).run(); } catch { /* exists */ }
-  try { sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN trigger_status TEXT DEFAULT 'pending'`).run(); } catch { /* exists */ }
+  try {
+    sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN last_triggered_at TEXT`).run();
+  } catch {
+    /* exists */
+  }
+  try {
+    sqlite
+      .prepare(`ALTER TABLE beast_schedules ADD COLUMN trigger_status TEXT DEFAULT 'pending'`)
+      .run();
+  } catch {
+    /* exists */
+  }
   // v3: fixed-time scheduling
-  try { sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN schedule_time TEXT`).run(); } catch { /* exists */ }
-  try { sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN timezone TEXT DEFAULT 'Asia/Bangkok'`).run(); } catch { /* exists */ }
+  try {
+    sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN schedule_time TEXT`).run();
+  } catch {
+    /* exists */
+  }
+  try {
+    sqlite
+      .prepare(`ALTER TABLE beast_schedules ADD COLUMN timezone TEXT DEFAULT 'Asia/Bangkok'`)
+      .run();
+  } catch {
+    /* exists */
+  }
   // v4: one-off schedules
-  try { sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN once INTEGER DEFAULT 0`).run(); } catch { /* exists */ }
-  try { sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN run_at TEXT`).run(); } catch { /* exists */ }
+  try {
+    sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN once INTEGER DEFAULT 0`).run();
+  } catch {
+    /* exists */
+  }
+  try {
+    sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN run_at TEXT`).run();
+  } catch {
+    /* exists */
+  }
   // v5: weekday-anchored recurring (T#706 — Boro coach lane)
-  try { sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN days_of_week TEXT`).run(); } catch { /* exists */ }
-} catch { /* already exists */ }
+  try {
+    sqlite.prepare(`ALTER TABLE beast_schedules ADD COLUMN days_of_week TEXT`).run();
+  } catch {
+    /* exists */
+  }
+} catch {
+  /* already exists */
+}
 
 // ============================================================================
 // Audit Log table (Task #72 — Bertus design, thread #81)
 try {
-  sqlite.prepare(`CREATE TABLE IF NOT EXISTS audit_log (
+  sqlite
+    .prepare(`CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT DEFAULT (datetime('now')),
     actor TEXT,
@@ -1303,39 +1576,58 @@ try {
     request_path TEXT,
     status_code INTEGER,
     request_id TEXT
-  )`).run();
+  )`)
+    .run();
   sqlite.prepare(`CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp)`).run();
   sqlite.prepare(`CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor)`).run();
-  sqlite.prepare(`CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_log(resource_type, resource_id)`).run();
+  sqlite
+    .prepare(
+      `CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_log(resource_type, resource_id)`,
+    )
+    .run();
   sqlite.prepare(`CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action)`).run();
-  try { sqlite.prepare(`ALTER TABLE audit_log ADD COLUMN request_id TEXT`).run(); } catch { /* exists */ }
+  try {
+    sqlite.prepare(`ALTER TABLE audit_log ADD COLUMN request_id TEXT`).run();
+  } catch {
+    /* exists */
+  }
   sqlite.prepare(`CREATE INDEX IF NOT EXISTS idx_audit_request_id ON audit_log(request_id)`).run();
-} catch { /* already exists */ }
+} catch {
+  /* already exists */
+}
 
 // Teams tables (Task #81 — Gnarl spec, thread #105)
 try {
-  sqlite.prepare(`CREATE TABLE IF NOT EXISTS teams (
+  sqlite
+    .prepare(`CREATE TABLE IF NOT EXISTS teams (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     description TEXT,
     created_by TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
-  )`).run();
-  sqlite.prepare(`CREATE TABLE IF NOT EXISTS team_members (
+  )`)
+    .run();
+  sqlite
+    .prepare(`CREATE TABLE IF NOT EXISTS team_members (
     team_id INTEGER NOT NULL,
     beast TEXT NOT NULL,
     role TEXT DEFAULT 'member',
     joined_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (team_id, beast),
     FOREIGN KEY (team_id) REFERENCES teams(id)
-  )`).run();
-  sqlite.prepare(`CREATE TABLE IF NOT EXISTS team_projects (
+  )`)
+    .run();
+  sqlite
+    .prepare(`CREATE TABLE IF NOT EXISTS team_projects (
     team_id INTEGER NOT NULL,
     project_id INTEGER NOT NULL,
     PRIMARY KEY (team_id, project_id),
     FOREIGN KEY (team_id) REFERENCES teams(id)
-  )`).run();
-} catch { /* already exists */ }
+  )`)
+    .run();
+} catch {
+  /* already exists */
+}
 
 // ============================================================================
 // Audit Log Query (Task #72 — Gorn-only read access)
@@ -1351,21 +1643,15 @@ registerAuditRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, requireBeas
 // Teams routes extracted to src/teams/routes.ts (T#803 P3-H)
 registerTeamsRoutes(app, sqlite, { hasSessionAuth });
 
-
 // Scheduler routes + helpers + auto-trigger daemon — extracted to src/scheduler/routes.ts (T#772)
 initScheduler(sqlite, db, REPO_ROOT, { wsBroadcast, enqueueNotification });
 registerSchedulerRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity });
-
-
 
 // Daemons (notification drain + DB maintenance + file archive) — extracted to src/daemons/routes.ts (T#773)
 initDaemons(sqlite);
 registerDaemonRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest });
 
-
-
 // Withings auto-sync daemon — moved to src/integrations/routes.ts initIntegrations() (T#775)
-
 
 // Supersede routes extracted to src/supersede/routes.ts (T#801 P3-I)
 registerSupersedeRoutes(app);
@@ -1373,9 +1659,6 @@ registerSupersedeRoutes(app);
 // ============================================================================
 // Trace Routes - Discovery journey visualization
 // ============================================================================
-
-
-
 
 // Link traces: POST /api/traces/:prevId/link { nextId: "..." }
 
@@ -1390,15 +1673,21 @@ registerSupersedeRoutes(app);
 // Inbox routes (handoff + inbox + learn) extracted to src/inbox/routes.ts (T#805 P3-J)
 registerInboxRoutes(app, sqlite, { isTrustedRequest, wsBroadcast, repoRoot: REPO_ROOT });
 
-
 // Specs routes (Spec Review SDD workflow) — extracted to src/specs/routes.ts (T#776)
-registerSpecsRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast });
+registerSpecsRoutes(app, sqlite, {
+  hasSessionAuth,
+  requireBeastIdentity,
+  isTrustedRequest,
+  wsBroadcast,
+});
 
 // ============================================================================
 // Risk Register (T#316)
 // ============================================================================
 
-try { sqlite.prepare(`
+try {
+  sqlite
+    .prepare(`
   CREATE TABLE IF NOT EXISTS risks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
@@ -1431,11 +1720,17 @@ try { sqlite.prepare(`
     closed_at DATETIME,
     deleted_at DATETIME
   )
-`).run(); } catch { /* exists */ }
+`)
+    .run();
+} catch {
+  /* exists */
+}
 
 // Risk + risk comment routes — extracted to src/risk/routes.ts
 
-try { sqlite.prepare(`
+try {
+  sqlite
+    .prepare(`
   CREATE TABLE IF NOT EXISTS risk_comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     risk_id INTEGER NOT NULL,
@@ -1443,7 +1738,11 @@ try { sqlite.prepare(`
     content TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
-`).run(); } catch { /* exists */ }
+`)
+    .run();
+} catch {
+  /* exists */
+}
 
 // ============================================================================
 // Withings OAuth Integration (T#414, Spec #23)
@@ -1468,14 +1767,30 @@ sqlite.exec(`
   )
 `);
 // Migration: add separate IV/tag columns for access and refresh tokens
-try { sqlite.prepare('ALTER TABLE oauth_tokens ADD COLUMN access_iv TEXT').run(); } catch { /* exists */ }
-try { sqlite.prepare('ALTER TABLE oauth_tokens ADD COLUMN access_tag TEXT').run(); } catch { /* exists */ }
-try { sqlite.prepare('ALTER TABLE oauth_tokens ADD COLUMN refresh_iv TEXT').run(); } catch { /* exists */ }
-try { sqlite.prepare('ALTER TABLE oauth_tokens ADD COLUMN refresh_tag TEXT').run(); } catch { /* exists */ }
+try {
+  sqlite.prepare('ALTER TABLE oauth_tokens ADD COLUMN access_iv TEXT').run();
+} catch {
+  /* exists */
+}
+try {
+  sqlite.prepare('ALTER TABLE oauth_tokens ADD COLUMN access_tag TEXT').run();
+} catch {
+  /* exists */
+}
+try {
+  sqlite.prepare('ALTER TABLE oauth_tokens ADD COLUMN refresh_iv TEXT').run();
+} catch {
+  /* exists */
+}
+try {
+  sqlite.prepare('ALTER TABLE oauth_tokens ADD COLUMN refresh_tag TEXT').run();
+} catch {
+  /* exists */
+}
 // Migration: drop NOT NULL on old token_iv/token_tag columns (T#476 — schema mismatch)
 // SQLite can't ALTER columns, so recreate the table if old columns exist
 try {
-  const cols = sqlite.prepare("PRAGMA table_info(oauth_tokens)").all() as any[];
+  const cols = sqlite.prepare('PRAGMA table_info(oauth_tokens)').all() as any[];
   const hasOldCol = cols.some((c: any) => c.name === 'token_iv' && c.notnull === 1);
   if (hasOldCol) {
     sqlite.exec(`
@@ -1494,23 +1809,23 @@ try {
     `);
     console.log('[OAuth] Migrated oauth_tokens: dropped NOT NULL on token_iv/token_tag');
   }
-} catch (err) { console.error('[OAuth] Migration error:', err); }
-
+} catch (err) {
+  console.error('[OAuth] Migration error:', err);
+}
 
 // OAuth tokens + Withings + Google + Gmail — extracted to src/integrations/routes.ts (T#775)
 initIntegrations(sqlite);
 registerIntegrationsRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, isForgeAuthorized });
-
 
 // Forge — Personal Routine Tracker — extracted to src/forge/routes.ts (T#777)
 // isForgeAuthorized + FORGE_BEAST_MODES kept here for cross-domain consumers (integrations)
 // Forge beast → mode map. 'write' implies 'read'. Owner session always full write.
 // Library #96 lever 1: scope-for-post-compromise-damage — grant the minimum mode each lane needs.
 const FORGE_BEAST_MODES: Record<string, 'read' | 'write'> = {
-  gorn: 'write',   // owner
-  sable: 'write',  // gatekeeper — logs meals for bear
-  karo: 'write',   // partner — bedrock 04-09 grant
-  boro: 'read',    // coach — periodization + progression reads only; writes route through Sable
+  gorn: 'write', // owner
+  sable: 'write', // gatekeeper — logs meals for bear
+  karo: 'write', // partner — bedrock 04-09 grant
+  boro: 'read', // coach — periodization + progression reads only; writes route through Sable
 };
 
 // Auth helper: Gorn (session) + allowlisted beasts per FORGE_BEAST_MODES.
@@ -1520,7 +1835,10 @@ const FORGE_BEAST_MODES: Record<string, 'read' | 'write'> = {
 // the legacy ?as= query param shape. Bearer-token-actor path is checked first;
 // ?as= path retained for backwards-compat with existing callers (Sable TG flows,
 // legacy scripts) until follow-up T# removes it post-migration audit.
-function isForgeAuthorized(c: any, options: { mode: 'read' | 'write' } = { mode: 'write' }): boolean {
+function isForgeAuthorized(
+  c: any,
+  options: { mode: 'read' | 'write' } = { mode: 'write' },
+): boolean {
   if (hasSessionAuth(c)) return true; // Gorn browser session — owner, full write
 
   // T#718 path: read requester from authenticated bearer-token actor (no ?as= needed)
@@ -1529,7 +1847,7 @@ function isForgeAuthorized(c: any, options: { mode: 'read' | 'write' } = { mode:
     const beastMode = FORGE_BEAST_MODES[actor];
     if (!beastMode) return false;
     if (options.mode === 'read') return true; // either mode satisfies read
-    return beastMode === 'write';              // write requires write
+    return beastMode === 'write'; // write requires write
   }
 
   // Backwards-compat: ?as= query param + isTrustedRequest local-network bypass.
@@ -1550,11 +1868,40 @@ function isForgeAuthorized(c: any, options: { mode: 'read' | 'write' } = { mode:
 
 // GET /api/routine/logs — list logs
 registerForgeRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, wsBroadcast });
-registerForumRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast, withRetry, getSupportedEmoji });
-registerDmRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast, sendDm, withRetry });
+registerForumRoutes(app, sqlite, {
+  hasSessionAuth,
+  requireBeastIdentity,
+  isTrustedRequest,
+  wsBroadcast,
+  withRetry,
+  getSupportedEmoji,
+});
+registerDmRoutes(app, sqlite, {
+  hasSessionAuth,
+  requireBeastIdentity,
+  isTrustedRequest,
+  wsBroadcast,
+  sendDm,
+  withRetry,
+});
 registerTraceRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest });
-registerDashboardRoutes(app, sqlite, { hasSessionAuth, handleDashboardSummary, handleDashboardActivity, handleDashboardGrowth, handleStats, handleReflect, handleList, handleGraph, handleMap, handleMap3d, handleVectorStats, getSetting, DB_PATH, oracleCache: null, setOracleCache: () => {} });
-
+registerDashboardRoutes(app, sqlite, {
+  hasSessionAuth,
+  handleDashboardSummary,
+  handleDashboardActivity,
+  handleDashboardGrowth,
+  handleStats,
+  handleReflect,
+  handleList,
+  handleGraph,
+  handleMap,
+  handleMap3d,
+  handleVectorStats,
+  getSetting,
+  DB_PATH,
+  oracleCache: null,
+  setOracleCache: () => {},
+});
 
 // ============================================================================
 // Rules — Decree and Norm governance (T#360)
@@ -1579,42 +1926,121 @@ sqlite.exec(`
 `);
 
 // Unique constraint on active rules to prevent duplicates
-try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_rules_unique_active ON rules (title, type) WHERE status = 'active'"); } catch {}
+try {
+  sqlite.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_rules_unique_active ON rules (title, type) WHERE status = 'active'",
+  );
+} catch {}
 
 // Migration: add decree approval columns
-try { sqlite.exec('ALTER TABLE rules ADD COLUMN approval_status TEXT DEFAULT NULL'); } catch {}
-try { sqlite.exec('ALTER TABLE rules ADD COLUMN approved_by TEXT DEFAULT NULL'); } catch {}
-try { sqlite.exec('ALTER TABLE rules ADD COLUMN approved_at DATETIME DEFAULT NULL'); } catch {}
-try { sqlite.exec('ALTER TABLE rules ADD COLUMN rejection_reason TEXT DEFAULT NULL'); } catch {}
+try {
+  sqlite.exec('ALTER TABLE rules ADD COLUMN approval_status TEXT DEFAULT NULL');
+} catch {}
+try {
+  sqlite.exec('ALTER TABLE rules ADD COLUMN approved_by TEXT DEFAULT NULL');
+} catch {}
+try {
+  sqlite.exec('ALTER TABLE rules ADD COLUMN approved_at DATETIME DEFAULT NULL');
+} catch {}
+try {
+  sqlite.exec('ALTER TABLE rules ADD COLUMN rejection_reason TEXT DEFAULT NULL');
+} catch {}
 
 // Seed data — only on first run (empty table)
 const ruleCount = (sqlite.prepare('SELECT COUNT(*) as c FROM rules').get() as any).c;
 if (ruleCount === 0) {
   const seedRules = [
-    { type: 'decree', title: 'SDD: All new features require spec files', content: 'All new features with endpoints or data models require a spec file in docs/specs/. Big features need Gorn approval via Sable.', author: 'leonard', enforcement: 'mandatory', source_thread_id: 256 },
-    { type: 'decree', title: 'Big features need Gorn approval via Sable', content: 'New projects, cross-team features, and significant architecture changes require spec submission to /specs and Gorn approval routed through Sable.', author: 'leonard', enforcement: 'mandatory', source_thread_id: 256 },
-    { type: 'decree', title: 'All Gorn action items route through Sable', content: 'Sable is the gatekeeper for all Gorn action items — spec approvals, reviews, decisions.', author: 'leonard', enforcement: 'mandatory', source_thread_id: 264 },
-    { type: 'decree', title: 'Nothing is deleted — archive, never delete', content: 'No git push --force. No rm -rf without backup. Supersede, don\'t delete. Timestamps are truth.', author: 'gorn', enforcement: 'mandatory' },
-    { type: 'decree', title: 'No git push --force', content: 'Force pushing violates the Nothing is Deleted principle. Always preserve history.', author: 'gorn', enforcement: 'mandatory' },
-    { type: 'decree', title: 'No commits of secrets (.env, credentials)', content: 'Never commit secrets, .env files, or credentials to any repository.', author: 'gorn', enforcement: 'mandatory' },
-    { type: 'norm', title: 'Use reactions for acknowledgments', content: 'Use emoji reactions (✅, 👀, etc.) for simple acknowledgments. Save posts for substantive content.', author: 'mara', enforcement: 'recommended' },
-    { type: 'norm', title: 'Sign all work with Beast name', content: 'End forum posts and DMs with your Beast name (— Karo, — Zaghnal, etc.) for clear attribution.', author: 'mara', enforcement: 'recommended' },
+    {
+      type: 'decree',
+      title: 'SDD: All new features require spec files',
+      content:
+        'All new features with endpoints or data models require a spec file in docs/specs/. Big features need Gorn approval via Sable.',
+      author: 'leonard',
+      enforcement: 'mandatory',
+      source_thread_id: 256,
+    },
+    {
+      type: 'decree',
+      title: 'Big features need Gorn approval via Sable',
+      content:
+        'New projects, cross-team features, and significant architecture changes require spec submission to /specs and Gorn approval routed through Sable.',
+      author: 'leonard',
+      enforcement: 'mandatory',
+      source_thread_id: 256,
+    },
+    {
+      type: 'decree',
+      title: 'All Gorn action items route through Sable',
+      content:
+        'Sable is the gatekeeper for all Gorn action items — spec approvals, reviews, decisions.',
+      author: 'leonard',
+      enforcement: 'mandatory',
+      source_thread_id: 264,
+    },
+    {
+      type: 'decree',
+      title: 'Nothing is deleted — archive, never delete',
+      content:
+        "No git push --force. No rm -rf without backup. Supersede, don't delete. Timestamps are truth.",
+      author: 'gorn',
+      enforcement: 'mandatory',
+    },
+    {
+      type: 'decree',
+      title: 'No git push --force',
+      content: 'Force pushing violates the Nothing is Deleted principle. Always preserve history.',
+      author: 'gorn',
+      enforcement: 'mandatory',
+    },
+    {
+      type: 'decree',
+      title: 'No commits of secrets (.env, credentials)',
+      content: 'Never commit secrets, .env files, or credentials to any repository.',
+      author: 'gorn',
+      enforcement: 'mandatory',
+    },
+    {
+      type: 'norm',
+      title: 'Use reactions for acknowledgments',
+      content:
+        'Use emoji reactions (✅, 👀, etc.) for simple acknowledgments. Save posts for substantive content.',
+      author: 'mara',
+      enforcement: 'recommended',
+    },
+    {
+      type: 'norm',
+      title: 'Sign all work with Beast name',
+      content:
+        'End forum posts and DMs with your Beast name (— Karo, — Zaghnal, etc.) for clear attribution.',
+      author: 'mara',
+      enforcement: 'recommended',
+    },
   ];
-  const insert = sqlite.prepare('INSERT INTO rules (type, title, content, author, enforcement, source_thread_id) VALUES (?, ?, ?, ?, ?, ?)');
+  const insert = sqlite.prepare(
+    'INSERT INTO rules (type, title, content, author, enforcement, source_thread_id) VALUES (?, ?, ?, ?, ?, ?)',
+  );
   for (const r of seedRules) {
     insert.run(r.type, r.title, r.content, r.author, r.enforcement, r.source_thread_id || null);
   }
 }
 
 // Governance routes extracted to src/governance/routes.ts (T#766)
-registerGovernanceRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, addMessage, sendDm, withRetry, wsBroadcast });
+registerGovernanceRoutes(app, sqlite, {
+  hasSessionAuth,
+  requireBeastIdentity,
+  addMessage,
+  sendDm,
+  withRetry,
+  wsBroadcast,
+});
 
 // ============================================================================
 // Prowl — Personal Task Manager for Gorn (T#279)
 // ============================================================================
 
-
-try { sqlite.prepare(`
+try {
+  sqlite
+    .prepare(`
   CREATE TABLE IF NOT EXISTS prowl_tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
@@ -1630,15 +2056,29 @@ try { sqlite.prepare(`
     updated_at TEXT NOT NULL,
     completed_at TEXT
   )
-`).run(); } catch { /* exists */ }
+`)
+    .run();
+} catch {
+  /* exists */
+}
 
 // Add notified_at column for Prowl Telegram notifications (T#467)
-try { sqlite.prepare(`ALTER TABLE prowl_tasks ADD COLUMN notified_at TEXT`).run(); } catch { /* already exists */ }
+try {
+  sqlite.prepare(`ALTER TABLE prowl_tasks ADD COLUMN notified_at TEXT`).run();
+} catch {
+  /* already exists */
+}
 // Add remind_before column for advance reminders (T#471) — values: null, 15m, 30m, 1h, 1d
-try { sqlite.prepare(`ALTER TABLE prowl_tasks ADD COLUMN remind_before TEXT`).run(); } catch { /* already exists */ }
+try {
+  sqlite.prepare(`ALTER TABLE prowl_tasks ADD COLUMN remind_before TEXT`).run();
+} catch {
+  /* already exists */
+}
 
 // --- Prowl Checklist Items (T#628) ---
-try { sqlite.prepare(`
+try {
+  sqlite
+    .prepare(`
   CREATE TABLE IF NOT EXISTS checklist_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id INTEGER NOT NULL REFERENCES prowl_tasks(id) ON DELETE CASCADE,
@@ -1648,19 +2088,40 @@ try { sqlite.prepare(`
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )
-`).run(); } catch { /* exists */ }
+`)
+    .run();
+} catch {
+  /* exists */
+}
 
 // Prowl routes extracted to src/prowl/routes.ts (T#767)
-registerProwlRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, requireBeastIdentity, wsBroadcast, enqueueNotification });
+registerProwlRoutes(app, sqlite, {
+  hasSessionAuth,
+  isTrustedRequest,
+  requireBeastIdentity,
+  wsBroadcast,
+  enqueueNotification,
+});
 
 // Library routes extracted to src/library/routes.ts (T#768)
-registerLibraryRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, searchIndexUpsert, searchIndexDelete, wsBroadcast });
+registerLibraryRoutes(app, sqlite, {
+  hasSessionAuth,
+  requireBeastIdentity,
+  searchIndexUpsert,
+  searchIndexDelete,
+  wsBroadcast,
+});
 
 // Risk routes extracted to src/risk/routes.ts (T#769)
 registerRiskRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, wsBroadcast });
 // Search routes + Meilisearch + FTS5 — extracted to src/search/routes.ts (T#771)
 initSearch(sqlite);
-registerSearchRoutes(app, sqlite, { hasSessionAuth, isLocalNetwork, isTrustedRequest, handleSearch });
+registerSearchRoutes(app, sqlite, {
+  hasSessionAuth,
+  isLocalNetwork,
+  isTrustedRequest,
+  handleSearch,
+});
 
 // Telegram routes + polling — extracted to src/telegram/routes.ts (T#770)
 registerTelegramRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, uploadsDir: UPLOADS_DIR });
@@ -1670,7 +2131,16 @@ registerTelegramRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, uploadsD
 // Keyed by identity (e.g. 'gorn', 'gorn_guest'). Rebuilt on server restart.
 const webPresence = new Map<string, { identity: string; role: string; lastSeen: number }>();
 export const WEB_PRESENCE_TIMEOUT_MS = 90_000; // 90s — 3 missed heartbeats
-registerPackRoutes(app, sqlite, { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast, getTmuxStatus, normalizeAvatarUrl, webPresence, WEB_PRESENCE_TIMEOUT_MS });
+registerPackRoutes(app, sqlite, {
+  hasSessionAuth,
+  requireBeastIdentity,
+  isTrustedRequest,
+  wsBroadcast,
+  getTmuxStatus,
+  normalizeAvatarUrl,
+  webPresence,
+  WEB_PRESENCE_TIMEOUT_MS,
+});
 registerServerRoutes(app, sqlite, { hasSessionAuth, wsBroadcast, webPresence });
 
 // ============================================================================
@@ -1747,7 +2217,10 @@ const WS_ALLOWED_ORIGINS = new Set([
 ]);
 
 // Validate WebSocket upgrade request
-function validateWsUpgrade(req: Request, server: any): { allowed: boolean; reason?: string; identity?: string } {
+function validateWsUpgrade(
+  req: Request,
+  server: any,
+): { allowed: boolean; reason?: string; identity?: string } {
   // 1. Origin validation — reject cross-origin browser connections.
   // Design decision: missing Origin is allowed (non-browser clients like curl, wscat, Beast
   // processes don't send Origin headers). The auth check below gates non-browser access.
@@ -1759,17 +2232,23 @@ function validateWsUpgrade(req: Request, server: any): { allowed: boolean; reaso
   }
 
   // 2. Auth check — same as REST: local network OR valid session
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || req.headers.get('x-real-ip')
-    || server.requestIP(req)?.address
-    || '127.0.0.1';
+  const ip =
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    req.headers.get('x-real-ip') ||
+    server.requestIP(req)?.address ||
+    '127.0.0.1';
 
-  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === 'localhost'
-    || ip.startsWith('192.168.') || ip.startsWith('10.')
-    || (ip.startsWith('172.') && (() => {
-      const second = parseInt(ip.split('.')[1], 10);
-      return second >= 16 && second <= 31;
-    })());
+  const isLocal =
+    ip === '127.0.0.1' ||
+    ip === '::1' ||
+    ip === 'localhost' ||
+    ip.startsWith('192.168.') ||
+    ip.startsWith('10.') ||
+    (ip.startsWith('172.') &&
+      (() => {
+        const second = parseInt(ip.split('.')[1], 10);
+        return second >= 16 && second <= 31;
+      })());
 
   // Check session cookie from Cookie header
   const cookies = req.headers.get('cookie') || '';
@@ -1799,7 +2278,7 @@ function validateWsUpgrade(req: Request, server: any): { allowed: boolean; reaso
   // Session auth is not required for WS since cookies may not be sent with WS upgrades
   // in all browsers (SameSite restrictions). The origin whitelist prevents cross-site abuse.
 
-  const identity = hasSession ? 'gorn' : (isLocal ? 'local' : (origin ? 'browser' : 'unknown'));
+  const identity = hasSession ? 'gorn' : isLocal ? 'local' : origin ? 'browser' : 'unknown';
   return { allowed: true, identity };
 }
 
@@ -1807,7 +2286,11 @@ function validateWsUpgrade(req: Request, server: any): { allowed: boolean; reaso
 export function wsBroadcast(event: string, data: any) {
   const payload = JSON.stringify({ event, data, ts: Date.now() });
   for (const ws of wsClients) {
-    try { ws.send(payload); } catch { wsClients.delete(ws); }
+    try {
+      ws.send(payload);
+    } catch {
+      wsClients.delete(ws);
+    }
   }
 }
 
@@ -1856,15 +2339,21 @@ export default {
       const validation = validateWsUpgrade(req, server);
       if (!validation.allowed) {
         // Audit log rejected WebSocket upgrade attempts
-        const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-          || req.headers.get('x-real-ip')
-          || server.requestIP(req)?.address || 'unknown';
+        const ip =
+          req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+          req.headers.get('x-real-ip') ||
+          server.requestIP(req)?.address ||
+          'unknown';
         try {
-          sqlite.prepare(
-            `INSERT INTO audit_log (actor, actor_type, action, resource_type, resource_id, ip_source, request_method, request_path, status_code)
-             VALUES (?, 'unknown', 'ws_upgrade_rejected', 'websocket', NULL, ?, 'GET', '/ws', 403)`
-          ).run(req.headers.get('origin') || 'no-origin', ip);
-        } catch (e) { console.error('[WS audit]', e); }
+          sqlite
+            .prepare(
+              `INSERT INTO audit_log (actor, actor_type, action, resource_type, resource_id, ip_source, request_method, request_path, status_code)
+             VALUES (?, 'unknown', 'ws_upgrade_rejected', 'websocket', NULL, ?, 'GET', '/ws', 403)`,
+            )
+            .run(req.headers.get('origin') || 'no-origin', ip);
+        } catch (e) {
+          console.error('[WS audit]', e);
+        }
         return new Response(validation.reason || 'Forbidden', { status: 403 });
       }
       // Derive role and identity from session cookie using the full parser
@@ -1873,13 +2362,21 @@ export default {
       const wsCookies = req.headers.get('cookie') || '';
       const wsSessionMatch = wsCookies.match(/(?:^|;\s*)oracle_session=([^;]+)/);
       const wsParsed = parseSessionToken(wsSessionMatch?.[1] || '');
-      const wsRole = wsParsed.valid ? (wsParsed.role || 'owner') : (validation.identity === 'local' ? 'beast' : 'unknown');
+      const wsRole = wsParsed.valid
+        ? wsParsed.role || 'owner'
+        : validation.identity === 'local'
+          ? 'beast'
+          : 'unknown';
       const wsData = wsParsed.valid && wsParsed.role === 'guest' ? wsParsed.data : undefined;
       // Identity for presence: use parsed session result, fall back to validateWsUpgrade's value
       const wsIdentity = wsParsed.valid
-        ? (wsParsed.role === 'guest' ? (wsParsed.data || 'guest') : 'gorn')
+        ? wsParsed.role === 'guest'
+          ? wsParsed.data || 'guest'
+          : 'gorn'
         : validation.identity;
-      const success = server.upgrade(req, { data: { identity: wsIdentity, role: wsRole, username: wsData } });
+      const success = server.upgrade(req, {
+        data: { identity: wsIdentity, role: wsRole, username: wsData },
+      });
       if (success) return undefined;
       return new Response('WebSocket upgrade failed', { status: 400 });
     }
@@ -1889,7 +2386,13 @@ export default {
     open(ws: any) {
       wsClients.add(ws);
       const identity = ws.data?.identity || 'unknown';
-      ws.send(JSON.stringify({ event: 'connected', data: { clients: wsClients.size, identity }, ts: Date.now() }));
+      ws.send(
+        JSON.stringify({
+          event: 'connected',
+          data: { clients: wsClients.size, identity },
+          ts: Date.now(),
+        }),
+      );
     },
     message(ws: any, message: string) {
       // Clients can send ping, we respond pong
@@ -1910,7 +2413,9 @@ export default {
             }
           }
         }
-      } catch { /* not JSON — ignore */ }
+      } catch {
+        /* not JSON — ignore */
+      }
     },
     close(ws: any) {
       wsClients.delete(ws);

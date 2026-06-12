@@ -30,12 +30,12 @@ import { getVaultPsiRoot } from './vault/handler.ts';
 import type { OracleDocument, OracleMetadata, IndexerConfig } from './types.ts';
 
 export class OracleIndexer {
-  private sqlite: Database;  // Raw bun:sqlite for FTS and schema operations
-  private db: BunSQLiteDatabase<typeof schema>;  // Drizzle for type-safe queries
+  private sqlite: Database; // Raw bun:sqlite for FTS and schema operations
+  private db: BunSQLiteDatabase<typeof schema>; // Drizzle for type-safe queries
   private vectorClient: VectorStoreAdapter | null = null;
   private config: IndexerConfig;
   private project: string | null;
-  private seenContentHashes: Set<string> = new Set();  // Content dedup across projects
+  private seenContentHashes: Set<string> = new Set(); // Content dedup across projects
 
   constructor(config: IndexerConfig) {
     this.config = config;
@@ -49,7 +49,12 @@ export class OracleIndexer {
   /**
    * Update indexing status for tray app
    */
-  private setIndexingStatus(isIndexing: boolean, current: number = 0, total: number = 0, error?: string): void {
+  private setIndexingStatus(
+    isIndexing: boolean,
+    current: number = 0,
+    total: number = 0,
+    error?: string,
+  ): void {
     // Ensure repo_root column exists (migration)
     try {
       this.sqlite.exec('ALTER TABLE indexing_status ADD COLUMN repo_root TEXT');
@@ -57,7 +62,8 @@ export class OracleIndexer {
       // Column already exists
     }
 
-    this.sqlite.prepare(`
+    this.sqlite
+      .prepare(`
       UPDATE indexing_status SET
         is_indexing = ?,
         progress_current = ?,
@@ -67,17 +73,18 @@ export class OracleIndexer {
         error = ?,
         repo_root = ?
       WHERE id = 1
-    `).run(
-      isIndexing ? 1 : 0,
-      current,
-      total,
-      isIndexing ? 1 : 0,
-      Date.now(),
-      isIndexing ? 1 : 0,
-      Date.now(),
-      error || null,
-      this.config.repoRoot
-    );
+    `)
+      .run(
+        isIndexing ? 1 : 0,
+        current,
+        total,
+        isIndexing ? 1 : 0,
+        Date.now(),
+        isIndexing ? 1 : 0,
+        Date.now(),
+        error || null,
+        this.config.repoRoot,
+      );
   }
 
   /**
@@ -106,11 +113,13 @@ export class OracleIndexer {
     // Query all documents for export
     let docs: any[] = [];
     try {
-      docs = this.sqlite.prepare(`
+      docs = this.sqlite
+        .prepare(`
         SELECT d.id, d.type, d.source_file, d.concepts, d.project, f.content
         FROM oracle_documents d
         JOIN oracle_fts f ON d.id = f.id
-      `).all() as any[];
+      `)
+        .all() as any[];
     } catch (e) {
       console.warn(`⚠️ Query failed: ${e instanceof Error ? e.message : e}`);
       return;
@@ -121,10 +130,10 @@ export class OracleIndexer {
       const exportData = {
         exported_at: new Date().toISOString(),
         count: docs.length,
-        documents: docs.map(d => ({
+        documents: docs.map((d) => ({
           ...d,
-          concepts: JSON.parse(d.concepts || '[]')
-        }))
+          concepts: JSON.parse(d.concepts || '[]'),
+        })),
       };
       fs.writeFileSync(jsonPath, JSON.stringify(exportData, null, 2));
       console.log(`📄 JSON export: ${jsonPath} (${docs.length} docs)`);
@@ -142,10 +151,10 @@ export class OracleIndexer {
       };
 
       const header = 'id,type,source_file,concepts,project,content';
-      const rows = docs.map(d =>
+      const rows = docs.map((d) =>
         [d.id, d.type, d.source_file, d.concepts, d.project || '', d.content]
-          .map(v => escapeCSV(String(v || '')))
-          .join(',')
+          .map((v) => escapeCSV(String(v || '')))
+          .join(','),
       );
 
       fs.writeFileSync(csvPath, [header, ...rows].join('\n'));
@@ -172,23 +181,20 @@ export class OracleIndexer {
 
     // Smart deletion: delete indexer-created docs whose source file no longer exists on disk.
     // Safe for multi-project vault: only removes docs with missing files, preserves oracle_learn docs.
-    const allIndexerDocs = this.db.select({ id: oracleDocuments.id, sourceFile: oracleDocuments.sourceFile })
+    const allIndexerDocs = this.db
+      .select({ id: oracleDocuments.id, sourceFile: oracleDocuments.sourceFile })
       .from(oracleDocuments)
-      .where(
-        or(eq(oracleDocuments.createdBy, 'indexer'), isNull(oracleDocuments.createdBy))
-      )
+      .where(or(eq(oracleDocuments.createdBy, 'indexer'), isNull(oracleDocuments.createdBy)))
       .all();
 
     const idsToDelete = allIndexerDocs
-      .filter(d => !fs.existsSync(path.join(this.config.repoRoot, d.sourceFile)))
-      .map(d => d.id);
+      .filter((d) => !fs.existsSync(path.join(this.config.repoRoot, d.sourceFile)))
+      .map((d) => d.id);
     console.log(`Smart delete: ${idsToDelete.length} stale docs (preserving oracle_learn)`);
 
     if (idsToDelete.length > 0) {
       // Delete from oracle_documents (Drizzle)
-      this.db.delete(oracleDocuments)
-        .where(inArray(oracleDocuments.id, idsToDelete))
-        .run();
+      this.db.delete(oracleDocuments).where(inArray(oracleDocuments.id, idsToDelete)).run();
 
       // Delete from FTS (raw SQL required for FTS5)
       const BATCH_SIZE = 500;
@@ -209,16 +215,19 @@ export class OracleIndexer {
       await this.vectorClient.ensureCollection();
       console.log(`Vector store (${this.vectorClient.name}) connected`);
     } catch (e) {
-      console.log('Vector store not available, using SQLite-only mode:', e instanceof Error ? e.message : e);
+      console.log(
+        'Vector store not available, using SQLite-only mode:',
+        e instanceof Error ? e.message : e,
+      );
       this.vectorClient = null;
     }
 
     const documents: OracleDocument[] = [];
 
     // Index each source type
-    documents.push(...await this.indexResonance());
-    documents.push(...await this.indexLearnings());
-    documents.push(...await this.indexRetrospectives());
+    documents.push(...(await this.indexResonance()));
+    documents.push(...(await this.indexLearnings()));
+    documents.push(...(await this.indexRetrospectives()));
 
     // Store in SQLite + Chroma
     await this.storeDocuments(documents);
@@ -274,7 +283,9 @@ export class OracleIndexer {
       totalFiles += files.length;
     }
 
-    console.log(`Indexed ${documents.length} resonance documents from ${totalFiles} files (skipped ${skippedDupes} duplicate files)`);
+    console.log(
+      `Indexed ${documents.length} resonance documents from ${totalFiles} files (skipped ${skippedDupes} duplicate files)`,
+    );
     return documents;
   }
 
@@ -283,7 +294,11 @@ export class OracleIndexer {
    * Following claude-mem's pattern of splitting by sections
    * Now reads frontmatter tags and inherits them to all chunks
    */
-  private parseResonanceFile(filename: string, content: string, sourceFileOverride?: string): OracleDocument[] {
+  private parseResonanceFile(
+    filename: string,
+    content: string,
+    sourceFileOverride?: string,
+  ): OracleDocument[] {
     const documents: OracleDocument[] = [];
     const sourceFile = sourceFileOverride || `ψ/memory/resonance/${filename}`;
     const now = Date.now();
@@ -292,11 +307,11 @@ export class OracleIndexer {
     const fileTags = this.parseFrontmatterTags(content);
 
     // Infer project from path
-    const fileProject = this.parseFrontmatterProject(content)
-      || this.inferProjectFromPath(sourceFile);
+    const fileProject =
+      this.parseFrontmatterProject(content) || this.inferProjectFromPath(sourceFile);
 
     // Split by ### headers (principles, sections)
-    const sections = content.split(/^###\s+/m).filter(s => s.trim());
+    const sections = content.split(/^###\s+/m).filter((s) => s.trim());
 
     sections.forEach((section, index) => {
       const lines = section.split('\n');
@@ -316,7 +331,7 @@ export class OracleIndexer {
         concepts: this.mergeConceptsWithTags(extractedConcepts, fileTags),
         created_at: now,
         updated_at: now,
-        project: fileProject || undefined
+        project: fileProject || undefined,
       });
 
       // Split bullet points into sub-documents (granular pattern)
@@ -333,7 +348,7 @@ export class OracleIndexer {
             concepts: this.mergeConceptsWithTags(bulletConcepts, fileTags),
             created_at: now,
             updated_at: now,
-            project: fileProject || undefined
+            project: fileProject || undefined,
           });
         });
       }
@@ -388,7 +403,9 @@ export class OracleIndexer {
       totalFiles += files.length;
     }
 
-    console.log(`Indexed ${documents.length} learning documents from ${totalFiles} files (skipped ${skippedDupes} duplicate files)`);
+    console.log(
+      `Indexed ${documents.length} learning documents from ${totalFiles} files (skipped ${skippedDupes} duplicate files)`,
+    );
     return documents;
   }
 
@@ -432,7 +449,7 @@ export class OracleIndexer {
   private inferProjectFromPath(relativePath: string): string | null {
     // Project-first layout: github.com/org/repo/ψ/...
     const projectFirst = relativePath.match(
-      /^(github\.com|gitlab\.com|bitbucket\.org)\/([^/]+\/[^/]+)\/ψ\//
+      /^(github\.com|gitlab\.com|bitbucket\.org)\/([^/]+\/[^/]+)\/ψ\//,
     );
     if (projectFirst) {
       return `${projectFirst[1]}/${projectFirst[2]}`.toLowerCase();
@@ -440,7 +457,7 @@ export class OracleIndexer {
 
     // Legacy layout: ψ/memory/{category}/github.com/org/repo/...
     const legacy = relativePath.match(
-      /^ψ\/(?:memory\/(?:learnings|retrospectives)|inbox\/handoff)\/(github\.com|gitlab\.com|bitbucket\.org)\/([^/]+\/[^/]+)\//
+      /^ψ\/(?:memory\/(?:learnings|retrospectives)|inbox\/handoff)\/(github\.com|gitlab\.com|bitbucket\.org)\/([^/]+\/[^/]+)\//,
     );
     if (legacy) {
       return `${legacy[1]}/${legacy[2]}`.toLowerCase();
@@ -457,22 +474,26 @@ export class OracleIndexer {
    * @param content - markdown content
    * @param sourceFileOverride - if provided, use as sourceFile instead of generating from filename
    */
-  private parseLearningFile(filename: string, content: string, sourceFileOverride?: string): OracleDocument[] {
+  private parseLearningFile(
+    filename: string,
+    content: string,
+    sourceFileOverride?: string,
+  ): OracleDocument[] {
     const documents: OracleDocument[] = [];
     const sourceFile = sourceFileOverride || `ψ/memory/learnings/${filename}`;
     const now = Date.now();
 
     // Extract file-level tags and project from frontmatter
     const fileTags = this.parseFrontmatterTags(content);
-    const fileProject = this.parseFrontmatterProject(content)
-      || this.inferProjectFromPath(sourceFile);
+    const fileProject =
+      this.parseFrontmatterProject(content) || this.inferProjectFromPath(sourceFile);
 
     // Extract title from frontmatter or filename
     const titleMatch = content.match(/^title:\s*(.+)$/m);
     const title = titleMatch ? titleMatch[1] : filename.replace('.md', '');
 
     // Split by ## headers (patterns)
-    const sections = content.split(/^##\s+/m).filter(s => s.trim());
+    const sections = content.split(/^##\s+/m).filter((s) => s.trim());
 
     sections.forEach((section, index) => {
       const lines = section.split('\n');
@@ -491,7 +512,7 @@ export class OracleIndexer {
         concepts: this.mergeConceptsWithTags(extractedConcepts, fileTags),
         created_at: now,
         updated_at: now,
-        project: fileProject || undefined
+        project: fileProject || undefined,
       });
     });
 
@@ -506,7 +527,7 @@ export class OracleIndexer {
         concepts: this.mergeConceptsWithTags(extractedConcepts, fileTags),
         created_at: now,
         updated_at: now,
-        project: fileProject || undefined
+        project: fileProject || undefined,
       });
     }
 
@@ -555,7 +576,9 @@ export class OracleIndexer {
       totalFiles += files.length;
     }
 
-    console.log(`Indexed ${documents.length} retrospective documents from ${totalFiles} files (skipped ${skippedDupes} duplicate files)`);
+    console.log(
+      `Indexed ${documents.length} retrospective documents from ${totalFiles} files (skipped ${skippedDupes} duplicate files)`,
+    );
     return documents;
   }
 
@@ -593,11 +616,11 @@ export class OracleIndexer {
     const fileTags = this.parseFrontmatterTags(content);
 
     // Infer project from frontmatter or path
-    const fileProject = this.parseFrontmatterProject(content)
-      || this.inferProjectFromPath(relativePath);
+    const fileProject =
+      this.parseFrontmatterProject(content) || this.inferProjectFromPath(relativePath);
 
     // Extract key sections (AI Diary, What I Learned, etc.)
-    const sections = content.split(/^##\s+/m).filter(s => s.trim());
+    const sections = content.split(/^##\s+/m).filter((s) => s.trim());
 
     sections.forEach((section, index) => {
       const lines = section.split('\n');
@@ -618,7 +641,7 @@ export class OracleIndexer {
         concepts: this.mergeConceptsWithTags(extractedConcepts, fileTags),
         created_at: now,
         updated_at: now,
-        project: fileProject || undefined
+        project: fileProject || undefined,
       });
     });
 
@@ -641,8 +664,8 @@ export class OracleIndexer {
 
     return tagsMatch[1]
       .split(',')
-      .map(t => t.trim().toLowerCase())
-      .filter(t => t.length > 0);
+      .map((t) => t.trim().toLowerCase())
+      .filter((t) => t.length > 0);
   }
 
   /**
@@ -661,8 +684,10 @@ export class OracleIndexer {
     if (projectMatch) {
       const project = projectMatch[1].trim();
       // Handle quoted values
-      if ((project.startsWith('"') && project.endsWith('"')) ||
-          (project.startsWith("'") && project.endsWith("'"))) {
+      if (
+        (project.startsWith('"') && project.endsWith('"')) ||
+        (project.startsWith("'") && project.endsWith("'"))
+      ) {
         return project.slice(1, -1);
       }
       return project || null;
@@ -701,13 +726,47 @@ export class OracleIndexer {
 
     // Common Oracle concepts (expanded list)
     const keywords = [
-      'trust', 'pattern', 'mirror', 'append', 'history', 'context',
-      'delete', 'behavior', 'intention', 'decision', 'human', 'external',
-      'brain', 'command', 'oracle', 'timestamp', 'immutable', 'preserve',
+      'trust',
+      'pattern',
+      'mirror',
+      'append',
+      'history',
+      'context',
+      'delete',
+      'behavior',
+      'intention',
+      'decision',
+      'human',
+      'external',
+      'brain',
+      'command',
+      'oracle',
+      'timestamp',
+      'immutable',
+      'preserve',
       // Additional keywords for better coverage
-      'learn', 'memory', 'session', 'workflow', 'api', 'mcp', 'claude',
-      'git', 'code', 'file', 'config', 'test', 'debug', 'error', 'fix',
-      'feature', 'refactor', 'style', 'docs', 'plan', 'task', 'issue'
+      'learn',
+      'memory',
+      'session',
+      'workflow',
+      'api',
+      'mcp',
+      'claude',
+      'git',
+      'code',
+      'file',
+      'config',
+      'test',
+      'debug',
+      'error',
+      'fix',
+      'feature',
+      'refactor',
+      'style',
+      'docs',
+      'plan',
+      'task',
+      'issue',
     ];
 
     for (const keyword of keywords) {
@@ -752,7 +811,8 @@ export class OracleIndexer {
         const docProject = (doc.project || this.project)?.toLowerCase();
 
         // Drizzle upsert with createdBy: 'indexer'
-        this.db.insert(oracleDocuments)
+        this.db
+          .insert(oracleDocuments)
           .values({
             id: doc.id,
             type: doc.type,
@@ -762,7 +822,7 @@ export class OracleIndexer {
             updatedAt: doc.updated_at,
             indexedAt: now,
             project: docProject,
-            createdBy: 'indexer',  // Mark as indexer-created
+            createdBy: 'indexer', // Mark as indexer-created
           })
           .onConflictDoUpdate({
             target: oracleDocuments.id,
@@ -774,16 +834,12 @@ export class OracleIndexer {
               indexedAt: now,
               project: docProject,
               // Don't update createdBy - preserve original
-            }
+            },
           })
           .run();
 
         // SQLite FTS (raw SQL required for FTS5)
-        insertFts.run(
-          doc.id,
-          doc.content,
-          doc.concepts.join(' ')
-        );
+        insertFts.run(doc.id, doc.content, doc.concepts.join(' '));
 
         // Chroma vector (metadata must be primitives, not arrays)
         ids.push(doc.id);
@@ -791,7 +847,7 @@ export class OracleIndexer {
         metadatas.push({
           type: doc.type,
           source_file: doc.source_file,
-          concepts: doc.concepts.join(',')  // Convert array to string for ChromaDB
+          concepts: doc.concepts.join(','), // Convert array to string for ChromaDB
         });
       }
       this.sqlite.exec('COMMIT');
@@ -818,17 +874,21 @@ export class OracleIndexer {
         const vectorDocs = batchIds.map((id, idx) => ({
           id,
           document: batchContents[idx],
-          metadata: batchMetadatas[idx]
+          metadata: batchMetadatas[idx],
         }));
         await this.vectorClient.addDocuments(vectorDocs);
-        console.log(`Vector batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(ids.length / BATCH_SIZE)} stored`);
+        console.log(
+          `Vector batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(ids.length / BATCH_SIZE)} stored`,
+        );
       } catch (error) {
         console.error(`Vector batch failed:`, error);
         vectorSuccess = false;
       }
     }
 
-    console.log(`Stored in SQLite${vectorSuccess ? ` + ${this.vectorClient.name}` : ` (${this.vectorClient.name} failed)`}`);
+    console.log(
+      `Stored in SQLite${vectorSuccess ? ` + ${this.vectorClient.name}` : ` (${this.vectorClient.name} failed)`}`,
+    );
   }
 
   /**
@@ -857,13 +917,16 @@ if (isMain) {
   const vaultRoot = 'path' in vaultResult ? vaultResult.path : null;
 
   // Vault may have project-first layout (github.com/org/repo/ψ/) without a root ψ/
-  const vaultHasContent = vaultRoot && (
-    fs.existsSync(path.join(vaultRoot, 'ψ')) ||
-    fs.existsSync(path.join(vaultRoot, 'github.com'))
-  );
-  const repoRoot = process.env.ORACLE_REPO_ROOT ||
-    (vaultHasContent ? vaultRoot :
-     fs.existsSync(path.join(projectRoot, 'ψ')) ? projectRoot : process.cwd());
+  const vaultHasContent =
+    vaultRoot &&
+    (fs.existsSync(path.join(vaultRoot, 'ψ')) || fs.existsSync(path.join(vaultRoot, 'github.com')));
+  const repoRoot =
+    process.env.ORACLE_REPO_ROOT ||
+    (vaultHasContent
+      ? vaultRoot
+      : fs.existsSync(path.join(projectRoot, 'ψ'))
+        ? projectRoot
+        : process.cwd());
 
   const config: IndexerConfig = {
     repoRoot,
@@ -872,18 +935,19 @@ if (isMain) {
     sourcePaths: {
       resonance: 'ψ/memory/resonance',
       learnings: 'ψ/memory/learnings',
-      retrospectives: 'ψ/memory/retrospectives'
-    }
+      retrospectives: 'ψ/memory/retrospectives',
+    },
   };
 
   const indexer = new OracleIndexer(config);
 
-  indexer.index()
+  indexer
+    .index()
     .then(async () => {
       console.log('Indexing complete!');
       await indexer.close();
     })
-    .catch(async err => {
+    .catch(async (err) => {
       console.error('Indexing failed:', err);
       await indexer.close();
       process.exit(1);
