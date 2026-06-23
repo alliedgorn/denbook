@@ -753,6 +753,70 @@ describe('getTokenInfo (Spec #51 Phase 3)', () => {
   });
 });
 
+// ============================================================================
+// T#866 — BKK-legibility belt (companion to T#864/T#865; format owner @dex,
+// substrate-pen @bertus). Pins the load-bearing properties so the human-read
+// block cannot drift from machine truth and telemetry cannot creep into it.
+// ============================================================================
+describe('getTokenInfo — T#866 BKK-legibility belt', () => {
+  const toMs = (s: string) => new Date(s.replace(' ', 'T') + 'Z').getTime();
+  const HOUR = 60 * 60 * 1000;
+
+  it('BKK siblings are exactly +7h of their UTC counterparts (single source, no skew)', () => {
+    const created = createToken('karo', 'gorn');
+    if (!('token' in created)) throw new Error('createToken failed');
+    const info = getTokenInfo(created.id)!;
+    expect(toMs(info.created_at_bkk) - toMs(info.created_at)).toBe(7 * HOUR);
+    expect(toMs(info.rotation_recommended_at_bkk) - toMs(info.rotation_recommended_at!)).toBe(7 * HOUR);
+    expect(toMs(info.expires_at_bkk) - toMs(info.expires_at)).toBe(7 * HOUR);
+    expect(toMs(info.max_lifetime_at_bkk!) - toMs(info.max_lifetime_at!)).toBe(7 * HOUR);
+  });
+
+  it('leaves every UTC field byte-verbatim — the belt only ADDs', () => {
+    const created = createToken('karo', 'gorn');
+    if (!('token' in created)) throw new Error('createToken failed');
+    const info = getTokenInfo(created.id)!;
+    expect(info.expires_at).toBe(created.expiresAt);
+    // recommend mark unchanged by the belt: still created + 12h
+    expect((toMs(info.rotation_recommended_at!) - toMs(info.created_at)) / HOUR).toBe(12);
+  });
+
+  it('marks summary flags walk-permit as the ONLY actionable mark, keyed to the +12h mark', () => {
+    const created = createToken('karo', 'gorn');
+    if (!('token' in created)) throw new Error('createToken failed');
+    const info = getTokenInfo(created.id)!;
+    expect(info.marks.walk_permit.act).toBe(true);
+    expect(info.marks.backstop.act).toBe(false);
+    expect(info.marks.hard_cap.act).toBe(false);
+    expect(info.marks.walk_permit.role).toBe('walk-permit');
+    // the actionable mark is the recommend (+12h), NOT expiry (+24h)
+    expect(info.marks.walk_permit.utc).toBe(info.rotation_recommended_at);
+    expect(info.marks.backstop.utc).toBe(info.expires_at);
+  });
+
+  it('_display is generated from the fields: UTC leads, BKK marked derived, telemetry EXCLUDED', () => {
+    const created = createToken('karo', 'gorn');
+    if (!('token' in created)) throw new Error('createToken failed');
+    const info = getTokenInfo(created.id)!;
+    const d = info._display;
+    // walk-permit row carries the action weight + both stamps, generated from the fields
+    expect(d).toContain('▶ WALK-PERMIT');
+    expect(d).toContain('⟵ act on this');
+    expect(d).toContain(`${info.rotation_recommended_at} UTC`);
+    expect(d).toContain(`${info.rotation_recommended_at_bkk} BKK-local`);
+    // quiet marks present
+    expect(d).toContain('backstop');
+    expect(d).toContain('hard cap');
+    // telemetry must NEVER appear in the walk-mark block (window-vs-permit guard — Bertus load-bearing)
+    expect(d).not.toContain(info.refresh_window_starts_at!);
+    expect(d).not.toContain(info.self_rotate_door_closes_at!);
+    // the loud row must show the permit mark and NOT the +24h backstop, so a tired eye can't mistime
+    const permitLine = d.split('\n').find(l => l.includes('WALK-PERMIT'))!;
+    expect(permitLine).toContain(info.rotation_recommended_at!);
+    expect(permitLine).not.toContain(info.expires_at);
+  });
+});
+
 describe('rotation_recommended flag (Spec #52 Phase 4)', () => {
   it('does NOT recommend rotation for fresh token', () => {
     const created = createToken('karo', 'gorn');
