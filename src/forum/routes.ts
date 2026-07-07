@@ -401,8 +401,21 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   });
 
   app.post('/api/thread', async (c) => {
+    // Parse the body in its own guard so a malformed JSON payload fails CLEAN
+    // (400 client-error) instead of falling through to the generic 500 catch
+    // below. Producer-side malformed bodies (e.g. an unescaped char that breaks
+    // the JSON before it leaves the shell) are the caller's fault, not a server
+    // fault — return the parse detail so it stops logging empty. (T#879)
+    let data: any;
     try {
-      const data = await c.req.json();
+      data = await c.req.json();
+    } catch (parseErr) {
+      return c.json({
+        error: 'Malformed JSON body',
+        detail: parseErr instanceof Error ? parseErr.message : 'JSON parse error',
+      }, 400);
+    }
+    try {
       if (!data.message) {
         return c.json({ error: 'Missing required field: message' }, 400);
       }
