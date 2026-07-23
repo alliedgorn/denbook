@@ -3688,7 +3688,7 @@ app.post('/api/upload', async (c) => {
     let finalExt = isImage ? (imageType!.ext) : ext;
     let finalMime = isImage ? (imageType!.mime) : (allowed?.mime || 'application/octet-stream');
 
-    // Image processing: resize, EXIF strip (existing behavior)
+    // Image processing: resize, orientation baked into pixels, EXIF stripped
     if (isImage) {
       try {
         const sharp = require('sharp');
@@ -3698,7 +3698,6 @@ app.post('/api/upload', async (c) => {
             .rotate()
             .resize(1920, null, { withoutEnlargement: true })
             .jpeg({ quality: 95 })
-            .withMetadata({ orientation: undefined })
             .toBuffer();
           finalExt = '.jpg';
           finalMime = 'image/jpeg';
@@ -3706,14 +3705,12 @@ app.post('/api/upload', async (c) => {
           processedBuffer = await sharp(buffer)
             .rotate()
             .jpeg({ quality: 95 })
-            .withMetadata({ orientation: undefined })
             .toBuffer();
           finalExt = '.jpg';
           finalMime = 'image/jpeg';
         } else {
           processedBuffer = await sharp(buffer)
             .rotate()
-            .withMetadata({ orientation: undefined })
             .toBuffer();
         }
       } catch { /* sharp not available — save original */ }
@@ -10898,7 +10895,6 @@ app.post('/api/routine/photo/upload', async (c) => {
         .rotate()
         .resize(1920, null, { withoutEnlargement: true })
         .jpeg({ quality: 95 })
-        .withMetadata({ orientation: undefined })
         .toBuffer();
       ext = '.jpg';
     } catch { /* sharp not available */ }
@@ -12719,10 +12715,10 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any): Promise<void> 
                 const sharp = require('sharp');
                 const metadata = await sharp(buffer).metadata();
                 if (metadata.width && metadata.width > 1920) {
-                  processedBuffer = await sharp(buffer).rotate().resize(1920, null, { withoutEnlargement: true }).jpeg({ quality: 95 }).withMetadata({ orientation: undefined }).toBuffer();
+                  processedBuffer = await sharp(buffer).rotate().resize(1920, null, { withoutEnlargement: true }).jpeg({ quality: 95 }).toBuffer();
                   ext = '.jpg';
                 } else {
-                  processedBuffer = await sharp(buffer).rotate().withMetadata({ orientation: undefined }).toBuffer();
+                  processedBuffer = await sharp(buffer).rotate().toBuffer();
                 }
               } catch { /* sharp not available */ }
 
