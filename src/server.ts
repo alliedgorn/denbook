@@ -342,20 +342,40 @@ export const GUEST_SESSION_DURATION_MS = 4 * 60 * 60 * 1000; // 4 hours (guest)
 // External client identity (audit / rate-limit) = CF-Connecting-IP, which is
 // unforgeable ONLY because the Caddy origin is locked to Cloudflare IP ranges
 // (edge companion control, T#846). That value is NOT used for the local decision.
-export function isLocalNetwork(c: Context): boolean {
+// [T#846 / Site-2] THE single local-trust predicate. Framework-agnostic on purpose:
+// it takes primitives so that BOTH the Hono REST path (isLocalNetwork) and the raw
+// WebSocket upgrade path (validateWsUpgrade) can share one implementation instead of
+// keeping inline copies that must be remembered in lockstep. Do not add a third
+// call site by copying this logic — call this.
+//
+// `headers` are the raw forwarding-header VALUES (any truthy value ⇒ edge-transited).
+// `peer` is the socket peer address; undefined ⇒ fail closed.
+export function isLocalTrusted(args: {
+  peer: string | undefined | null;
+  cfConnectingIp?: string | null;
+  xForwardedFor?: string | null;
+  xRealIp?: string | null;
+  forwarded?: string | null;
+}): boolean {
   // (2) Any forwarding header ⇒ the request came through the public edge ⇒ not local.
-  const hasForwardingHeaders = !!(
-       c.req.header('cf-connecting-ip')
-    || c.req.header('x-forwarded-for')
-    || c.req.header('x-real-ip')
-    || c.req.header('forwarded')
-  );
-  if (hasForwardingHeaders) return false;
+  if (args.cfConnectingIp || args.xForwardedFor || args.xRealIp || args.forwarded) {
+    return false;
+  }
 
-  // (1) Socket peer address, injected from Bun's server.requestIP() at app.fetch.
-  // Absent (undefined) ⇒ fail closed (treated as non-local).
-  const peer = (c.env as { ip?: string } | undefined)?.ip;
+  // (1) Socket peer must be loopback. Absent (undefined) ⇒ fail closed.
+  const peer = args.peer;
   return peer === '127.0.0.1' || peer === '::1' || peer === 'localhost';
+}
+
+export function isLocalNetwork(c: Context): boolean {
+  // Socket peer address is injected from Bun's server.requestIP() at app.fetch.
+  return isLocalTrusted({
+    peer: (c.env as { ip?: string } | undefined)?.ip,
+    cfConnectingIp: c.req.header('cf-connecting-ip'),
+    xForwardedFor: c.req.header('x-forwarded-for'),
+    xRealIp: c.req.header('x-real-ip'),
+    forwarded: c.req.header('forwarded'),
+  });
 }
 
 // Generate session token using HMAC-SHA256
@@ -1768,18 +1788,27 @@ function validateWsUpgrade(req: Request, server: any): { allowed: boolean; reaso
     return { allowed: false, reason: `Origin rejected: ${origin}` };
   }
 
-  // 2. Auth check — same as REST: local network OR valid session
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || req.headers.get('x-real-ip')
-    || server.requestIP(req)?.address
-    || '127.0.0.1';
-
-  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === 'localhost'
-    || ip.startsWith('192.168.') || ip.startsWith('10.')
-    || (ip.startsWith('172.') && (() => {
-      const second = parseInt(ip.split('.')[1], 10);
-      return second >= 16 && second <= 31;
-    })());
+  // 2. Auth check — same as REST: local network OR valid session.
+  //
+  // [T#846 Site-2] Delegates to isLocalTrusted — the SAME predicate the REST path
+  // (isLocalNetwork) uses — rather than keeping a second inline copy that has to be
+  // remembered in lockstep with it.
+  //
+  // The previous inline version derived trust from the LEFTMOST X-Forwarded-For,
+  // which is client-controlled: a forged `X-Forwarded-For: 127.0.0.1` on the /ws
+  // upgrade resolved as local and granted an UNAUTHENTICATED beast-role socket.
+  // Same bug class as the REST isLocalNetwork bypass, same fix. Private-range
+  // allowances are dropped here too — no legitimate direct-LAN path in this topology.
+  //
+  // Peer address comes straight from Bun's server.requestIP() here (this path runs
+  // before app.fetch, so there is no Hono env to read it from).
+  const isLocal = isLocalTrusted({
+    peer: server.requestIP(req)?.address,
+    cfConnectingIp: req.headers.get('cf-connecting-ip'),
+    xForwardedFor: req.headers.get('x-forwarded-for'),
+    xRealIp: req.headers.get('x-real-ip'),
+    forwarded: req.headers.get('forwarded'),
+  });
 
   // Check session cookie from Cookie header
   const cookies = req.headers.get('cookie') || '';
