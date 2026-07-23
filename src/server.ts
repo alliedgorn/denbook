@@ -72,6 +72,7 @@ import {
 } from './server/dashboard.ts';
 
 import { handleContext } from './server/context.ts';
+import { processImageForStorage, ImageProcessingError } from './server/image-processing.ts';
 import { handleScheduleAdd, handleScheduleList } from './tools/schedule.ts';
 import type { ToolContext } from './tools/types.ts';
 
@@ -3684,36 +3685,29 @@ app.post('/api/upload', async (c) => {
     const buffer = Buffer.from(await file.arrayBuffer());
     if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-    let processedBuffer = buffer;
+    let processedBuffer: Buffer = buffer;
     let finalExt = isImage ? (imageType!.ext) : ext;
     let finalMime = isImage ? (imageType!.mime) : (allowed?.mime || 'application/octet-stream');
 
-    // Image processing: resize, orientation baked into pixels, EXIF stripped
+    // Image processing: resize, orientation baked into pixels, EXIF stripped.
+    // Fails closed — an image we cannot strip is not stored (T#881).
     if (isImage) {
       try {
-        const sharp = require('sharp');
-        const metadata = await sharp(buffer).metadata();
-        if (metadata.width && metadata.width > 1920) {
-          processedBuffer = await sharp(buffer)
-            .rotate()
-            .resize(1920, null, { withoutEnlargement: true })
-            .jpeg({ quality: 95 })
-            .toBuffer();
-          finalExt = '.jpg';
-          finalMime = 'image/jpeg';
-        } else if (buffer.length > 2 * 1024 * 1024) {
-          processedBuffer = await sharp(buffer)
-            .rotate()
-            .jpeg({ quality: 95 })
-            .toBuffer();
-          finalExt = '.jpg';
-          finalMime = 'image/jpeg';
-        } else {
-          processedBuffer = await sharp(buffer)
-            .rotate()
-            .toBuffer();
-        }
-      } catch { /* sharp not available — save original */ }
+        const processed = await processImageForStorage(buffer, {
+          fallbackExt: finalExt,
+          fallbackMime: finalMime,
+          reencodeOverBytes: 2 * 1024 * 1024,
+        });
+        processedBuffer = processed.buffer;
+        finalExt = processed.ext;
+        finalMime = processed.mime;
+      } catch (e) {
+        const err = e as ImageProcessingError;
+        console.error('[upload] EXIF strip failed, rejecting upload:', err.message, err.cause);
+        return err.sharpUnavailable
+          ? c.json({ error: 'Image processing is unavailable — upload rejected' }, 503)
+          : c.json({ error: 'Image could not be processed' }, 400);
+      }
     }
 
     const filename = `${crypto.randomUUID()}${finalExt}`;
@@ -10873,31 +10867,29 @@ app.post('/api/routine/photo/upload', async (c) => {
     const imageType = detectImageType(buffer);
     if (!imageType) return c.json({ error: 'Invalid image. Only JPG, PNG, GIF, WebP allowed.' }, 400);
 
-    // Process with sharp: EXIF rotation + keep date + strip GPS + resize
-    let processedBuffer = buffer;
-    let ext = imageType.ext;
+    // Process with sharp: EXIF rotation + keep date + strip GPS + resize.
+    // Capture date is read out of EXIF before stripping and kept in the DB.
+    // Fails closed — these carry GPS, so an unstrippable photo is not stored.
+    let processedBuffer: Buffer;
+    let ext: string;
     let captureDate: string | null = null;
     try {
-      const sharp = require('sharp');
-      // Extract EXIF date before processing
-      const metadata = await sharp(buffer).metadata();
-      if (metadata.exif) {
-        try {
-          // Parse EXIF for DateTimeOriginal (tag 0x9003)
-          const exifStr = metadata.exif.toString('binary');
-          const dateMatch = exifStr.match(/(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
-          if (dateMatch) {
-            captureDate = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T${dateMatch[4]}:${dateMatch[5]}:${dateMatch[6]}.000Z`;
-          }
-        } catch { /* date extraction failed */ }
-      }
-      processedBuffer = await sharp(buffer)
-        .rotate()
-        .resize(1920, null, { withoutEnlargement: true })
-        .jpeg({ quality: 95 })
-        .toBuffer();
-      ext = '.jpg';
-    } catch { /* sharp not available */ }
+      const processed = await processImageForStorage(buffer, {
+        fallbackExt: imageType.ext,
+        fallbackMime: imageType.mime,
+        alwaysReencode: true,
+        extractCaptureDate: true,
+      });
+      processedBuffer = processed.buffer;
+      ext = processed.ext;
+      captureDate = processed.captureDate;
+    } catch (e) {
+      const err = e as ImageProcessingError;
+      console.error('[routine/photo] EXIF strip failed, rejecting upload:', err.message, err.cause);
+      return err.sharpUnavailable
+        ? c.json({ error: 'Image processing is unavailable — upload rejected' }, 503)
+        : c.json({ error: 'Image could not be processed' }, 400);
+    }
 
     const filename = `${crypto.randomUUID()}${ext}`;
     fs.writeFileSync(path.join(ROUTINE_UPLOADS, filename), processedBuffer);
@@ -12708,28 +12700,31 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any): Promise<void> 
           if (imageRes.ok) {
             const buffer = Buffer.from(await imageRes.arrayBuffer());
             if (buffer.length <= 20 * 1024 * 1024) {
-              // Process with sharp if available
-              let processedBuffer = buffer;
-              let ext = '.' + (filePath.split('.').pop() || 'jpg');
+              // Strip EXIF before storing. Fails closed — on failure the photo
+              // is not saved and the message is delivered without it, rather
+              // than storing un-stripped bytes (T#881).
+              const srcExt = '.' + (filePath.split('.').pop() || 'jpg');
+              let processed;
               try {
-                const sharp = require('sharp');
-                const metadata = await sharp(buffer).metadata();
-                if (metadata.width && metadata.width > 1920) {
-                  processedBuffer = await sharp(buffer).rotate().resize(1920, null, { withoutEnlargement: true }).jpeg({ quality: 95 }).toBuffer();
-                  ext = '.jpg';
-                } else {
-                  processedBuffer = await sharp(buffer).rotate().toBuffer();
-                }
-              } catch { /* sharp not available */ }
+                processed = await processImageForStorage(buffer, {
+                  fallbackExt: srcExt,
+                  fallbackMime: srcExt === '.png' ? 'image/png' : 'image/jpeg',
+                });
+              } catch (e) {
+                const err = e as ImageProcessingError;
+                console.error(`[Telegram:${bot.beast}] EXIF strip failed, photo not saved:`, err.message, err.cause);
+              }
 
-              if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-              const filename = `telegram_${crypto.randomUUID()}${ext}`;
-              fs.writeFileSync(path.join(UPLOADS_DIR, filename), processedBuffer);
-              try {
-                sqlite.prepare('INSERT INTO files (filename, original_name, mime_type, size_bytes, uploaded_by, context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(filename, `telegram_photo${ext}`, ext === '.jpg' ? 'image/jpeg' : 'image/png', processedBuffer.length, 'gorn', 'telegram', Date.now());
-              } catch { /* files table may not have all columns */ }
-              photoUrl = `https://denbook.online/api/f/${filename}`;
-              console.log(`[Telegram:${bot.beast}] Photo saved: ${filename}`);
+              if (processed) {
+                if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+                const filename = `telegram_${crypto.randomUUID()}${processed.ext}`;
+                fs.writeFileSync(path.join(UPLOADS_DIR, filename), processed.buffer);
+                try {
+                  sqlite.prepare('INSERT INTO files (filename, original_name, mime_type, size_bytes, uploaded_by, context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(filename, `telegram_photo${processed.ext}`, processed.mime, processed.buffer.length, 'gorn', 'telegram', Date.now());
+                } catch { /* files table may not have all columns */ }
+                photoUrl = `https://denbook.online/api/f/${filename}`;
+                console.log(`[Telegram:${bot.beast}] Photo saved: ${filename}`);
+              }
             }
           }
         }

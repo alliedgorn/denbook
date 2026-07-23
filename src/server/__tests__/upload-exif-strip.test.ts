@@ -20,6 +20,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import sharp from 'sharp';
+import { processImageForStorage, ImageProcessingError } from '../image-processing.ts';
 
 /** Builds a JPEG carrying GPS + device EXIF and the given orientation tag. */
 async function makeExifJpeg(width: number, height: number, orientation: number): Promise<Buffer> {
@@ -88,5 +89,89 @@ describe('upload EXIF stripping', () => {
 
     // Documents the old behaviour: the call that read as "strip" preserves GPS.
     expect((await sharp(out).metadata()).exif).toBeTruthy();
+  });
+});
+
+/**
+ * Tests against the shared helper rather than a hand-rolled pipeline, so these
+ * catch call-site drift as well as sharp-version drift — the gap that existed
+ * while each route reimplemented the pipeline inline.
+ */
+describe('processImageForStorage', () => {
+  const opts = { fallbackExt: '.png', fallbackMime: 'image/png' };
+
+  it('strips EXIF and re-encodes when the image exceeds max width', async () => {
+    const r = await processImageForStorage(await makeExifJpeg(3000, 2000, 1), opts);
+
+    expect(r.ext).toBe('.jpg');
+    expect(r.mime).toBe('image/jpeg');
+    expect((await sharp(r.buffer).metadata()).width).toBe(1920);
+    expect((await sharp(r.buffer).metadata()).exif).toBeFalsy();
+  });
+
+  it('strips EXIF on passthrough, keeping the caller ext/mime', async () => {
+    const r = await processImageForStorage(await makeExifJpeg(300, 200, 1), opts);
+
+    expect(r.ext).toBe('.png');
+    expect(r.mime).toBe('image/png');
+    expect((await sharp(r.buffer).metadata()).exif).toBeFalsy();
+  });
+
+  it('re-encodes over the byte threshold when one is given', async () => {
+    const r = await processImageForStorage(await makeExifJpeg(300, 200, 1), {
+      ...opts,
+      reencodeOverBytes: 10,
+    });
+
+    expect(r.ext).toBe('.jpg');
+    expect((await sharp(r.buffer).metadata()).exif).toBeFalsy();
+  });
+
+  it('always re-encodes when asked, and still strips', async () => {
+    const r = await processImageForStorage(await makeExifJpeg(300, 200, 1), {
+      ...opts,
+      alwaysReencode: true,
+    });
+
+    expect(r.ext).toBe('.jpg');
+    expect((await sharp(r.buffer).metadata()).exif).toBeFalsy();
+  });
+
+  it('recovers the capture date before stripping, so the date survives the strip', async () => {
+    const withDate = await sharp({
+      create: { width: 60, height: 40, channels: 3, background: { r: 4, g: 4, b: 4 } },
+    })
+      .jpeg()
+      .withExif({ IFD0: { DateTimeOriginal: '2026:03:28 14:05:09' }, GPS: { GPSLatitudeRef: 'N' } })
+      .toBuffer();
+
+    const r = await processImageForStorage(withDate, { ...opts, extractCaptureDate: true });
+
+    expect(r.captureDate).toBe('2026-03-28T14:05:09.000Z');
+    expect((await sharp(r.buffer).metadata()).exif).toBeFalsy();
+  });
+
+  it('leaves captureDate null when extraction is not requested', async () => {
+    const r = await processImageForStorage(await makeExifJpeg(60, 40, 1), opts);
+    expect(r.captureDate).toBeNull();
+  });
+
+  it('FAILS CLOSED on unprocessable input — never returns the original bytes', async () => {
+    const garbage = Buffer.from('this is not an image, not even slightly');
+
+    // The whole point: no fallback path may hand back un-stripped input.
+    await expect(processImageForStorage(garbage, opts)).rejects.toThrow(ImageProcessingError);
+  });
+
+  it('marks input failures as not-sharpUnavailable, so callers can pick 400 vs 503', async () => {
+    const garbage = Buffer.from('still not an image');
+
+    try {
+      await processImageForStorage(garbage, opts);
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(ImageProcessingError);
+      expect((e as ImageProcessingError).sharpUnavailable).toBe(false);
+    }
   });
 });
