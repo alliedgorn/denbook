@@ -7,7 +7,7 @@
  */
 
 import { getSetting, setSetting, sqlite } from '../db/index.ts';
-import { enqueueNotification } from '../notify.ts';
+import { enqueueNotification, truncateForTmux } from '../notify.ts';
 
 // ============================================================================
 // Oracle Registry
@@ -226,17 +226,7 @@ export function getThreadSubscribers(threadId: number): Array<{ beast_name: stri
 // Notification Dispatch
 // ============================================================================
 
-/**
- * Sanitize a string for safe injection into tmux send-keys.
- * Strips newlines, escapes quotes, truncates.
- */
-function sanitizeForTmux(text: string, maxLen: number = 200): string {
-  return text
-    .replace(/\n/g, ' ')
-    .replace(/"/g, "'")
-    .replace(/\\/g, '\\\\')
-    .slice(0, maxLen);
-}
+// sanitizeForTmux moved to ../notify.ts as truncateForTmux (T#893).
 
 /**
  * Notify mentioned Oracles via tmux send-keys.
@@ -259,8 +249,8 @@ export function notifyMentioned(
 
   const registry = getOracleRegistry();
   const notified: string[] = [];
-  const preview = sanitizeForTmux(content);
-  const summaryPreview = sanitizeForTmux(content, 50);
+  const preview = truncateForTmux(content);
+  const summaryPreview = truncateForTmux(content, 50);
 
   // Extract the raw Oracle name from author (strip @project suffix)
   const authorName = author.split('@')[0].toLowerCase();
@@ -284,11 +274,11 @@ export function notifyMentioned(
     let message: string;
     if (level === 'summary' && !isDirect) {
       // Summary mode: one-liner with author + thread + truncated content
-      message = `[Forum summary] ${author} in thread #${threadId} ("${sanitizeForTmux(threadTitle, 50)}"): ${summaryPreview}...`;
+      message = `[Forum summary] ${author} in thread #${threadId} ("${truncateForTmux(threadTitle, 50)}"): ${summaryPreview}...`;
     } else if (context) {
-      message = `[${context.type}] From ${author} in ${context.label} ("${sanitizeForTmux(threadTitle, 50)}"):\\n\\n${preview}\\n\\n${context.hint}`;
+      message = `[${context.type}] From ${author} in ${context.label} ("${truncateForTmux(threadTitle, 50)}"):\\n\\n${preview}\\n\\n${context.hint}`;
     } else {
-      message = `[Forum message] From ${author} in thread #${threadId} ("${sanitizeForTmux(threadTitle, 50)}"):\\n\\n${preview}\\n\\nUse /forum thread ${threadId} to read and /forum post <message> (with thread_id ${threadId}) to reply.`;
+      message = `[Forum message] From ${author} in thread #${threadId} ("${truncateForTmux(threadTitle, 50)}"):\\n\\n${preview}\\n\\nUse /forum thread ${threadId} to read and /forum post <message> (with thread_id ${threadId}) to reply.`;
     }
 
     try {

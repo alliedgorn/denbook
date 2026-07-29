@@ -8,7 +8,7 @@
 import { eq, and, desc, sql, isNull } from 'drizzle-orm';
 import { db, dmConversations, dmMessages } from '../db/index.ts';
 import { getOracleRegistry } from '../forum/mentions.ts';
-import { enqueueNotification } from '../notify.ts';
+import { enqueueNotification, truncateForTmux } from '../notify.ts';
 import type { DmConversation, DmMessage } from './types.ts';
 
 // ============================================================================
@@ -24,16 +24,7 @@ function sortPair(a: string, b: string): [string, string] {
   return la < lb ? [la, lb] : [lb, la];
 }
 
-/**
- * Sanitize text for tmux injection.
- */
-function sanitizeForTmux(text: string, maxLen: number = 200): string {
-  return text
-    .replace(/\n/g, ' ')
-    .replace(/"/g, "'")
-    .replace(/\\/g, '\\\\')
-    .slice(0, maxLen);
-}
+// sanitizeForTmux moved to ../notify.ts as truncateForTmux (T#893).
 
 // ============================================================================
 // Conversation Operations
@@ -134,7 +125,7 @@ function notifyDmRecipient(from: string, to: string, content: string): boolean {
   const entry = registry[to];
   if (!entry) return false;
 
-  const preview = sanitizeForTmux(content, 120);
+  const preview = truncateForTmux(content, 120);
   const isGuestDm = from.startsWith('[Guest] ');
   const guestUsername = isGuestDm ? from.slice(8) : null;
   const dmLabel = isGuestDm ? `[DM [Guest] from ${guestUsername}]` : `[DM from ${from}]`;

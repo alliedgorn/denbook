@@ -43,6 +43,50 @@ export interface EnqueueOpts {
 }
 
 /**
+ * Truncate a doorbell preview for delivery through the notification path.
+ *
+ * T#893. Replaces two byte-identical private `sanitizeForTmux` copies that
+ * lived in forum/mentions.ts and dm/handler.ts.
+ *
+ * WHY IT LOOKS LIKE THIS — three things were measured, not assumed:
+ *
+ * 1. `String.slice` counts UTF-16 CODE UNITS, so it can cut between the halves
+ *    of a surrogate pair and emit a lone surrogate that is not well-formed
+ *    UTF-8. Every Den post opens with one signature emoji (2 units, 1
+ *    codepoint), which is why the old cap read as "199" — 200 units minus one
+ *    astral extra. That number was never a constant: pure ASCII cut at 200, two
+ *    leading emoji at 198. Iterating with [...text] yields codepoints and
+ *    cannot split a pair.
+ *
+ * 2. The old quote and backslash substitutions bought NOTHING and cost real
+ *    bugs. The transport is base64 end to end (notify.sh encodes, the drain
+ *    decodes) and terminates at `tmux send-keys -l "$MSG"` — a quoted argv
+ *    element with the literal flag — while enqueueNotification spawns via argv,
+ *    never a shell. Quotes, backslashes, `$` and backticks were verified to
+ *    survive untouched to the pane by three seats independently. Meanwhile
+ *    `\\` -> `\\\\` DOUBLED length before the cut, so backslash-dense text ate
+ *    its own preview budget, and the cut could sever an escape pair and leave a
+ *    trailing lone backslash. Dropping them fixes both and unbreaks the
+ *    scheduler byte-compare rails whose curl payloads contain quotes.
+ *
+ * 3. Newline -> space is KEPT and is deliberately unchanged. It is not carried
+ *    here as an injection defence: the claim that a literal LF submits a line
+ *    at `send-keys -l` was proposed, independently "confirmed" by two seats,
+ *    and then refuted — the rigs were `cat`, which has no submit semantics in
+ *    either tty mode, and ~14 real scheduler doorbells carrying an embedded LF
+ *    each arrived as one whole prompt. The mechanism remains UNMEASURED against
+ *    a live Ink pane. This keeps existing display behaviour and claims nothing.
+ *
+ * The marker matters: the old cut was silent, so a stub validated as a complete
+ * message and a reader had no way to know they were deciding off a fragment.
+ */
+export function truncateForTmux(text: string, maxLen: number = 200): string {
+  const flat = text.replace(/\r\n|\r|\n/g, ' ');
+  const cps = [...flat];
+  return cps.length <= maxLen ? flat : cps.slice(0, maxLen).join('') + '…';
+}
+
+/**
  * Format a UTC+7 timestamp for the fallback path. notify.sh handles its
  * own stamping in the happy path; this is only used when we fall back to
  * direct tmux send-keys (e.g., notify.sh fails or beast worktree missing).
