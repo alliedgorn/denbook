@@ -9,6 +9,27 @@ import type { ToolContext } from '../tools/types.ts';
 import { schedule } from '../db/index.ts';
 
 // ============================================================================
+// T#905 — due-schedule predicate.
+//
+// Exported so the regression test binds to the STRING THE ENDPOINT ACTUALLY RUNS.
+// A test that re-types the predicate cannot catch a revert; this one can.
+//
+// Both sides MUST be wrapped in datetime(). `now` is bound as an ISO-8601 string
+// from new Date().toISOString() ('T' separator), while next_due_at is written
+// space-separated by the wake storm cap at pack/routes.ts:411
+// (datetime('now', ...) returns 'YYYY-MM-DD HH:MM:SS'). A raw string comparison
+// puts ' ' (0x20) below 'T' (0x54), so EVERY same-day space-separated row sorts
+// as overdue whatever the clock says — a beat 14 hours in the future reported due.
+//
+// Found by @zaghnal from a write-locked seat; the trigger loop in
+// runSchedulerCycle already wraps both sides, so no beat has ever fired early.
+// This endpoint only ever answered a Beast asking "what do I owe?" — and every
+// seat's standing orders read it on wake.
+// ============================================================================
+export const DUE_SCHEDULES_SQL =
+  'SELECT * FROM beast_schedules WHERE beast = ? AND enabled = 1 AND datetime(next_due_at) <= datetime(?) ORDER BY next_due_at';
+
+// ============================================================================
 // Module-level state — captured via initScheduler()
 // ============================================================================
 
@@ -375,9 +396,7 @@ export function registerSchedulerRoutes(app: OpenAPIHono, sqliteDb: Database, he
     const beast = c.req.query('beast');
     if (!beast) return c.json({ error: 'beast parameter required' }, 400);
     const now = new Date().toISOString();
-    const rows = sqlite.prepare(
-      'SELECT * FROM beast_schedules WHERE beast = ? AND enabled = 1 AND next_due_at <= ? ORDER BY next_due_at'
-    ).all(beast, now) as any[];
+    const rows = sqlite.prepare(DUE_SCHEDULES_SQL).all(beast, now) as any[];
     return c.json({ schedules: rows, total: rows.length });
   });
 
