@@ -69,7 +69,7 @@ export const HELP_ENDPOINTS = [
     { method: 'GET', path: '/api/tasks/:id', desc: 'Get task by ID (includes subtasks summary if parent)', params: null },
     { method: 'GET', path: '/api/tasks/:id/subtree', desc: 'Get parent task + all direct subtasks (Spec #56)', params: null },
     { method: 'POST', path: '/api/tasks', desc: 'Create task (Spec #56: parent_task_id for subtasks)', params: 'body: { title, assigned_to, reviewer, project_id, description?, status?, parent_task_id? }' },
-    { method: 'PATCH', path: '/api/tasks/:id', desc: 'Update task (Spec #56: parent_task_id for reparent)', params: 'body: { title?, description?, assignee?, reviewer?, status?, parent_task_id? }' },
+    { method: 'PATCH', path: '/api/tasks/:id', desc: 'Update task (Spec #56: parent_task_id for reparent)', params: 'body: { title?, description?, assigned_to?, reviewer?, status?, parent_task_id? }' },
     { method: 'DELETE', path: '/api/tasks/:id', desc: 'Delete task (orphans subtasks via SET NULL)', params: null },
     { method: 'POST', path: '/api/tasks/:id/comments', desc: 'Add comment to task', params: 'body: { author, content }' },
     { method: 'GET', path: '/api/tasks/:id/comments', desc: 'Get task comments', params: null },
