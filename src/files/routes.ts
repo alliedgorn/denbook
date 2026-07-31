@@ -121,7 +121,6 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
               .rotate()
               .resize(1920, null, { withoutEnlargement: true })
               .jpeg({ quality: 95 })
-              .withMetadata({ orientation: undefined })
               .toBuffer();
             finalExt = '.jpg';
             finalMime = 'image/jpeg';
@@ -129,14 +128,12 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
             processedBuffer = await sharp(buffer)
               .rotate()
               .jpeg({ quality: 95 })
-              .withMetadata({ orientation: undefined })
               .toBuffer();
             finalExt = '.jpg';
             finalMime = 'image/jpeg';
           } else {
             processedBuffer = await sharp(buffer)
               .rotate()
-              .withMetadata({ orientation: undefined })
               .toBuffer();
           }
         } catch { /* sharp not available — save original */ }

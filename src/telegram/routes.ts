@@ -138,10 +138,10 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
                 const sharp = require('sharp');
                 const metadata = await sharp(buffer).metadata();
                 if (metadata.width && metadata.width > 1920) {
-                  processedBuffer = await sharp(buffer).rotate().resize(1920, null, { withoutEnlargement: true }).jpeg({ quality: 95 }).withMetadata({ orientation: undefined }).toBuffer();
+                  processedBuffer = await sharp(buffer).rotate().resize(1920, null, { withoutEnlargement: true }).jpeg({ quality: 95 }).toBuffer();
                   ext = '.jpg';
                 } else {
-                  processedBuffer = await sharp(buffer).rotate().withMetadata({ orientation: undefined }).toBuffer();
+                  processedBuffer = await sharp(buffer).rotate().toBuffer();
                 }
               } catch { /* sharp not available */ }
 
