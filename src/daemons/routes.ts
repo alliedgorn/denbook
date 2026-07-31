@@ -63,12 +63,23 @@ function perBeastDrainAlive(pidPath: string, beast: string): boolean {
     // return true for A, and `:78` then suppressed the fallback for a seat
     // whose own drain was dead — silently, with the queue reading as owned.
     //
-    // Two details are load-bearing:
-    //   1. /proc/<pid>/cmdline is NUL-separated. A multi-token needle cannot
-    //      match the raw bytes at all — it must be normalised first. (The old
+    // Two details are load-bearing, and THEY BREAK IN OPPOSITE DIRECTIONS — a
+    // maintainer tidying this line needs to know which failure they are about
+    // to cause (framing from @karo, T#909):
+    //
+    //   1. NUL NORMALISATION. /proc/<pid>/cmdline is NUL-separated, so a
+    //      multi-token needle cannot match the raw bytes at all. (The old
     //      single-token needle worked only because it spanned no separator.)
-    //   2. The TRAILING SPACE. Without it `raxprobe` satisfies the `rax` check;
-    //      this host has carried bertusprobe, drainprobe and selftest816969.
+    //      ⇒ Drop the .replace() and EVERY seat reads DEAD. The fallback then
+    //        engages for everyone — which looks like extra resilience and is
+    //        actually double delivery plus a permanent WINDOW-2-WARNING flood
+    //        that resets the Window-3 countdown. It fails in the flattering
+    //        direction, which is why it would survive review.
+    //
+    //   2. TRAILING SPACE. ⇒ Drop it and `<beast>probe` satisfies the `<beast>`
+    //      check — the false-ALIVE direction, suppressing the fallback for a
+    //      seat that has no drain. This host has carried bertusprobe,
+    //      drainprobe and selftest816969.
     try {
       const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf-8').replace(/\0/g, ' ');
       return cmdline.includes(`notify-drain.sh ${beast} `);
