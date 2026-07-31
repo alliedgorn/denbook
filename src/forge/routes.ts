@@ -1154,7 +1154,6 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
           .rotate()
           .resize(1920, null, { withoutEnlargement: true })
           .jpeg({ quality: 95 })
-          .withMetadata({ orientation: undefined })
           .toBuffer();
         ext = '.jpg';
       } catch { /* sharp not available */ }
