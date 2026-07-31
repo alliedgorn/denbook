@@ -43,7 +43,7 @@ const drainLastSent: Map<string, number> = new Map(); // beast → last send tim
  * Phase 2+ defense-in-depth: write start-time to PID file alongside PID, validate
  * against /proc/<pid>/stat field 22 (process start time). systemd-PIDFile pattern.
  */
-function perBeastDrainAlive(pidPath: string): boolean {
+function perBeastDrainAlive(pidPath: string, beast: string): boolean {
   try {
     if (!fs.existsSync(pidPath)) return false;
     const pid = parseInt(fs.readFileSync(pidPath, 'utf-8').trim(), 10);
@@ -51,10 +51,27 @@ function perBeastDrainAlive(pidPath: string): boolean {
     // Layer 1: process exists?
     try { process.kill(pid, 0); }
     catch { return false; } // ESRCH = process gone
-    // Layer 2: process is actually notify-drain.sh? (PID-reuse defense)
+    // Layer 2: is it THIS BEAST'S notify-drain.sh? (PID-reuse defense)
+    //
+    // T#910. This check used to be `cmdline.includes('notify-drain.sh')` with no
+    // beast name, which defends against a recycled PID running something
+    // unrelated but NOT against one running *another seat's* drain — every
+    // seat's drain satisfies the bare needle equally. Thirteen drains start
+    // within seconds of each other at wake, so "the recycled PID is another
+    // drain" is the likeliest reuse case on this host, not the unlikeliest.
+    // A stale pidfile for seat A landing on seat B's live drain made this
+    // return true for A, and `:78` then suppressed the fallback for a seat
+    // whose own drain was dead — silently, with the queue reading as owned.
+    //
+    // Two details are load-bearing:
+    //   1. /proc/<pid>/cmdline is NUL-separated. A multi-token needle cannot
+    //      match the raw bytes at all — it must be normalised first. (The old
+    //      single-token needle worked only because it spanned no separator.)
+    //   2. The TRAILING SPACE. Without it `raxprobe` satisfies the `rax` check;
+    //      this host has carried bertusprobe, drainprobe and selftest816969.
     try {
-      const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf-8');
-      return cmdline.includes('notify-drain.sh');
+      const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf-8').replace(/\0/g, ' ');
+      return cmdline.includes(`notify-drain.sh ${beast} `);
     } catch { return false; } // /proc gone or unreadable = treat as dead
   } catch { return false; }
 }
@@ -71,11 +88,14 @@ function runDrainCycle() {
       const pidPath = path.join(DRAIN_DIR, `${beast}.pid`);
 
       // Spec #54 v2 §1 — skip if per-Beast drain owns this queue.
-      // perBeastDrainAlive uses signal-0 kill + /proc/<pid>/cmdline check to
-      // defend against Linux PID-reuse (Bertus near-blocker §1, promoted from
-      // Phase 2 to Phase 1 baseline). Closes the implicit-fallback-drift class
+      // perBeastDrainAlive uses signal-0 kill + a BEAST-SCOPED /proc/<pid>/cmdline
+      // check to defend against Linux PID-reuse (Bertus near-blocker §1, promoted
+      // from Phase 2 to Phase 1 baseline). Closes the implicit-fallback-drift class
       // that defeats the offline-resilience guarantee.
-      if (perBeastDrainAlive(pidPath)) continue;
+      // ⛔ The beast name and its trailing space are deliberate and must not be
+      // "simplified" back to a bare `notify-drain.sh` needle — see T#910. Without
+      // them this suppresses the fallback for the WRONG seat.
+      if (perBeastDrainAlive(pidPath, beast)) continue;
 
       // T#738 / Spec #54 Phase 5 Window 2: log-only-warning when server-drain
       // falls back to handling a queue that should be per-Beast-drained.
