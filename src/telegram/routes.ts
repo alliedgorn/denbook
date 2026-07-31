@@ -4,7 +4,7 @@ import type { Database } from 'bun:sqlite';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { enqueueNotification } from '../notify.ts';
+import { enqueueNotification, truncateForTmux } from '../notify.ts';
 
 const TG_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const TG_POLL_INTERVAL = 3000; // ms
@@ -117,7 +117,13 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
       const replied = msg.reply_to_message;
       const repliedId = typeof replied.message_id === 'number' ? replied.message_id : '?';
       const repliedText = replied.text || replied.caption || '[media]';
-      const repliedPreview = repliedText.length > 80 ? repliedText.slice(0, 80) + '...' : repliedText;
+      // T#893: codepoint-aware + marked. The old `.slice(0, 80)` counted UTF-16
+      // units, so it could split a surrogate pair mid-emoji; and its '...' was
+      // only appended on the >80 branch, which was correct but hand-rolled in
+      // one of five doorbells. truncateForTmux also flattens embedded newlines,
+      // which this span never did — a replied-to message with a newline used to
+      // break the single-line doorbell format.
+      const repliedPreview = truncateForTmux(repliedText, 80);
       replyContext = `(replying to TG#${repliedId}: "${repliedPreview}")\\n`;
     }
 
@@ -158,7 +164,11 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
         }
       } catch (e) { console.error(`[Telegram:${bot.beast}] Photo download error:`, e); }
 
-      const caption = msg.caption || '';
+      // T#893: bound the caption, never the envelope — `photoUrl` and the
+      // labels must survive intact or the doorbell loses the link it exists to
+      // deliver. This is the regression an outer cap on the assembled string
+      // would cause (@bertus's one-liner, refuted 07-31 05:22).
+      const caption = msg.caption ? truncateForTmux(msg.caption) : '';
       if (photoUrl) {
         notifyText = caption
           ? `[Telegram from Gorn] ${replyContext}${caption}\\n\\nPhoto: ${photoUrl}`
@@ -171,12 +181,16 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
       confirmText = `✓ Notified ${bot.beast}`;
 
     } else if (msg.text) {
-      notifyText = `[Telegram from Gorn] ${replyContext}${msg.text}`;
+      notifyText = `[Telegram from Gorn] ${replyContext}${truncateForTmux(msg.text)}`;
       confirmText = `✓ Notified ${bot.beast}`;
 
     } else if (msg.document) {
-      const docName = msg.document.file_name || 'unknown';
-      notifyText = `[Telegram from Gorn] ${replyContext}Document: ${docName}${msg.caption ? ' — ' + msg.caption : ''}`;
+      // T#893: `file_name` and `caption` are authored by whoever created the
+      // file, not by the sender the chat_id gate authenticates (@bertus's
+      // reframe: the gate authenticates the SENDER, not the AUTHOR). Bound both.
+      const docName = truncateForTmux(msg.document.file_name || 'unknown', 120);
+      const docCaption = msg.caption ? truncateForTmux(msg.caption) : '';
+      notifyText = `[Telegram from Gorn] ${replyContext}Document: ${docName}${docCaption ? ' — ' + docCaption : ''}`;
       confirmText = `✓ Notified ${bot.beast}`;
 
     } else if (msg.voice) {
@@ -184,7 +198,9 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
       confirmText = `✓ Notified ${bot.beast}`;
 
     } else if (msg.sticker) {
-      const emoji = msg.sticker.emoji || '';
+      // T#893: sticker `emoji` is a free-text field on an attacker-authorable
+      // sticker pack, not a validated glyph. Bound it like any other span.
+      const emoji = truncateForTmux(msg.sticker.emoji || '', 16);
       notifyText = `[Telegram from Gorn] ${replyContext}Sticker ${emoji}`;
       confirmText = `✓ Notified ${bot.beast}`;
 
