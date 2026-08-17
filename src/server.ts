@@ -281,9 +281,16 @@ app.notFound((c) => {
 });
 
 // CORS middleware — restricted to known origins (T#502)
+// allowHeaders pinned (T#952): with allowHeaders empty, hono's cors middleware
+// falls through to `requestHeaders.split(/\s*,\s*/)` on the attacker-controlled
+// Access-Control-Request-Headers (GHSA-8j4g-w8fx-2239 — quadratic ReDoS,
+// measured 17.8s of blocked event loop on a 100KB header, unauth preflight).
+// An explicit list makes headers.length>0 so that split never runs. The list is
+// the actual client-header set; credentials:true forbids a '*' wildcard anyway.
 app.use('*', cors({
   origin: ['http://localhost:47778', 'http://127.0.0.1:47778', 'https://denbook.online'],
   credentials: true,
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Beast', 'If-None-Match'],
 }));
 
 // Security headers middleware (T#502 — Talon audit finding, T#503 — CSP)
