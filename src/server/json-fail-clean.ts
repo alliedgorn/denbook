@@ -11,6 +11,13 @@
  * class centrally.
  *
  * Design (see T#954 thread):
+ * - This is a PRE-PARSE middleware, deliberately NOT a Hono `app.onError()`
+ *   handler. Each of the ~85 sites wraps `c.req.json()` in its own try/catch
+ *   that returns 500 — swallowing the parse-throw locally before it could ever
+ *   reach onError, so onError would miss every site. Intercepting the parse
+ *   BEFORE the handler runs IS the fix. Do NOT "simplify" this to onError: it
+ *   would silently reopen all 85 sites (@bertus, T#954 review — the distinction
+ *   is load-bearing).
  * - Validates the body via a raw CLONE (`c.req.raw.clone().text()` + JSON.parse),
  *   exactly as the audit middleware clones for its own read. The clone does NOT consume the stream the handler
  *   reads, so this is ORDER-INDEPENDENT — it does not matter whether it runs
