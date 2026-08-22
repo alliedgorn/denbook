@@ -89,6 +89,7 @@ import {
 
 import { enqueueNotification } from './notify.ts';
 import { rbacMiddleware, getGuestAllowlist } from './server/rbac.ts';
+import { jsonFailClean } from './server/json-fail-clean.ts';
 import type { Role } from './server/rbac.ts';
 import { registerGovernanceRoutes } from './governance/routes.ts';
 import { registerProwlRoutes } from './prowl/routes.ts';
@@ -707,6 +708,14 @@ app.use('/api/*', async (c, next) => {
     }
   } catch { /* never block requests for logging failures */ }
 });
+
+// ============================================================================
+// Malformed-JSON fail-clean middleware (T#954)
+// A malformed JSON body returns a clean 400, not a bare 500, for the whole class
+// of ~85 `c.req.json()` sites. Central + order-independent (validates via a raw
+// clone that does not consume the handler's stream). See src/server/json-fail-clean.ts.
+// ============================================================================
+app.use('/api/*', jsonFailClean());
 
 // ============================================================================
 // Auth — rate-limit infrastructure (route handlers extracted to src/server/routes.ts, T#781)
