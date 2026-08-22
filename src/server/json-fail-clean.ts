@@ -25,6 +25,14 @@
  * - Gated to requests that actually declare a non-empty JSON payload, so
  *   multipart form uploads (`c.req.parseBody()`) and body-less requests pass
  *   straight through untouched.
+ *
+ * Documented residual (by design, @bertus review): the gate is content-type
+ * scoped. A malformed body sent with a NON-`application/json` content-type
+ * bypasses this guard and still surfaces as the handler's 500 — because Hono's
+ * `c.req.json()` parses regardless of declared content-type, so catching every
+ * content-type here would wrongly try to JSON-parse legitimate text/form bodies.
+ * The realistic malformed case (an `application/json` request with bad bytes)
+ * IS covered; the content-type-mismatched case is left to the handler.
  */
 
 import type { Context, Next } from 'hono';
