@@ -10,6 +10,15 @@
  * (POST /api/thread) with a per-handler guard; this middleware fixes the whole
  * class centrally.
  *
+ * Supersession (joint call @gnarl + @karo, 2026-08-27, T#879 thread): once this
+ * middleware merges it covers /api/thread too, so T#879's inline guard becomes
+ * redundant (dead defense-in-depth the pre-parse shadows). Decision: T#954
+ * SUPERSEDES T#879 — T#879 is closed superseded-by-T#954 on merge (branch
+ * retained + marked superseded, Nothing-is-Deleted), NOT merged alongside — never
+ * two guards on one handler. Fallback if T#954 slips materially: T#879 lands
+ * narrow-first as interim, and T#954's later merge MUST remove the now-redundant
+ * /api/thread inline guard as part of generalizing.
+ *
  * Design (see T#954 thread):
  * - This is a PRE-PARSE middleware, deliberately NOT a Hono `app.onError()`
  *   handler. Each of the ~85 sites wraps `c.req.json()` in its own try/catch
