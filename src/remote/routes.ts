@@ -19,6 +19,11 @@ export function registerRemoteRoutes(app: OpenAPIHono, helpers: RemoteHelpers) {
 
   // GET /api/remote/status — which beast is currently attached
   app.openapi(remoteStatusRoute, ((c: Context) => {
+    // Remote status requires local tmux access — reject non-local requests cleanly (T#953).
+    // Identical guard to attach; status leaks the attached-beast name + runs tmux unauth without it.
+    if (!isLocalNetwork(c) && !hasSessionAuth(c)) {
+      return c.json({ error: 'forbidden' }, 403);
+    }
     // Verify the Remote session still exists and has a linked window
     if (attachedBeastName) {
       try {
@@ -105,6 +110,11 @@ export function registerRemoteRoutes(app: OpenAPIHono, helpers: RemoteHelpers) {
 
   // POST /api/remote/detach — detach current beast (local only — requires tmux)
   app.openapi(remoteDetachRoute, ((c: Context) => {
+    // Remote detach requires local tmux access — reject non-local requests cleanly (T#953).
+    // Identical guard to attach; detach runs `tmux unlink-window` (destructive state-change) unauth without it.
+    if (!isLocalNetwork(c) && !hasSessionAuth(c)) {
+      return c.json({ error: 'forbidden' }, 403);
+    }
     try {
       execSync(`tmux unlink-window -k -t ${JSON.stringify(REMOTE_SESSION)}:1`, { timeout: 2000 });
     } catch { /* already detached */ }
