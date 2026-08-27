@@ -537,6 +537,10 @@ export const remoteStatusRoute = createRoute({
       },
       description: 'Whether a beast window is linked into the remote tmux session and which beast (if any)',
     },
+    403: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Forbidden — requires local network or session auth',
+    },
   },
 });
 
@@ -602,6 +606,10 @@ export const remoteDetachRoute = createRoute({
         },
       },
       description: 'Remote session detached (idempotent — succeeds even when no window was linked)',
+    },
+    403: {
+      content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      description: 'Forbidden — requires local network or session auth',
     },
   },
 });
