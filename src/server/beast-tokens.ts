@@ -457,6 +457,22 @@ export function getTokenInfo(tokenId: number): {
   // Computed: created_at + ROTATION_RECOMMENDED_HOURS — when the rotation_recommended
   // header starts firing on validateToken responses.
   rotation_recommended_at: string | null;
+  // [T#866] BKK-local siblings (fixed UTC+7, no DST) for the human-read marks. Derived,
+  // never authoritative — the verbatim UTC fields above stay the source of truth.
+  created_at_bkk: string;
+  rotation_recommended_at_bkk: string;
+  expires_at_bkk: string;
+  max_lifetime_at_bkk: string | null;
+  // [T#866] Role-tagged mark summary — function labels + the single actionable flag, so a
+  // reader keys off the action-word, not a field-name or "the first number on the row".
+  marks: {
+    walk_permit: { role: string; act: boolean; utc: string; bkk: string };
+    backstop: { role: string; act: boolean; utc: string; bkk: string };
+    hard_cap: { role: string; act: boolean; utc: string | null; bkk: string | null };
+  };
+  // [T#866] Presentation block, GENERATED from the fields above (never hand-built) so the
+  // human read cannot drift from machine truth. Underscore = presentation, not data.
+  _display: string;
 } | null {
   const row = getTokenByIdStmt.get(tokenId) as
     | {
@@ -471,6 +487,34 @@ export function getTokenInfo(tokenId: number): {
   const expiresMs = new Date(row.expires_at.replace(' ', 'T') + 'Z').getTime();
   const fmt = (ms: number) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
 
+  // [T#866] BKK is fixed UTC+7 (no DST) — shift the epoch then reuse fmt()'s UTC render to
+  // get BKK wall-clock. Derive each mark ONCE here so the structured fields and the
+  // generated _display block share a single source and cannot drift (Dex format-owner call).
+  const fmtBkk = (ms: number) => fmt(ms + 7 * 60 * 60 * 1000);
+  const maxLifeMs = row.max_lifetime_at
+    ? new Date(row.max_lifetime_at.replace(' ', 'T') + 'Z').getTime()
+    : null;
+  const recommendMs = createdMs + ROTATION_RECOMMENDED_HOURS * 60 * 60 * 1000;
+
+  const rotationRecommendedAt = fmt(recommendMs);
+  const rotationRecommendedAtBkk = fmtBkk(recommendMs);
+  const expiresAtBkk = fmtBkk(expiresMs);
+  const maxLifetimeAtBkk = maxLifeMs !== null ? fmtBkk(maxLifeMs) : null;
+
+  // _display: UTC verbatim leads each row, BKK-local follows behind → (visibly derived).
+  // walk-permit carries ALL visual weight (▶ / CAPS / ⟵ act on this); backstop + hard-cap
+  // stay quiet (lowercase, indented) so a tired eye can't time a walk off the +24h/+7d rows.
+  // Telemetry marks (refresh-window / self-rotate-door) are deliberately ABSENT — not walk-marks.
+  // Glyph fallback (documented, if a read-path mangles unicode): ▶→>, →→->, ⟵ act on this→<- act on this.
+  const displayLines = [
+    `TOKEN #${row.id}  (created ${row.created_at} UTC)`,
+    `▶ WALK-PERMIT  ${rotationRecommendedAt} UTC   → ${rotationRecommendedAtBkk} BKK-local   ⟵ act on this`,
+    `  backstop     ${row.expires_at} UTC   → ${expiresAtBkk} BKK-local`,
+  ];
+  if (row.max_lifetime_at && maxLifetimeAtBkk) {
+    displayLines.push(`  hard cap     ${row.max_lifetime_at} UTC   → ${maxLifetimeAtBkk} BKK-local`);
+  }
+
   return {
     id: row.id,
     beast: row.beast,
@@ -481,7 +525,18 @@ export function getTokenInfo(tokenId: number): {
     next_token_id: row.next_token_id,
     refresh_window_starts_at: fmt(expiresMs - REFRESH_WINDOW_HOURS * 60 * 60 * 1000),
     self_rotate_door_closes_at: fmt(expiresMs + SELF_ROTATE_GRACE_AFTER_EXPIRY_HOURS * 60 * 60 * 1000),
-    rotation_recommended_at: fmt(createdMs + ROTATION_RECOMMENDED_HOURS * 60 * 60 * 1000),
+    rotation_recommended_at: rotationRecommendedAt,
+    // [T#866] derived BKK siblings + role-tagged summary + generated _display block
+    created_at_bkk: fmtBkk(createdMs),
+    rotation_recommended_at_bkk: rotationRecommendedAtBkk,
+    expires_at_bkk: expiresAtBkk,
+    max_lifetime_at_bkk: maxLifetimeAtBkk,
+    marks: {
+      walk_permit: { role: 'walk-permit', act: true, utc: rotationRecommendedAt, bkk: rotationRecommendedAtBkk },
+      backstop: { role: 'backstop', act: false, utc: row.expires_at, bkk: expiresAtBkk },
+      hard_cap: { role: 'hard cap', act: false, utc: row.max_lifetime_at, bkk: maxLifetimeAtBkk },
+    },
+    _display: displayLines.join('\n'),
   };
 }
 
