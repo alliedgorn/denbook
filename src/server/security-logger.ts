@@ -25,6 +25,7 @@ export type SecurityEventType =
   | 'token_revoked'          // OAuth token revoked/disconnected
   | 'settings_changed'       // Auth/security settings modified
   | 'impersonation_blocked'  // ?as= spoofing blocked on protected endpoint
+  | 'legacy_auth_used'       // T#719 — deprecated ?as= param seen on a bearer-carrying call (audit-only, not used as actor)
   | 'session_destroyed'      // Session logout
   | 'alert_triggered'        // Threshold alert fired by checkAlertThresholds
   | 'token_validated'        // Beast token validated (sampled, T#546)
