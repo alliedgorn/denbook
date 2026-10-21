@@ -317,35 +317,45 @@ export const SESSION_COOKIE_NAME = 'oracle_session';
 export const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (owner)
 export const GUEST_SESSION_DURATION_MS = 4 * 60 * 60 * 1000; // 4 hours (guest)
 
-// Check if request is from local network
+// Check if request is from local network (the local-trust gate).
+//
+// [T#846] A request is local-trusted ONLY if it is a DIRECT connection to the
+// loopback bind (Beast → 127.0.0.1:47778), proven by BOTH:
+//   (1) the socket peer is loopback, AND
+//   (2) NO edge-forwarding headers are present.
+//
+// Topology: client → Cloudflare → Caddy(:443) → bun(127.0.0.1:47778). bun binds
+// loopback only, so EVERY proxied (external) request also has a loopback socket
+// peer — socket-peer alone cannot distinguish external-via-edge from real-local.
+// The discriminator is the forwarding headers: every CF/Caddy-proxied request
+// carries CF-Connecting-IP / X-Forwarded-For, so their PRESENCE proves the request
+// transited the public edge and must never be treated as local. A genuine
+// direct-to-loopback call (a Beast on the box) carries none.
+//
+// The previous implementation trusted the LEFTMOST X-Forwarded-For value, which is
+// client-controlled — a forged `X-Forwarded-For: 127.0.0.1` resolved as local and
+// bypassed auth (the isLocalNetwork XFF-spoofing auth-bypass). Never key the
+// local-trust decision off ANY client-settable header. Private-range allowances
+// (192.168/10/172.16-31) are also dropped: there is no legitimate direct-LAN path
+// in this topology, so any non-loopback peer is non-local.
+//
+// External client identity (audit / rate-limit) = CF-Connecting-IP, which is
+// unforgeable ONLY because the Caddy origin is locked to Cloudflare IP ranges
+// (edge companion control, T#846). That value is NOT used for the local decision.
 export function isLocalNetwork(c: Context): boolean {
-  // Check actual client IP — do NOT trust Via header (spoofable).
-  // Caddy should be configured to set X-Real-IP to the actual client IP.
-  const forwarded = c.req.header('x-forwarded-for');
-  const realIp = c.req.header('x-real-ip');
-  const ip = forwarded?.split(',')[0]?.trim() || realIp || '127.0.0.1';
+  // (2) Any forwarding header ⇒ the request came through the public edge ⇒ not local.
+  const hasForwardingHeaders = !!(
+       c.req.header('cf-connecting-ip')
+    || c.req.header('x-forwarded-for')
+    || c.req.header('x-real-ip')
+    || c.req.header('forwarded')
+  );
+  if (hasForwardingHeaders) return false;
 
-  return ip === '127.0.0.1'
-      || ip === '::1'
-      || ip === 'localhost'
-      || ip.startsWith('192.168.')
-      || ip.startsWith('10.')
-      || ip.startsWith('172.16.')
-      || ip.startsWith('172.17.')
-      || ip.startsWith('172.18.')
-      || ip.startsWith('172.19.')
-      || ip.startsWith('172.20.')
-      || ip.startsWith('172.21.')
-      || ip.startsWith('172.22.')
-      || ip.startsWith('172.23.')
-      || ip.startsWith('172.24.')
-      || ip.startsWith('172.25.')
-      || ip.startsWith('172.26.')
-      || ip.startsWith('172.27.')
-      || ip.startsWith('172.28.')
-      || ip.startsWith('172.29.')
-      || ip.startsWith('172.30.')
-      || ip.startsWith('172.31.');
+  // (1) Socket peer address, injected from Bun's server.requestIP() at app.fetch.
+  // Absent (undefined) ⇒ fail closed (treated as non-local).
+  const peer = (c.env as { ip?: string } | undefined)?.ip;
+  return peer === '127.0.0.1' || peer === '::1' || peer === 'localhost';
 }
 
 // Generate session token using HMAC-SHA256
