@@ -15,36 +15,42 @@ import type { ToolContext, ToolResponse, OracleLearnInput } from './types.ts';
 /** Coerce concepts to string[] — handles string, array, or undefined from MCP input */
 export function coerceConcepts(concepts: unknown): string[] {
   if (Array.isArray(concepts)) return concepts.map(String);
-  if (typeof concepts === 'string') return concepts.split(',').map(s => s.trim()).filter(Boolean);
+  if (typeof concepts === 'string')
+    return concepts
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
   return [];
 }
 
 export const learnToolDef = {
   name: 'oracle_learn',
-  description: 'Add a new pattern or learning to the Oracle knowledge base. Creates a markdown file in ψ/memory/learnings/ and indexes it.',
+  description:
+    'Add a new pattern or learning to the Oracle knowledge base. Creates a markdown file in ψ/memory/learnings/ and indexes it.',
   inputSchema: {
     type: 'object',
     properties: {
       pattern: {
         type: 'string',
-        description: 'The pattern or learning to add (can be multi-line)'
+        description: 'The pattern or learning to add (can be multi-line)',
       },
       source: {
         type: 'string',
-        description: 'Optional source attribution (defaults to "Oracle Learn")'
+        description: 'Optional source attribution (defaults to "Oracle Learn")',
       },
       concepts: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Optional concept tags (e.g., ["git", "safety", "trust"])'
+        description: 'Optional concept tags (e.g., ["git", "safety", "trust"])',
       },
       project: {
         type: 'string',
-        description: 'Source project. Accepts: "github.com/owner/repo", "owner/repo", local path with ghq/Code prefix, or GitHub URL. Auto-normalized to "github.com/owner/repo" format.'
-      }
+        description:
+          'Source project. Accepts: "github.com/owner/repo", "owner/repo", local path with ghq/Code prefix, or GitHub URL. Auto-normalized to "github.com/owner/repo" format.',
+      },
     },
-    required: ['pattern']
-  }
+    required: ['pattern'],
+  },
 };
 
 // ============================================================================
@@ -101,7 +107,10 @@ export function extractProjectFromSource(source?: string): string | null {
 // Handler
 // ============================================================================
 
-export async function handleLearn(ctx: ToolContext, input: OracleLearnInput): Promise<ToolResponse> {
+export async function handleLearn(
+  ctx: ToolContext,
+  input: OracleLearnInput,
+): Promise<ToolResponse> {
   const { pattern, source, concepts, project: projectInput } = input;
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
@@ -121,9 +130,10 @@ export async function handleLearn(ctx: ToolContext, input: OracleLearnInput): Pr
   if ('needsInit' in vault) console.error(`[Vault] ${vault.hint}`);
   const vaultRoot = 'path' in vault ? vault.path : null;
 
-  const project = normalizeProject(projectInput)
-    || extractProjectFromSource(source)
-    || detectProject(ctx.repoRoot);
+  const project =
+    normalizeProject(projectInput) ||
+    extractProjectFromSource(source) ||
+    detectProject(ctx.repoRoot);
   const projectDir = (project || '_universal').toLowerCase();
 
   let filePath: string;
@@ -161,40 +171,51 @@ export async function handleLearn(ctx: ToolContext, input: OracleLearnInput): Pr
     '',
     '---',
     '*Added via Oracle Learn*',
-    ''
+    '',
   ].join('\n');
 
   fs.writeFileSync(filePath, frontmatter, 'utf-8');
 
   const id = `learning_${dateStr}_${slug}`;
 
-  ctx.db.insert(oracleDocuments).values({
-    id,
-    type: 'learning',
-    sourceFile: sourceFileRel,
-    concepts: JSON.stringify(conceptsList),
-    createdAt: now.getTime(),
-    updatedAt: now.getTime(),
-    indexedAt: now.getTime(),
-    origin: null,
-    project,
-    createdBy: 'oracle_learn',
-  }).run();
+  ctx.db
+    .insert(oracleDocuments)
+    .values({
+      id,
+      type: 'learning',
+      sourceFile: sourceFileRel,
+      concepts: JSON.stringify(conceptsList),
+      createdAt: now.getTime(),
+      updatedAt: now.getTime(),
+      indexedAt: now.getTime(),
+      origin: null,
+      project,
+      createdBy: 'oracle_learn',
+    })
+    .run();
 
-  ctx.sqlite.prepare(`
+  ctx.sqlite
+    .prepare(`
     INSERT INTO oracle_fts (id, content, concepts)
     VALUES (?, ?, ?)
-  `).run(id, frontmatter, conceptsList.join(' '));
+  `)
+    .run(id, frontmatter, conceptsList.join(' '));
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        success: true,
-        file: sourceFileRel,
-        id,
-        message: `Pattern added to Oracle knowledge base${vaultRoot ? ' (vault)' : ''}`
-      }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            success: true,
+            file: sourceFileRel,
+            id,
+            message: `Pattern added to Oracle knowledge base${vaultRoot ? ' (vault)' : ''}`,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
   };
 }

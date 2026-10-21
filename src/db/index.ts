@@ -52,10 +52,16 @@ function initializeDatabase(sqliteDb: Database, drizzleDb: BunSQLiteDatabase<typ
   sqliteDb.exec('INSERT OR IGNORE INTO indexing_status (id, is_indexing) VALUES (1, 0)');
 
   // One-time migration: normalize project casing to lowercase
-  const migrated = sqliteDb.prepare("SELECT value FROM settings WHERE key = 'migration_lowercase_projects'").get() as { value: string } | undefined;
+  const migrated = sqliteDb
+    .prepare("SELECT value FROM settings WHERE key = 'migration_lowercase_projects'")
+    .get() as { value: string } | undefined;
   if (!migrated) {
-    sqliteDb.exec("UPDATE oracle_documents SET project = LOWER(project) WHERE project <> LOWER(project)");
-    sqliteDb.exec("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('migration_lowercase_projects', '1', unixepoch() * 1000)");
+    sqliteDb.exec(
+      'UPDATE oracle_documents SET project = LOWER(project) WHERE project <> LOWER(project)',
+    );
+    sqliteDb.exec(
+      "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('migration_lowercase_projects', '1', unixepoch() * 1000)",
+    );
   }
 }
 
@@ -109,7 +115,13 @@ export * from './schema.ts';
 // ============================================================================
 
 export function getBeastProfile(name: string) {
-  return db.select().from(schema.beastProfiles).where(eq(schema.beastProfiles.name, name.toLowerCase())).get() ?? null;
+  return (
+    db
+      .select()
+      .from(schema.beastProfiles)
+      .where(eq(schema.beastProfiles.name, name.toLowerCase()))
+      .get() ?? null
+  );
 }
 
 export function getAllBeastProfiles() {
@@ -129,7 +141,8 @@ export function upsertBeastProfile(profile: {
   const now = Date.now();
   const name = profile.name.toLowerCase();
 
-  return db.insert(schema.beastProfiles)
+  return db
+    .insert(schema.beastProfiles)
     .values({
       name,
       displayName: profile.displayName,
@@ -159,7 +172,8 @@ export function upsertBeastProfile(profile: {
 }
 
 export function updateBeastAvatar(name: string, avatarUrl: string) {
-  return db.update(schema.beastProfiles)
+  return db
+    .update(schema.beastProfiles)
     .set({ avatarUrl, updatedAt: Date.now() })
     .where(eq(schema.beastProfiles.name, name.toLowerCase()))
     .run();

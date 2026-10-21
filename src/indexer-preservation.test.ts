@@ -85,7 +85,8 @@ beforeEach(() => {
 // ============================================================================
 
 function simulateSmartDeletion(project: string | null): string[] {
-  const docsToDelete = db.select({ id: oracleDocuments.id })
+  const docsToDelete = db
+    .select({ id: oracleDocuments.id })
     .from(oracleDocuments)
     .where(
       and(
@@ -94,17 +95,15 @@ function simulateSmartDeletion(project: string | null): string[] {
           ? or(eq(oracleDocuments.project, project), isNull(oracleDocuments.project))
           : isNull(oracleDocuments.project),
         // Only delete indexer-created OR legacy (null) docs
-        or(eq(oracleDocuments.createdBy, 'indexer'), isNull(oracleDocuments.createdBy))
-      )
+        or(eq(oracleDocuments.createdBy, 'indexer'), isNull(oracleDocuments.createdBy)),
+      ),
     )
     .all();
 
-  const idsToDelete = docsToDelete.map(d => d.id);
+  const idsToDelete = docsToDelete.map((d) => d.id);
 
   if (idsToDelete.length > 0) {
-    db.delete(oracleDocuments)
-      .where(inArray(oracleDocuments.id, idsToDelete))
-      .run();
+    db.delete(oracleDocuments).where(inArray(oracleDocuments.id, idsToDelete)).run();
 
     // Delete from FTS
     const placeholders = idsToDelete.map(() => '?').join(',');
@@ -137,9 +136,11 @@ function insertTestDoc(doc: {
     })
     .run();
 
-  sqlite.prepare(`
+  sqlite
+    .prepare(`
     INSERT INTO oracle_fts (id, content, concepts) VALUES (?, ?, ?)
-  `).run(doc.id, doc.content || 'Test content', '');
+  `)
+    .run(doc.id, doc.content || 'Test content', '');
 }
 
 // ============================================================================
@@ -170,14 +171,20 @@ describe('Indexer Preservation - oracle_learn documents', () => {
     const deleted = simulateSmartDeletion('github.com/current/repo');
 
     // Verify oracle_learn doc is preserved
-    const preserved = db.select().from(oracleDocuments)
-      .where(eq(oracleDocuments.id, 'test-oracle-learn-1')).get();
+    const preserved = db
+      .select()
+      .from(oracleDocuments)
+      .where(eq(oracleDocuments.id, 'test-oracle-learn-1'))
+      .get();
     expect(preserved).toBeDefined();
     expect(preserved?.createdBy).toBe('oracle_learn');
 
     // Verify indexer doc was deleted
-    const notPreserved = db.select().from(oracleDocuments)
-      .where(eq(oracleDocuments.id, 'test-indexer-1')).get();
+    const notPreserved = db
+      .select()
+      .from(oracleDocuments)
+      .where(eq(oracleDocuments.id, 'test-indexer-1'))
+      .get();
     expect(notPreserved).toBeUndefined();
 
     expect(deleted).toContain('test-indexer-1');
@@ -206,10 +213,16 @@ describe('Indexer Preservation - oracle_learn documents', () => {
     simulateSmartDeletion('github.com/team/repo-a');
 
     // Both oracle_learn docs should be preserved
-    const docA = db.select().from(oracleDocuments)
-      .where(eq(oracleDocuments.id, 'learn-repo-a')).get();
-    const docB = db.select().from(oracleDocuments)
-      .where(eq(oracleDocuments.id, 'learn-repo-b')).get();
+    const docA = db
+      .select()
+      .from(oracleDocuments)
+      .where(eq(oracleDocuments.id, 'learn-repo-a'))
+      .get();
+    const docB = db
+      .select()
+      .from(oracleDocuments)
+      .where(eq(oracleDocuments.id, 'learn-repo-b'))
+      .get();
 
     expect(docA).toBeDefined();
     expect(docB).toBeDefined();
@@ -240,13 +253,19 @@ describe('Indexer Preservation - project isolation', () => {
     const deleted = simulateSmartDeletion('github.com/current/repo');
 
     // Other repo's doc should be preserved
-    const otherDoc = db.select().from(oracleDocuments)
-      .where(eq(oracleDocuments.id, 'other-repo-doc')).get();
+    const otherDoc = db
+      .select()
+      .from(oracleDocuments)
+      .where(eq(oracleDocuments.id, 'other-repo-doc'))
+      .get();
     expect(otherDoc).toBeDefined();
 
     // Current repo's doc should be deleted
-    const currentDoc = db.select().from(oracleDocuments)
-      .where(eq(oracleDocuments.id, 'current-repo-doc')).get();
+    const currentDoc = db
+      .select()
+      .from(oracleDocuments)
+      .where(eq(oracleDocuments.id, 'current-repo-doc'))
+      .get();
     expect(currentDoc).toBeUndefined();
 
     expect(deleted).toContain('current-repo-doc');
@@ -294,8 +313,11 @@ describe('Indexer Preservation - project isolation', () => {
     const deleted = simulateSmartDeletion('github.com/any/repo');
 
     // Universal oracle_learn should be preserved
-    const doc = db.select().from(oracleDocuments)
-      .where(eq(oracleDocuments.id, 'universal-learn-doc')).get();
+    const doc = db
+      .select()
+      .from(oracleDocuments)
+      .where(eq(oracleDocuments.id, 'universal-learn-doc'))
+      .get();
     expect(doc).toBeDefined();
     expect(deleted).not.toContain('universal-learn-doc');
   });
@@ -316,8 +338,7 @@ describe('Indexer Preservation - legacy docs (null createdBy)', () => {
     const deleted = simulateSmartDeletion('github.com/current/repo');
 
     // Legacy doc should be deleted (treated as indexer doc)
-    const doc = db.select().from(oracleDocuments)
-      .where(eq(oracleDocuments.id, 'legacy-doc')).get();
+    const doc = db.select().from(oracleDocuments).where(eq(oracleDocuments.id, 'legacy-doc')).get();
     expect(doc).toBeUndefined();
     expect(deleted).toContain('legacy-doc');
   });
@@ -336,18 +357,14 @@ describe('Indexer Preservation - FTS sync', () => {
     });
 
     // Verify FTS entry exists
-    const ftsBefore = sqlite.prepare(
-      'SELECT id FROM oracle_fts WHERE id = ?'
-    ).get('fts-test-doc');
+    const ftsBefore = sqlite.prepare('SELECT id FROM oracle_fts WHERE id = ?').get('fts-test-doc');
     expect(ftsBefore).toBeDefined();
 
     // Simulate indexer run
     simulateSmartDeletion('github.com/current/repo');
 
     // Verify FTS entry is also deleted
-    const ftsAfter = sqlite.prepare(
-      'SELECT id FROM oracle_fts WHERE id = ?'
-    ).get('fts-test-doc');
+    const ftsAfter = sqlite.prepare('SELECT id FROM oracle_fts WHERE id = ?').get('fts-test-doc');
     expect(ftsAfter).toBeFalsy(); // null or undefined
   });
 
@@ -366,9 +383,9 @@ describe('Indexer Preservation - FTS sync', () => {
     simulateSmartDeletion('github.com/current/repo');
 
     // FTS entry should still exist
-    const fts = sqlite.prepare(
-      'SELECT content FROM oracle_fts WHERE id = ?'
-    ).get('fts-preserved-doc') as { content: string } | undefined;
+    const fts = sqlite
+      .prepare('SELECT content FROM oracle_fts WHERE id = ?')
+      .get('fts-preserved-doc') as { content: string } | undefined;
     expect(fts).toBeDefined();
     expect(fts?.content).toBe('This content should remain searchable');
   });
@@ -453,7 +470,7 @@ describe('Indexer Preservation - edge cases', () => {
 
     // Verify remaining docs
     const remaining = db.select({ id: oracleDocuments.id }).from(oracleDocuments).all();
-    const remainingIds = remaining.map(d => d.id);
+    const remainingIds = remaining.map((d) => d.id);
     expect(remainingIds).toContain('oracle-learn-doc');
     expect(remainingIds).toContain('manual-doc');
   });

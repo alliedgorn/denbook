@@ -41,9 +41,27 @@ const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 // Reserved names that guests cannot use (Beast names + system names)
 const RESERVED_NAMES = new Set([
-  'gorn', 'leonard', 'zaghnal', 'karo', 'gnarl', 'bertus', 'dex', 'quill',
-  'talon', 'flint', 'vigil', 'rax', 'sable', 'snap', 'pip', 'system',
-  'admin', 'owner', 'beast', 'guest', 'unknown',
+  'gorn',
+  'leonard',
+  'zaghnal',
+  'karo',
+  'gnarl',
+  'bertus',
+  'dex',
+  'quill',
+  'talon',
+  'flint',
+  'vigil',
+  'rax',
+  'sable',
+  'snap',
+  'pip',
+  'system',
+  'admin',
+  'owner',
+  'beast',
+  'guest',
+  'unknown',
 ]);
 
 /**
@@ -79,7 +97,7 @@ export function initGuestTables(sqlite: Database): void {
 
   // Add last_active_at column if not present
   try {
-    sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN last_active_at TEXT");
+    sqlite.exec('ALTER TABLE guest_accounts ADD COLUMN last_active_at TEXT');
   } catch {
     // Column already exists
   }
@@ -92,14 +110,38 @@ export function initGuestTables(sqlite: Database): void {
   }
 
   // Add profile fields for guest settings (T#574, Spec #35)
-  try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN bio TEXT"); } catch { /* exists */ }
-  try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN interests TEXT"); } catch { /* exists */ }
-  try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN avatar_url TEXT"); } catch { /* exists */ }
+  try {
+    sqlite.exec('ALTER TABLE guest_accounts ADD COLUMN bio TEXT');
+  } catch {
+    /* exists */
+  }
+  try {
+    sqlite.exec('ALTER TABLE guest_accounts ADD COLUMN interests TEXT');
+  } catch {
+    /* exists */
+  }
+  try {
+    sqlite.exec('ALTER TABLE guest_accounts ADD COLUMN avatar_url TEXT');
+  } catch {
+    /* exists */
+  }
 
   // Add ban fields (T#616, Spec #36)
-  try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN banned_at TEXT"); } catch { /* exists */ }
-  try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN banned_by TEXT"); } catch { /* exists */ }
-  try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN ban_reason TEXT"); } catch { /* exists */ }
+  try {
+    sqlite.exec('ALTER TABLE guest_accounts ADD COLUMN banned_at TEXT');
+  } catch {
+    /* exists */
+  }
+  try {
+    sqlite.exec('ALTER TABLE guest_accounts ADD COLUMN banned_by TEXT');
+  } catch {
+    /* exists */
+  }
+  try {
+    sqlite.exec('ALTER TABLE guest_accounts ADD COLUMN ban_reason TEXT');
+  } catch {
+    /* exists */
+  }
 }
 
 /**
@@ -118,7 +160,9 @@ export async function createGuest(
     throw new Error('Username must be at least 3 characters');
   }
   if (!/^[a-z0-9_-]+$/.test(lower)) {
-    throw new Error('Username must contain only lowercase letters, numbers, hyphens, and underscores');
+    throw new Error(
+      'Username must contain only lowercase letters, numbers, hyphens, and underscores',
+    );
   }
   if (RESERVED_NAMES.has(lower)) {
     throw new Error(`Username "${lower}" is reserved`);
@@ -129,19 +173,25 @@ export async function createGuest(
 
   const hash = await Bun.password.hash(password, { algorithm: 'bcrypt', cost: 12 });
 
-  const result = sqlite.prepare(`
+  const result = sqlite
+    .prepare(`
     INSERT INTO guest_accounts (username, password_hash, display_name, expires_at)
     VALUES (?, ?, ?, ?)
-  `).run(lower, hash, displayName || lower, expiresAt || null);
+  `)
+    .run(lower, hash, displayName || lower, expiresAt || null);
 
-  return sqlite.prepare('SELECT * FROM guest_accounts WHERE id = ?').get(result.lastInsertRowid) as GuestAccount;
+  return sqlite
+    .prepare('SELECT * FROM guest_accounts WHERE id = ?')
+    .get(result.lastInsertRowid) as GuestAccount;
 }
 
 /**
  * List all guest accounts (no password hashes returned).
  */
 export function listGuests(sqlite: Database): Omit<GuestAccount, 'password_hash'>[] {
-  const guests = sqlite.prepare('SELECT * FROM guest_accounts ORDER BY created_at DESC').all() as GuestAccount[];
+  const guests = sqlite
+    .prepare('SELECT * FROM guest_accounts ORDER BY created_at DESC')
+    .all() as GuestAccount[];
   return guests.map(({ password_hash, ...rest }) => rest);
 }
 
@@ -156,14 +206,18 @@ export function getGuest(sqlite: Database, id: number): GuestAccount | null {
  * Get a guest by username.
  */
 export function getGuestByUsername(sqlite: Database, username: string): GuestAccount | null {
-  return sqlite.prepare('SELECT * FROM guest_accounts WHERE username = ?').get(username.toLowerCase().trim()) as GuestAccount | null;
+  return sqlite
+    .prepare('SELECT * FROM guest_accounts WHERE username = ?')
+    .get(username.toLowerCase().trim()) as GuestAccount | null;
 }
 
 /**
  * Look up a guest by display name (case-insensitive). Falls back for DM recipient resolution.
  */
 export function getGuestByDisplayName(sqlite: Database, displayName: string): GuestAccount | null {
-  return sqlite.prepare('SELECT * FROM guest_accounts WHERE LOWER(display_name) = ?').get(displayName.toLowerCase().trim()) as GuestAccount | null;
+  return sqlite
+    .prepare('SELECT * FROM guest_accounts WHERE LOWER(display_name) = ?')
+    .get(displayName.toLowerCase().trim()) as GuestAccount | null;
 }
 
 /**
@@ -215,9 +269,11 @@ export function banGuest(
   reason: string,
 ): GuestAccount | null {
   const now = new Date().toISOString();
-  sqlite.prepare(
-    `UPDATE guest_accounts SET banned_at = ?, banned_by = ?, ban_reason = ?, disabled_at = COALESCE(disabled_at, ?) WHERE id = ?`
-  ).run(now, bannedBy, reason, now, id);
+  sqlite
+    .prepare(
+      `UPDATE guest_accounts SET banned_at = ?, banned_by = ?, ban_reason = ?, disabled_at = COALESCE(disabled_at, ?) WHERE id = ?`,
+    )
+    .run(now, bannedBy, reason, now, id);
   return getGuest(sqlite, id);
 }
 
@@ -225,9 +281,11 @@ export function banGuest(
  * Unban a guest account (T#616).
  */
 export function unbanGuest(sqlite: Database, id: number): GuestAccount | null {
-  sqlite.prepare(
-    `UPDATE guest_accounts SET banned_at = NULL, banned_by = NULL, ban_reason = NULL WHERE id = ?`
-  ).run(id);
+  sqlite
+    .prepare(
+      `UPDATE guest_accounts SET banned_at = NULL, banned_by = NULL, ban_reason = NULL WHERE id = ?`,
+    )
+    .run(id);
   return getGuest(sqlite, id);
 }
 
@@ -264,10 +322,12 @@ export function recordFailedAttempt(sqlite: Database, guest: GuestAccount): void
   const newCount = guest.failed_attempts + 1;
   if (newCount >= LOCKOUT_THRESHOLD) {
     const lockUntil = new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString();
-    sqlite.prepare('UPDATE guest_accounts SET failed_attempts = ?, locked_until = ? WHERE id = ?')
+    sqlite
+      .prepare('UPDATE guest_accounts SET failed_attempts = ?, locked_until = ? WHERE id = ?')
       .run(newCount, lockUntil, guest.id);
   } else {
-    sqlite.prepare('UPDATE guest_accounts SET failed_attempts = ? WHERE id = ?')
+    sqlite
+      .prepare('UPDATE guest_accounts SET failed_attempts = ? WHERE id = ?')
       .run(newCount, guest.id);
   }
 }
@@ -276,7 +336,10 @@ export function recordFailedAttempt(sqlite: Database, guest: GuestAccount): void
  * Record a successful login.
  */
 export function recordSuccessfulLogin(sqlite: Database, guestId: number): void {
-  sqlite.prepare('UPDATE guest_accounts SET failed_attempts = 0, locked_until = NULL, last_login_at = datetime(\'now\') WHERE id = ?')
+  sqlite
+    .prepare(
+      "UPDATE guest_accounts SET failed_attempts = 0, locked_until = NULL, last_login_at = datetime('now') WHERE id = ?",
+    )
     .run(guestId);
 }
 
@@ -318,12 +381,19 @@ export function updateGuestProfile(
 /**
  * Reset a guest's password (by ID, owner action).
  */
-export async function resetGuestPassword(sqlite: Database, id: number, newPassword: string): Promise<boolean> {
+export async function resetGuestPassword(
+  sqlite: Database,
+  id: number,
+  newPassword: string,
+): Promise<boolean> {
   if (!newPassword || newPassword.length < 8) {
     throw new Error('Password must be at least 8 characters');
   }
   const hash = await Bun.password.hash(newPassword, { algorithm: 'bcrypt', cost: 12 });
-  const result = sqlite.prepare('UPDATE guest_accounts SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?')
+  const result = sqlite
+    .prepare(
+      'UPDATE guest_accounts SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?',
+    )
     .run(hash, id);
   return result.changes > 0;
 }
@@ -345,7 +415,10 @@ export async function changeGuestPassword(
     return { success: false, error: 'New password must be at least 8 characters' };
   }
   const hash = await Bun.password.hash(newPassword, { algorithm: 'bcrypt', cost: 12 });
-  sqlite.prepare('UPDATE guest_accounts SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?')
+  sqlite
+    .prepare(
+      'UPDATE guest_accounts SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?',
+    )
     .run(hash, guest.id);
   return { success: true };
 }
@@ -353,9 +426,16 @@ export async function changeGuestPassword(
 /**
  * Log a guest API action to the audit log.
  */
-export function logGuestAction(sqlite: Database, guestId: number, endpoint: string, method: string): void {
-  sqlite.prepare('INSERT INTO guest_audit_log (guest_id, endpoint, method) VALUES (?, ?, ?)')
+export function logGuestAction(
+  sqlite: Database,
+  guestId: number,
+  endpoint: string,
+  method: string,
+): void {
+  sqlite
+    .prepare('INSERT INTO guest_audit_log (guest_id, endpoint, method) VALUES (?, ?, ?)')
     .run(guestId, endpoint, method);
-  sqlite.prepare('UPDATE guest_accounts SET last_active_at = datetime(\'now\') WHERE id = ?')
+  sqlite
+    .prepare("UPDATE guest_accounts SET last_active_at = datetime('now') WHERE id = ?")
     .run(guestId);
 }

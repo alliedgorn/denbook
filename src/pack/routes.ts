@@ -5,7 +5,14 @@ import { eq } from 'drizzle-orm';
 import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { Database } from 'bun:sqlite';
-import { db, beastProfiles, getBeastProfile, getAllBeastProfiles, upsertBeastProfile, updateBeastAvatar } from '../db/index.ts';
+import {
+  db,
+  beastProfiles,
+  getBeastProfile,
+  getAllBeastProfiles,
+  upsertBeastProfile,
+  updateBeastAvatar,
+} from '../db/index.ts';
 import { packListRoute, packSpinnerVerbsRoute } from '../server/openapi.ts';
 
 // ============================================================================
@@ -23,23 +30,38 @@ interface PackHelpers {
   WEB_PRESENCE_TIMEOUT_MS: number;
 }
 
-export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: PackHelpers): void {
-  const { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast, getTmuxStatus, normalizeAvatarUrl, webPresence, WEB_PRESENCE_TIMEOUT_MS } = helpers;
+export function registerPackRoutes(
+  app: OpenAPIHono,
+  sqliteDb: Database,
+  helpers: PackHelpers,
+): void {
+  const {
+    hasSessionAuth,
+    requireBeastIdentity,
+    isTrustedRequest,
+    wsBroadcast,
+    getTmuxStatus,
+    normalizeAvatarUrl,
+    webPresence,
+    WEB_PRESENCE_TIMEOUT_MS,
+  } = helpers;
   const sqlite: Database = sqliteDb;
 
   app.openapi(packListRoute, ((c: Context) => {
     const profiles = getAllBeastProfiles();
     const { tmuxStatus, contextPctMap } = getTmuxStatus();
 
-    const beasts = profiles.map(p => {
+    const beasts = profiles.map((p) => {
       const sessionName = p.name.charAt(0).toUpperCase() + p.name.slice(1);
-      const rawStatus = tmuxStatus.get(sessionName.toLowerCase()) || tmuxStatus.get(p.name) || 'offline';
+      const rawStatus =
+        tmuxStatus.get(sessionName.toLowerCase()) || tmuxStatus.get(p.name) || 'offline';
       return {
         ...p,
         avatarUrl: normalizeAvatarUrl(p.avatarUrl),
         online: rawStatus === 'processing' || rawStatus === 'idle' || rawStatus === 'waiting',
         status: rawStatus, // 'processing' | 'idle' | 'waiting' | 'shell' | 'offline'
-        contextPct: contextPctMap.get(sessionName.toLowerCase()) ?? contextPctMap.get(p.name) ?? null,
+        contextPct:
+          contextPctMap.get(sessionName.toLowerCase()) ?? contextPctMap.get(p.name) ?? null,
         sessionName,
       };
     });
@@ -47,7 +69,7 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
     // Owner (Gorn) presence from WS heartbeat map
     const now = Date.now();
     const ownerPresence = webPresence.get('gorn');
-    const ownerOnline = !!ownerPresence && (now - ownerPresence.lastSeen) < WEB_PRESENCE_TIMEOUT_MS;
+    const ownerOnline = !!ownerPresence && now - ownerPresence.lastSeen < WEB_PRESENCE_TIMEOUT_MS;
     const owner = {
       name: 'gorn',
       online: ownerOnline,
@@ -64,31 +86,41 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
     const allVerbs = new Set<string>();
 
     try {
-      const dirs = fs.readdirSync(workspaceDir, { withFileTypes: true })
-        .filter(d => d.isDirectory())
-        .map(d => d.name);
+      const dirs = fs
+        .readdirSync(workspaceDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
       for (const dir of dirs) {
         try {
           const configPath = path.join(workspaceDir, dir, '.claude', 'settings.local.json');
           const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
           const sv = config.spinnerVerbs;
           if (sv) {
-            const verbList = (Array.isArray(sv) ? sv : (sv.verbs || [])).filter((v: unknown) => typeof v === 'string');
+            const verbList = (Array.isArray(sv) ? sv : sv.verbs || []).filter(
+              (v: unknown) => typeof v === 'string',
+            );
             if (verbList.length > 0) {
               beastVerbs[dir] = verbList;
               for (const v of verbList) allVerbs.add(v);
             }
           }
-        } catch { /* skip */ }
+        } catch {
+          /* skip */
+        }
       }
-    } catch { /* workspace not readable */ }
+    } catch {
+      /* workspace not readable */
+    }
 
-    return c.json({
-      beasts: beastVerbs,
-      allVerbs: [...allVerbs].sort(),
-      totalUnique: allVerbs.size,
-      totalBeasts: Object.keys(beastVerbs).length,
-    }, 200);
+    return c.json(
+      {
+        beasts: beastVerbs,
+        allVerbs: [...allVerbs].sort(),
+        totalUnique: allVerbs.size,
+        totalBeasts: Object.keys(beastVerbs).length,
+      },
+      200,
+    );
   }) as any);
 
   app.get('/api/beast/:name/terminal', (c) => {
@@ -104,20 +136,25 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       // Capture pane with ANSI escape codes
       const output = execSync(
         `tmux capture-pane -t ${JSON.stringify(sessionName)} -p -e -S -${rows}`,
-        { timeout: 3000, maxBuffer: 1024 * 1024 }
+        { timeout: 3000, maxBuffer: 1024 * 1024 },
       ).toString();
 
       // Get pane dimensions
-      let cols = 80, paneRows = 24;
+      let cols = 80,
+        paneRows = 24;
       try {
         const info = execSync(
           `tmux display-message -t ${JSON.stringify(sessionName)} -p "#{pane_width} #{pane_height}"`,
-          { timeout: 2000 }
-        ).toString().trim();
+          { timeout: 2000 },
+        )
+          .toString()
+          .trim();
         const [w, h] = info.split(' ').map(Number);
         if (w) cols = w;
         if (h) paneRows = h;
-      } catch { /* use defaults */ }
+      } catch {
+        /* use defaults */
+      }
 
       return c.json({
         name,
@@ -183,7 +220,20 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       const { key } = body;
 
       // Whitelist of allowed special keys
-      const ALLOWED_KEYS = ['Enter', 'Escape', 'BSpace', 'Tab', 'Up', 'Down', 'Left', 'Right', 'C-c', 'C-d', 'C-z', 'C-l'];
+      const ALLOWED_KEYS = [
+        'Enter',
+        'Escape',
+        'BSpace',
+        'Tab',
+        'Up',
+        'Down',
+        'Left',
+        'Right',
+        'C-c',
+        'C-d',
+        'C-z',
+        'C-l',
+      ];
       if (!key || !ALLOWED_KEYS.includes(key)) {
         return c.json({ error: `Invalid key. Allowed: ${ALLOWED_KEYS.join(', ')}` }, 400);
       }
@@ -207,19 +257,40 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
     const profile = getBeastProfile(name);
 
     const BEAST_COLORS: Record<string, string> = {
-      hyena: '#d97706', horse: '#7c3aed', alligator: '#059669',
-      bear: '#92400e', kangaroo: '#dc2626', lion: '#ca8a04',
-      raccoon: '#6366f1', otter: '#0d9488', crow: '#475569',
-      octopus: '#9b59b6', ferret: '#8b6834',
-      wolf: '#64748b', porcupine: '#a3a3a3', mongoose: '#f59e0b',
-      owl: '#8b5cf6', hawk: '#ef4444',
+      hyena: '#d97706',
+      horse: '#7c3aed',
+      alligator: '#059669',
+      bear: '#92400e',
+      kangaroo: '#dc2626',
+      lion: '#ca8a04',
+      raccoon: '#6366f1',
+      otter: '#0d9488',
+      crow: '#475569',
+      octopus: '#9b59b6',
+      ferret: '#8b6834',
+      wolf: '#64748b',
+      porcupine: '#a3a3a3',
+      mongoose: '#f59e0b',
+      owl: '#8b5cf6',
+      hawk: '#ef4444',
     };
     const ANIMAL_EMOJI: Record<string, string> = {
-      hyena: '🐾', horse: '🐴', alligator: '🐊', bear: '🐻',
-      kangaroo: '🦘', lion: '🦁', raccoon: '🦝', otter: '🦦', crow: '🐦‍⬛',
-      octopus: '🐙', ferret: '🐾',
-      wolf: '🐺', porcupine: '🦔', mongoose: '🐿️',
-      owl: '🦉', hawk: '🦅',
+      hyena: '🐾',
+      horse: '🐴',
+      alligator: '🐊',
+      bear: '🐻',
+      kangaroo: '🦘',
+      lion: '🦁',
+      raccoon: '🦝',
+      otter: '🦦',
+      crow: '🐦‍⬛',
+      octopus: '🐙',
+      ferret: '🐾',
+      wolf: '🐺',
+      porcupine: '🦔',
+      mongoose: '🐿️',
+      owl: '🦉',
+      hawk: '🦅',
     };
 
     const animal = profile?.animal?.toLowerCase() || 'unknown';
@@ -249,7 +320,10 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
     // T#793 PACK-1 — Gorn-only (mass-mutate across all profiles).
     const caller = requireBeastIdentity(c);
     if (!caller) {
-      return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+      return c.json(
+        { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+        401,
+      );
     }
     if (caller !== 'gorn') {
       return c.json({ error: 'Gorn-only — mass profile mutation' }, 403);
@@ -284,7 +358,10 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       // T#793 PACK-1 — owner-or-Gorn-only profile create/replace.
       const caller = requireBeastIdentity(c);
       if (!caller) {
-        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+        return c.json(
+          { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+          401,
+        );
       }
       const name = c.req.param('name');
       if (caller !== name.toLowerCase() && caller !== 'gorn') {
@@ -319,7 +396,10 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       // T#793 PACK-1 — owner-or-Gorn-only profile update.
       const caller = requireBeastIdentity(c);
       if (!caller) {
-        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+        return c.json(
+          { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+          401,
+        );
       }
       const name = c.req.param('name');
       if (caller !== name.toLowerCase() && caller !== 'gorn') {
@@ -342,10 +422,7 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       if (body.birthdate !== undefined) updates.birthdate = body.birthdate;
       if (body.sex !== undefined) updates.sex = body.sex;
 
-      db.update(beastProfiles)
-        .set(updates)
-        .where(eq(beastProfiles.name, name.toLowerCase()))
-        .run();
+      db.update(beastProfiles).set(updates).where(eq(beastProfiles.name, name.toLowerCase())).run();
 
       const updated = getBeastProfile(name);
       return c.json(updated);
@@ -359,7 +436,10 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       // T#793 PACK-1 — owner-or-Gorn-only avatar update.
       const caller = requireBeastIdentity(c);
       if (!caller) {
-        return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
+        return c.json(
+          { error: 'Beast identity required — bearer-token or owner session', requiresAuth: true },
+          401,
+        );
       }
       const name = c.req.param('name');
       if (caller !== name.toLowerCase() && caller !== 'gorn') {
@@ -367,7 +447,10 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       }
       const profile = getBeastProfile(name);
       if (!profile) {
-        return c.json({ error: 'Beast not found. Create profile first with PUT /api/beast/:name' }, 404);
+        return c.json(
+          { error: 'Beast not found. Create profile first with PUT /api/beast/:name' },
+          404,
+        );
       }
 
       const body = await c.req.json();
@@ -393,10 +476,15 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
         return c.json({ error: 'forbidden' }, 403);
       }
       if (asParam && asParam !== name && asParam !== 'gorn') {
-        return c.json({ error: 'Cross-Beast wake denied. You can only wake yourself or be Gorn.' }, 403);
+        return c.json(
+          { error: 'Cross-Beast wake denied. You can only wake yourself or be Gorn.' },
+          403,
+        );
       }
 
-      const beastRow = sqlite.prepare('SELECT name, rest_status FROM beast_profiles WHERE name = ?').get(name) as any;
+      const beastRow = sqlite
+        .prepare('SELECT name, rest_status FROM beast_profiles WHERE name = ?')
+        .get(name) as any;
       if (!beastRow) {
         return c.json({ error: `Beast '${name}' not found` }, 404);
       }
@@ -406,21 +494,26 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       // Schedule storm cap — drop schedules overdue by more than the cap
       const stormCapHours = parseInt(process.env.SCHEDULER_STORM_CAP_HOURS || '24');
       const cutoff = new Date(Date.now() - stormCapHours * 3600 * 1000).toISOString();
-      const dropResult = sqlite.prepare(
-        `UPDATE beast_schedules
+      const dropResult = sqlite
+        .prepare(
+          `UPDATE beast_schedules
          SET next_due_at = datetime('now', '+' || CAST(interval_seconds AS TEXT) || ' seconds'),
              trigger_status = 'pending',
              updated_at = datetime('now')
          WHERE beast = ?
            AND enabled = 1
-           AND datetime(next_due_at) < datetime(?)`
-      ).run(name, cutoff);
+           AND datetime(next_due_at) < datetime(?)`,
+        )
+        .run(name, cutoff);
 
       // Set rest_status back to active
-      sqlite.prepare("UPDATE beast_profiles SET rest_status = 'active', updated_at = ? WHERE name = ?")
+      sqlite
+        .prepare("UPDATE beast_profiles SET rest_status = 'active', updated_at = ? WHERE name = ?")
         .run(Date.now(), name);
 
-      console.log(`[Wake] ${name}: rest_status ${previousStatus} → active. Dropped ${dropResult.changes} schedules overdue by >${stormCapHours}h.`);
+      console.log(
+        `[Wake] ${name}: rest_status ${previousStatus} → active. Dropped ${dropResult.changes} schedules overdue by >${stormCapHours}h.`,
+      );
       wsBroadcast('beast_state_change', { beast: name, rest_status: 'active' });
 
       return c.json({
@@ -432,11 +525,12 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
         resumed_at: new Date().toISOString(),
       });
     } catch (error) {
-      return c.json({
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }, 500);
+      return c.json(
+        {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        500,
+      );
     }
   });
-
-
 }

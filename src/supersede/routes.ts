@@ -22,14 +22,16 @@ export function registerSupersedeRoutes(app: OpenAPIHono) {
     const whereClause = project ? eq(supersedeLog.project, project) : undefined;
 
     // Get total count using Drizzle
-    const countResult = db.select({ total: sql<number>`count(*)` })
+    const countResult = db
+      .select({ total: sql<number>`count(*)` })
       .from(supersedeLog)
       .where(whereClause)
       .get();
     const total = countResult?.total || 0;
 
     // Get logs using Drizzle
-    const logs = db.select()
+    const logs = db
+      .select()
       .from(supersedeLog)
       .where(whereClause)
       .orderBy(desc(supersedeLog.supersededAt))
@@ -37,25 +39,28 @@ export function registerSupersedeRoutes(app: OpenAPIHono) {
       .offset(offset)
       .all();
 
-    return c.json({
-      supersessions: logs.map(log => ({
-        id: log.id,
-        old_path: log.oldPath,
-        old_id: log.oldId,
-        old_title: log.oldTitle,
-        old_type: log.oldType,
-        new_path: log.newPath,
-        new_id: log.newId,
-        new_title: log.newTitle,
-        reason: log.reason,
-        superseded_at: new Date(log.supersededAt).toISOString(),
-        superseded_by: log.supersededBy,
-        project: log.project
-      })),
-      total,
-      limit,
-      offset
-    }, 200);
+    return c.json(
+      {
+        supersessions: logs.map((log) => ({
+          id: log.id,
+          old_path: log.oldPath,
+          old_id: log.oldId,
+          old_title: log.oldTitle,
+          old_type: log.oldType,
+          new_path: log.newPath,
+          new_id: log.newId,
+          new_title: log.newTitle,
+          reason: log.reason,
+          superseded_at: new Date(log.supersededAt).toISOString(),
+          superseded_by: log.supersededBy,
+          project: log.project,
+        })),
+        total,
+        limit,
+        offset,
+      },
+      200,
+    );
   }) as any);
 
   // Get supersede chain for a document (what superseded what)
@@ -63,30 +68,35 @@ export function registerSupersedeRoutes(app: OpenAPIHono) {
     const docPath = decodeURIComponent(c.req.param('path') ?? '');
 
     // Find all supersessions where this doc was old or new using Drizzle
-    const asOld = db.select()
+    const asOld = db
+      .select()
       .from(supersedeLog)
       .where(eq(supersedeLog.oldPath, docPath))
       .orderBy(supersedeLog.supersededAt)
       .all();
 
-    const asNew = db.select()
+    const asNew = db
+      .select()
       .from(supersedeLog)
       .where(eq(supersedeLog.newPath, docPath))
       .orderBy(supersedeLog.supersededAt)
       .all();
 
-    return c.json({
-      superseded_by: asOld.map(log => ({
-        new_path: log.newPath,
-        reason: log.reason,
-        superseded_at: new Date(log.supersededAt).toISOString()
-      })),
-      supersedes: asNew.map(log => ({
-        old_path: log.oldPath,
-        reason: log.reason,
-        superseded_at: new Date(log.supersededAt).toISOString()
-      }))
-    }, 200);
+    return c.json(
+      {
+        superseded_by: asOld.map((log) => ({
+          new_path: log.newPath,
+          reason: log.reason,
+          superseded_at: new Date(log.supersededAt).toISOString(),
+        })),
+        supersedes: asNew.map((log) => ({
+          old_path: log.oldPath,
+          reason: log.reason,
+          superseded_at: new Date(log.supersededAt).toISOString(),
+        })),
+      },
+      200,
+    );
   }) as any);
 
   // Log a new supersession
@@ -100,28 +110,38 @@ export function registerSupersedeRoutes(app: OpenAPIHono) {
         return c.json({ error: 'Missing required field: old_path' }, 400);
       }
 
-      const result = db.insert(supersedeLog).values({
-        oldPath: data.old_path,
-        oldId: data.old_id || null,
-        oldTitle: data.old_title || null,
-        oldType: data.old_type || null,
-        newPath: data.new_path || null,
-        newId: data.new_id || null,
-        newTitle: data.new_title || null,
-        reason: data.reason || null,
-        supersededAt: Date.now(),
-        supersededBy: data.superseded_by || 'user',
-        project: data.project || null
-      }).returning({ id: supersedeLog.id }).get();
+      const result = db
+        .insert(supersedeLog)
+        .values({
+          oldPath: data.old_path,
+          oldId: data.old_id || null,
+          oldTitle: data.old_title || null,
+          oldType: data.old_type || null,
+          newPath: data.new_path || null,
+          newId: data.new_id || null,
+          newTitle: data.new_title || null,
+          reason: data.reason || null,
+          supersededAt: Date.now(),
+          supersededBy: data.superseded_by || 'user',
+          project: data.project || null,
+        })
+        .returning({ id: supersedeLog.id })
+        .get();
 
-      return c.json({
-        id: result.id,
-        message: 'Supersession logged'
-      }, 201);
+      return c.json(
+        {
+          id: result.id,
+          message: 'Supersession logged',
+        },
+        201,
+      );
     } catch (error) {
-      return c.json({
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }, 500);
+      return c.json(
+        {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        500,
+      );
     }
   }) as any);
 }

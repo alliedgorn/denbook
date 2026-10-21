@@ -10,20 +10,25 @@ import type { ToolContext, ToolResponse, OracleReflectInput } from './types.ts';
 
 export const reflectToolDef = {
   name: 'oracle_reflect',
-  description: 'Get a random principle or learning for reflection. Use this for periodic wisdom or to align with Oracle philosophy.',
+  description:
+    'Get a random principle or learning for reflection. Use this for periodic wisdom or to align with Oracle philosophy.',
   inputSchema: {
     type: 'object',
-    properties: {}
-  }
+    properties: {},
+  },
 };
 
-export async function handleReflect(ctx: ToolContext, _input: OracleReflectInput): Promise<ToolResponse> {
-  const randomDoc = ctx.db.select({
-    id: oracleDocuments.id,
-    type: oracleDocuments.type,
-    sourceFile: oracleDocuments.sourceFile,
-    concepts: oracleDocuments.concepts,
-  })
+export async function handleReflect(
+  ctx: ToolContext,
+  _input: OracleReflectInput,
+): Promise<ToolResponse> {
+  const randomDoc = ctx.db
+    .select({
+      id: oracleDocuments.id,
+      type: oracleDocuments.type,
+      sourceFile: oracleDocuments.sourceFile,
+      concepts: oracleDocuments.concepts,
+    })
     .from(oracleDocuments)
     .where(inArray(oracleDocuments.type, ['principle', 'learning']))
     .orderBy(sql`RANDOM()`)
@@ -34,26 +39,34 @@ export async function handleReflect(ctx: ToolContext, _input: OracleReflectInput
     throw new Error('No documents found in Oracle knowledge base');
   }
 
-  const content = ctx.sqlite.prepare(`
+  const content = ctx.sqlite
+    .prepare(`
     SELECT content FROM oracle_fts WHERE id = ?
-  `).get(randomDoc.id) as { content: string } | undefined;
+  `)
+    .get(randomDoc.id) as { content: string } | undefined;
 
   if (!content) {
     throw new Error('Document content not found in FTS index');
   }
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        principle: {
-          id: randomDoc.id,
-          type: randomDoc.type,
-          content: content.content,
-          source_file: randomDoc.sourceFile,
-          concepts: JSON.parse(randomDoc.concepts || '[]')
-        }
-      }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(
+          {
+            principle: {
+              id: randomDoc.id,
+              type: randomDoc.type,
+              content: content.content,
+              source_file: randomDoc.sourceFile,
+              concepts: JSON.parse(randomDoc.concepts || '[]'),
+            },
+          },
+          null,
+          2,
+        ),
+      },
+    ],
   };
 }

@@ -14,21 +14,21 @@ import { enqueueNotification } from '../notify.ts';
 // ============================================================================
 
 export interface OracleEntry {
-  tmux: string;       // tmux session name (capitalized)
-  workspace: string;  // workspace path
+  tmux: string; // tmux session name (capitalized)
+  workspace: string; // workspace path
 }
 
 export type OracleRegistry = Record<string, OracleEntry>;
 
 const DEFAULT_REGISTRY: OracleRegistry = {
   zaghnal: { tmux: 'Zaghnal', workspace: '/home/gorn/workspace/gorn-oracle' },
-  karo:    { tmux: 'Karo',    workspace: '/home/gorn/workspace/karo' },
-  gnarl:   { tmux: 'Gnarl',   workspace: '/home/gorn/workspace/gnarl' },
-  bertus:  { tmux: 'Bertus',  workspace: '/home/gorn/workspace/bertus' },
-  mara:    { tmux: 'Mara',    workspace: '/home/gorn/workspace/mara' },
+  karo: { tmux: 'Karo', workspace: '/home/gorn/workspace/karo' },
+  gnarl: { tmux: 'Gnarl', workspace: '/home/gorn/workspace/gnarl' },
+  bertus: { tmux: 'Bertus', workspace: '/home/gorn/workspace/bertus' },
+  mara: { tmux: 'Mara', workspace: '/home/gorn/workspace/mara' },
   leonard: { tmux: 'Leonard', workspace: '/home/gorn/workspace/leonard' },
-  rax:     { tmux: 'Rax',     workspace: '/home/gorn/workspace/rax' },
-  pip:     { tmux: 'Pip',     workspace: '/home/gorn/workspace/pip' },
+  rax: { tmux: 'Rax', workspace: '/home/gorn/workspace/rax' },
+  pip: { tmux: 'Pip', workspace: '/home/gorn/workspace/pip' },
 };
 
 let registryCache: OracleRegistry | null = null;
@@ -42,7 +42,7 @@ const CACHE_TTL_MS = 30_000; // Refresh from DB every 30s
  */
 export function getOracleRegistry(): OracleRegistry {
   const now = Date.now();
-  if (registryCache && (now - registryCacheTime) < CACHE_TTL_MS) return registryCache;
+  if (registryCache && now - registryCacheTime < CACHE_TTL_MS) return registryCache;
 
   // Build from beast_profiles (single source of truth)
   try {
@@ -51,18 +51,19 @@ export function getOracleRegistry(): OracleRegistry {
       const registry: OracleRegistry = {};
       for (const b of beasts) {
         const name = b.name.toLowerCase();
-        const displayName = b.display_name || (name.charAt(0).toUpperCase() + name.slice(1));
+        const displayName = b.display_name || name.charAt(0).toUpperCase() + name.slice(1);
         // Special case: zaghnal's workspace is gorn-oracle (legacy)
-        const workspace = name === 'zaghnal'
-          ? '/home/gorn/workspace/gorn-oracle'
-          : `/home/gorn/workspace/${name}`;
+        const workspace =
+          name === 'zaghnal' ? '/home/gorn/workspace/gorn-oracle' : `/home/gorn/workspace/${name}`;
         registry[name] = { tmux: displayName, workspace };
       }
       registryCache = registry;
       registryCacheTime = now;
       return registry;
     }
-  } catch { /* beast_profiles table may not exist yet */ }
+  } catch {
+    /* beast_profiles table may not exist yet */
+  }
 
   // Fallback to hardcoded defaults
   registryCache = DEFAULT_REGISTRY;
@@ -109,14 +110,22 @@ export function parseMentions(content: string, threadId?: number): string[] {
       // Check if it's a team name (e.g. @real-broker → all team members)
       try {
         const teamName = name.replace(/-/g, ' ');
-        const team = sqlite.prepare('SELECT id FROM teams WHERE LOWER(name) = ? OR LOWER(REPLACE(name, \' \', \'-\')) = ?').get(teamName, name) as any;
+        const team = sqlite
+          .prepare(
+            "SELECT id FROM teams WHERE LOWER(name) = ? OR LOWER(REPLACE(name, ' ', '-')) = ?",
+          )
+          .get(teamName, name) as any;
         if (team) {
-          const members = sqlite.prepare('SELECT beast FROM team_members WHERE team_id = ?').all(team.id) as any[];
+          const members = sqlite
+            .prepare('SELECT beast FROM team_members WHERE team_id = ?')
+            .all(team.id) as any[];
           for (const m of members) {
             if (m.beast in registry) names.add(m.beast);
           }
         }
-      } catch { /* teams table may not exist yet */ }
+      } catch {
+        /* teams table may not exist yet */
+      }
     }
   }
 
@@ -127,16 +136,20 @@ export function parseMentions(content: string, threadId?: number): string[] {
   if (hasHere && threadId) {
     // Get all unique authors who participated in this thread
     try {
-      const rows = sqlite.prepare(
-        'SELECT DISTINCT author FROM forum_messages WHERE thread_id = ? AND author IS NOT NULL'
-      ).all(threadId) as any[];
+      const rows = sqlite
+        .prepare(
+          'SELECT DISTINCT author FROM forum_messages WHERE thread_id = ? AND author IS NOT NULL',
+        )
+        .all(threadId) as any[];
       for (const r of rows) {
         const authorName = r.author?.split('@')[0]?.toLowerCase();
         if (authorName && authorName in registry) {
           names.add(authorName);
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   return [...names];
@@ -154,13 +167,15 @@ export type SubscriptionLevel = 'full' | 'summary' | 'muted';
  */
 export function getSubscriptionLevel(beast: string, threadId: number): SubscriptionLevel {
   try {
-    const row = sqlite.prepare(
-      'SELECT level FROM forum_notification_prefs WHERE beast_name = ? AND thread_id = ?'
-    ).get(beast.toLowerCase(), threadId) as { level: string } | undefined;
+    const row = sqlite
+      .prepare('SELECT level FROM forum_notification_prefs WHERE beast_name = ? AND thread_id = ?')
+      .get(beast.toLowerCase(), threadId) as { level: string } | undefined;
     if (row && (row.level === 'full' || row.level === 'summary' || row.level === 'muted')) {
       return row.level;
     }
-  } catch { /* table may not have level column yet */ }
+  } catch {
+    /* table may not have level column yet */
+  }
   return 'full';
 }
 
@@ -169,14 +184,16 @@ export function getSubscriptionLevel(beast: string, threadId: number): Subscript
  */
 export function setSubscription(beast: string, threadId: number, level: SubscriptionLevel): void {
   const now = Date.now();
-  sqlite.prepare(`
+  sqlite
+    .prepare(`
     INSERT INTO forum_notification_prefs (beast_name, thread_id, muted, level, updated_at)
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(beast_name, thread_id) DO UPDATE SET
       level = excluded.level,
       muted = CASE WHEN excluded.level = 'muted' THEN 1 ELSE 0 END,
       updated_at = excluded.updated_at
-  `).run(beast.toLowerCase(), threadId, level === 'muted' ? 1 : 0, level, now);
+  `)
+    .run(beast.toLowerCase(), threadId, level === 'muted' ? 1 : 0, level, now);
 }
 
 /**
@@ -185,41 +202,51 @@ export function setSubscription(beast: string, threadId: number, level: Subscrip
  */
 export function autoSubscribe(beast: string, threadId: number): void {
   const now = Date.now();
-  sqlite.prepare(`
+  sqlite
+    .prepare(`
     INSERT INTO forum_notification_prefs (beast_name, thread_id, muted, level, updated_at)
     VALUES (?, ?, 0, 'full', ?)
     ON CONFLICT(beast_name, thread_id) DO NOTHING
-  `).run(beast.toLowerCase(), threadId, now);
+  `)
+    .run(beast.toLowerCase(), threadId, now);
 }
 
 /**
  * Get all subscriptions for a Beast.
  */
-export function getSubscriptions(beast: string): Array<{ thread_id: number; level: SubscriptionLevel }> {
+export function getSubscriptions(
+  beast: string,
+): Array<{ thread_id: number; level: SubscriptionLevel }> {
   try {
-    const rows = sqlite.prepare(
-      'SELECT thread_id, level FROM forum_notification_prefs WHERE beast_name = ?'
-    ).all(beast.toLowerCase()) as any[];
-    return rows.map(r => ({
+    const rows = sqlite
+      .prepare('SELECT thread_id, level FROM forum_notification_prefs WHERE beast_name = ?')
+      .all(beast.toLowerCase()) as any[];
+    return rows.map((r) => ({
       thread_id: r.thread_id,
-      level: (r.level === 'full' || r.level === 'summary' || r.level === 'muted') ? r.level : 'full',
+      level: r.level === 'full' || r.level === 'summary' || r.level === 'muted' ? r.level : 'full',
     }));
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 /**
  * Get all subscribers for a thread (T#621).
  */
-export function getThreadSubscribers(threadId: number): Array<{ beast_name: string; level: SubscriptionLevel }> {
+export function getThreadSubscribers(
+  threadId: number,
+): Array<{ beast_name: string; level: SubscriptionLevel }> {
   try {
-    const rows = sqlite.prepare(
-      'SELECT beast_name, level FROM forum_notification_prefs WHERE thread_id = ?'
-    ).all(threadId) as any[];
-    return rows.map(r => ({
+    const rows = sqlite
+      .prepare('SELECT beast_name, level FROM forum_notification_prefs WHERE thread_id = ?')
+      .all(threadId) as any[];
+    return rows.map((r) => ({
       beast_name: r.beast_name,
-      level: (r.level === 'full' || r.level === 'summary' || r.level === 'muted') ? r.level : 'full',
+      level: r.level === 'full' || r.level === 'summary' || r.level === 'muted' ? r.level : 'full',
     }));
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 // ============================================================================
@@ -231,11 +258,7 @@ export function getThreadSubscribers(threadId: number): Array<{ beast_name: stri
  * Strips newlines, escapes quotes, truncates.
  */
 function sanitizeForTmux(text: string, maxLen: number = 200): string {
-  return text
-    .replace(/\n/g, ' ')
-    .replace(/"/g, "'")
-    .replace(/\\/g, '\\\\')
-    .slice(0, maxLen);
+  return text.replace(/\n/g, ' ').replace(/"/g, "'").replace(/\\/g, '\\\\').slice(0, maxLen);
 }
 
 /**

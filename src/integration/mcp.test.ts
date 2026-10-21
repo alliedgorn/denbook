@@ -8,49 +8,52 @@
  * To run: ensure no other MCP process is using stdio, then `bun test src/integration/mcp.test.ts`
  * These tests are excluded from the default `bun test` via bunfig.toml preload/filter.
  */
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import type { Subprocess } from "bun";
+import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import type { Subprocess } from 'bun';
 
 interface McpRequest {
-  jsonrpc: "2.0";
+  jsonrpc: '2.0';
   id: number;
   method: string;
   params?: Record<string, unknown>;
 }
 
 interface McpResponse {
-  jsonrpc: "2.0";
+  jsonrpc: '2.0';
   id: number;
   result?: unknown;
   error?: { code: number; message: string };
 }
 
-let mcpProcess: Subprocess<"pipe", "pipe", "pipe"> | null = null;
+let mcpProcess: Subprocess<'pipe', 'pipe', 'pipe'> | null = null;
 let requestId = 0;
 
-async function sendMcpRequest(method: string, params?: Record<string, unknown>): Promise<McpResponse> {
-  if (!mcpProcess) throw new Error("MCP process not started");
+async function sendMcpRequest(
+  method: string,
+  params?: Record<string, unknown>,
+): Promise<McpResponse> {
+  if (!mcpProcess) throw new Error('MCP process not started');
 
   const request: McpRequest = {
-    jsonrpc: "2.0",
+    jsonrpc: '2.0',
     id: ++requestId,
     method,
     params,
   };
 
-  const requestLine = JSON.stringify(request) + "\n";
+  const requestLine = JSON.stringify(request) + '\n';
   mcpProcess.stdin.write(requestLine);
 
   // Read response with timeout
   const reader = mcpProcess.stdout.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
+  let buffer = '';
 
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(() => {
       reader.releaseLock();
-      reject(new Error("MCP request timed out after 5s"));
-    }, 5000)
+      reject(new Error('MCP request timed out after 5s'));
+    }, 5000),
   );
 
   const readPromise = (async () => {
@@ -59,7 +62,7 @@ async function sendMcpRequest(method: string, params?: Record<string, unknown>):
       if (done) break;
 
       buffer += decoder.decode(value);
-      const lines = buffer.split("\n");
+      const lines = buffer.split('\n');
 
       for (const line of lines) {
         if (line.trim()) {
@@ -77,14 +80,14 @@ async function sendMcpRequest(method: string, params?: Record<string, unknown>):
     }
 
     reader.releaseLock();
-    throw new Error("No response received - MCP process stdout closed");
+    throw new Error('No response received - MCP process stdout closed');
   })();
 
   return Promise.race([readPromise, timeoutPromise]);
 }
 
 async function callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
-  const response = await sendMcpRequest("tools/call", {
+  const response = await sendMcpRequest('tools/call', {
     name,
     arguments: args,
   });
@@ -98,26 +101,26 @@ async function callTool(name: string, args: Record<string, unknown> = {}): Promi
 
 // MCP tests require spawning an MCP server process - they're environment-dependent
 // and excluded from the default test run. Run explicitly when testing MCP changes.
-const MCP_TEST_ENABLED = process.env.MCP_TEST === "1";
+const MCP_TEST_ENABLED = process.env.MCP_TEST === '1';
 
-describe.skipIf(!MCP_TEST_ENABLED)("MCP Integration", () => {
+describe.skipIf(!MCP_TEST_ENABLED)('MCP Integration', () => {
   beforeAll(async () => {
     // Start MCP server
-    mcpProcess = Bun.spawn(["bun", "run", "src/index.ts"], {
-      cwd: import.meta.dir.replace("/src/integration", ""),
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
+    mcpProcess = Bun.spawn(['bun', 'run', 'src/index.ts'], {
+      cwd: import.meta.dir.replace('/src/integration', ''),
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
     });
 
     // Wait for server to initialize
     await Bun.sleep(2000);
 
     // Initialize connection
-    await sendMcpRequest("initialize", {
-      protocolVersion: "2024-11-05",
+    await sendMcpRequest('initialize', {
+      protocolVersion: '2024-11-05',
       capabilities: {},
-      clientInfo: { name: "test-client", version: "1.0.0" },
+      clientInfo: { name: 'test-client', version: '1.0.0' },
     });
   });
 
@@ -130,9 +133,9 @@ describe.skipIf(!MCP_TEST_ENABLED)("MCP Integration", () => {
   // ===================
   // Tool Listing
   // ===================
-  describe("Tool Discovery", () => {
-    test("lists available tools", async () => {
-      const response = await sendMcpRequest("tools/list");
+  describe('Tool Discovery', () => {
+    test('lists available tools', async () => {
+      const response = await sendMcpRequest('tools/list');
       expect(response.result).toBeDefined();
 
       const result = response.result as { tools: Array<{ name: string }> };
@@ -141,49 +144,49 @@ describe.skipIf(!MCP_TEST_ENABLED)("MCP Integration", () => {
 
       // Check for core tools
       const toolNames = result.tools.map((t) => t.name);
-      expect(toolNames).toContain("oracle_search");
-      expect(toolNames).toContain("oracle_list");
-      expect(toolNames).toContain("oracle_stats");
+      expect(toolNames).toContain('oracle_search');
+      expect(toolNames).toContain('oracle_list');
+      expect(toolNames).toContain('oracle_stats');
     });
   });
 
   // ===================
   // Read-Only Tools
   // ===================
-  describe("Read-Only Tools", () => {
-    test("oracle_search returns results", async () => {
-      const result = await callTool("oracle_search", {
-        query: "oracle",
+  describe('Read-Only Tools', () => {
+    test('oracle_search returns results', async () => {
+      const result = await callTool('oracle_search', {
+        query: 'oracle',
         limit: 5,
       });
 
       expect(result).toBeDefined();
-      expect(typeof result).toBe("object");
+      expect(typeof result).toBe('object');
     });
 
-    test("oracle_list returns documents", async () => {
-      const result = await callTool("oracle_list", {
+    test('oracle_list returns documents', async () => {
+      const result = await callTool('oracle_list', {
         limit: 10,
       });
 
       expect(result).toBeDefined();
     });
 
-    test("oracle_stats returns statistics", async () => {
-      const result = await callTool("oracle_stats", {});
+    test('oracle_stats returns statistics', async () => {
+      const result = await callTool('oracle_stats', {});
       expect(result).toBeDefined();
     });
 
-    test("oracle_concepts returns concept list", async () => {
-      const result = await callTool("oracle_concepts", {
+    test('oracle_concepts returns concept list', async () => {
+      const result = await callTool('oracle_concepts', {
         limit: 20,
       });
 
       expect(result).toBeDefined();
     });
 
-    test("oracle_reflect returns random wisdom", async () => {
-      const result = await callTool("oracle_reflect", {});
+    test('oracle_reflect returns random wisdom', async () => {
+      const result = await callTool('oracle_reflect', {});
       expect(result).toBeDefined();
     });
   });
@@ -191,18 +194,18 @@ describe.skipIf(!MCP_TEST_ENABLED)("MCP Integration", () => {
   // ===================
   // Thread Tools
   // ===================
-  describe("Thread Tools", () => {
-    test("oracle_threads lists threads", async () => {
-      const result = await callTool("oracle_threads", {
+  describe('Thread Tools', () => {
+    test('oracle_threads lists threads', async () => {
+      const result = await callTool('oracle_threads', {
         limit: 10,
       });
 
       expect(result).toBeDefined();
     });
 
-    test("oracle_threads with status filter", async () => {
-      const result = await callTool("oracle_threads", {
-        status: "active",
+    test('oracle_threads with status filter', async () => {
+      const result = await callTool('oracle_threads', {
+        status: 'active',
         limit: 5,
       });
 
@@ -213,9 +216,9 @@ describe.skipIf(!MCP_TEST_ENABLED)("MCP Integration", () => {
   // ===================
   // Trace Tools
   // ===================
-  describe("Trace Tools", () => {
-    test("oracle_trace_list returns traces", async () => {
-      const result = await callTool("oracle_trace_list", {
+  describe('Trace Tools', () => {
+    test('oracle_trace_list returns traces', async () => {
+      const result = await callTool('oracle_trace_list', {
         limit: 10,
       });
 
@@ -226,20 +229,20 @@ describe.skipIf(!MCP_TEST_ENABLED)("MCP Integration", () => {
   // ===================
   // Error Handling
   // ===================
-  describe("Error Handling", () => {
-    test("handles invalid tool name", async () => {
+  describe('Error Handling', () => {
+    test('handles invalid tool name', async () => {
       try {
-        await callTool("nonexistent_tool", {});
+        await callTool('nonexistent_tool', {});
         expect(true).toBe(false); // Should have thrown
       } catch (error) {
         expect(error).toBeDefined();
       }
     });
 
-    test("handles missing required params", async () => {
+    test('handles missing required params', async () => {
       try {
         // oracle_search requires 'query' param
-        await callTool("oracle_search", {});
+        await callTool('oracle_search', {});
         // May or may not throw depending on implementation
       } catch (error) {
         expect(error).toBeDefined();

@@ -5,7 +5,12 @@
  * Uses EmbeddingProvider since LanceDB doesn't generate embeddings.
  */
 
-import type { VectorStoreAdapter, VectorDocument, VectorQueryResult, EmbeddingProvider } from '../types.ts';
+import type {
+  VectorStoreAdapter,
+  VectorDocument,
+  VectorQueryResult,
+  EmbeddingProvider,
+} from '../types.ts';
 
 export class LanceDBAdapter implements VectorStoreAdapter {
   readonly name = 'lancedb';
@@ -44,12 +49,14 @@ export class LanceDBAdapter implements VectorStoreAdapter {
     } else {
       // Create with a schema-defining dummy row, then delete it
       const dims = this.embedder.dimensions;
-      this.table = await this.db.createTable(this.collectionName, [{
-        id: '__init__',
-        text: '',
-        metadata: '{}',
-        vector: new Array(dims).fill(0),
-      }]);
+      this.table = await this.db.createTable(this.collectionName, [
+        {
+          id: '__init__',
+          text: '',
+          metadata: '{}',
+          vector: new Array(dims).fill(0),
+        },
+      ]);
       await this.table.delete('id = "__init__"');
     }
 
@@ -64,7 +71,10 @@ export class LanceDBAdapter implements VectorStoreAdapter {
       this.table = null;
       console.log(`[LanceDB] Collection '${this.collectionName}' deleted`);
     } catch (e) {
-      console.warn('[LanceDB] deleteCollection failed:', e instanceof Error ? e.message : String(e));
+      console.warn(
+        '[LanceDB] deleteCollection failed:',
+        e instanceof Error ? e.message : String(e),
+      );
     }
   }
 
@@ -72,7 +82,7 @@ export class LanceDBAdapter implements VectorStoreAdapter {
     if (docs.length === 0) return;
     if (!this.table) await this.ensureCollection();
 
-    const texts = docs.map(d => d.document);
+    const texts = docs.map((d) => d.document);
     const embeddings = await this.embedder.embed(texts);
 
     const rows = docs.map((doc, i) => ({
@@ -86,7 +96,11 @@ export class LanceDBAdapter implements VectorStoreAdapter {
     console.log(`[LanceDB] Added ${docs.length} documents`);
   }
 
-  async query(text: string, limit: number = 10, where?: Record<string, any>): Promise<VectorQueryResult> {
+  async query(
+    text: string,
+    limit: number = 10,
+    where?: Record<string, any>,
+  ): Promise<VectorQueryResult> {
     if (!this.table) await this.ensureCollection();
 
     const [queryEmbedding] = await this.embedder.embed([text]);
@@ -98,10 +112,12 @@ export class LanceDBAdapter implements VectorStoreAdapter {
     // Filter metadata in JavaScript (LanceDB json_extract requires LargeBinary, not Utf8)
     let filtered = results;
     if (where) {
-      filtered = results.filter((r: any) => {
-        const meta = JSON.parse(r.metadata || '{}');
-        return Object.entries(where).every(([k, v]) => meta[k] === v);
-      }).slice(0, limit);
+      filtered = results
+        .filter((r: any) => {
+          const meta = JSON.parse(r.metadata || '{}');
+          return Object.entries(where).every(([k, v]) => meta[k] === v);
+        })
+        .slice(0, limit);
     }
 
     return {
@@ -122,7 +138,10 @@ export class LanceDBAdapter implements VectorStoreAdapter {
     }
 
     const vector = Array.from(rows[0].vector);
-    const results = await this.table.search(vector).limit(nResults + 1).toArray();
+    const results = await this.table
+      .search(vector)
+      .limit(nResults + 1)
+      .toArray();
 
     const filtered = results.filter((r: any) => r.id !== id).slice(0, nResults);
 
@@ -160,7 +179,9 @@ export class LanceDBAdapter implements VectorStoreAdapter {
     return { count: stats.count, name: this.collectionName };
   }
 
-  async getAllEmbeddings(limit: number = 5000): Promise<{ ids: string[]; embeddings: number[][]; metadatas: any[] }> {
+  async getAllEmbeddings(
+    limit: number = 5000,
+  ): Promise<{ ids: string[]; embeddings: number[][]; metadatas: any[] }> {
     if (!this.table) return { ids: [], embeddings: [], metadatas: [] };
 
     const rows = await this.table.query().limit(limit).toArray();

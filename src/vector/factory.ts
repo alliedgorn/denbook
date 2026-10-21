@@ -11,7 +11,10 @@ import { ChromaMcpAdapter } from './adapters/chroma-mcp.ts';
 import { SqliteVecAdapter } from './adapters/sqlite-vec.ts';
 import { LanceDBAdapter } from './adapters/lancedb.ts';
 import { QdrantAdapter } from './adapters/qdrant.ts';
-import { CloudflareVectorizeAdapter, CloudflareAIEmbeddings } from './adapters/cloudflare-vectorize.ts';
+import {
+  CloudflareVectorizeAdapter,
+  CloudflareAIEmbeddings,
+} from './adapters/cloudflare-vectorize.ts';
 import { createEmbeddingProvider } from './embeddings.ts';
 
 export interface VectorStoreConfig {
@@ -47,52 +50,52 @@ export function createVectorStore(config: VectorStoreConfig = {}): VectorStoreAd
   const home = process.env.HOME || process.env.USERPROFILE;
   if (!home) throw new Error('HOME environment variable not set — cannot resolve vector DB paths');
 
-  const type = config.type
-    || (process.env.ORACLE_VECTOR_DB as VectorDBType)
-    || 'chroma';
+  const type = config.type || (process.env.ORACLE_VECTOR_DB as VectorDBType) || 'chroma';
 
   const collectionName = config.collectionName || 'oracle_knowledge';
 
   switch (type) {
     case 'sqlite-vec': {
-      const dbPath = config.dataPath
-        || process.env.ORACLE_VECTOR_DB_PATH
-        || path.join(home,'.oracle', 'vectors.db');
+      const dbPath =
+        config.dataPath ||
+        process.env.ORACLE_VECTOR_DB_PATH ||
+        path.join(home, '.oracle', 'vectors.db');
 
-      const embeddingType = config.embeddingProvider
-        || (process.env.ORACLE_EMBEDDING_PROVIDER as EmbeddingProviderType)
-        || 'ollama';
+      const embeddingType =
+        config.embeddingProvider ||
+        (process.env.ORACLE_EMBEDDING_PROVIDER as EmbeddingProviderType) ||
+        'ollama';
 
-      const embeddingModel = config.embeddingModel
-        || process.env.ORACLE_EMBEDDING_MODEL;
+      const embeddingModel = config.embeddingModel || process.env.ORACLE_EMBEDDING_MODEL;
 
       const embedder = createEmbeddingProvider(embeddingType, embeddingModel);
       return new SqliteVecAdapter(collectionName, dbPath, embedder);
     }
 
     case 'lancedb': {
-      const dbPath = config.dataPath
-        || process.env.ORACLE_VECTOR_DB_PATH
-        || path.join(home,'.oracle', 'lancedb');
+      const dbPath =
+        config.dataPath ||
+        process.env.ORACLE_VECTOR_DB_PATH ||
+        path.join(home, '.oracle', 'lancedb');
 
-      const embeddingType = config.embeddingProvider
-        || (process.env.ORACLE_EMBEDDING_PROVIDER as EmbeddingProviderType)
-        || 'ollama';
+      const embeddingType =
+        config.embeddingProvider ||
+        (process.env.ORACLE_EMBEDDING_PROVIDER as EmbeddingProviderType) ||
+        'ollama';
 
-      const embeddingModel = config.embeddingModel
-        || process.env.ORACLE_EMBEDDING_MODEL;
+      const embeddingModel = config.embeddingModel || process.env.ORACLE_EMBEDDING_MODEL;
 
       const embedder = createEmbeddingProvider(embeddingType, embeddingModel);
       return new LanceDBAdapter(collectionName, dbPath, embedder);
     }
 
     case 'qdrant': {
-      const embeddingType = config.embeddingProvider
-        || (process.env.ORACLE_EMBEDDING_PROVIDER as EmbeddingProviderType)
-        || 'ollama';
+      const embeddingType =
+        config.embeddingProvider ||
+        (process.env.ORACLE_EMBEDDING_PROVIDER as EmbeddingProviderType) ||
+        'ollama';
 
-      const embeddingModel = config.embeddingModel
-        || process.env.ORACLE_EMBEDDING_MODEL;
+      const embeddingModel = config.embeddingModel || process.env.ORACLE_EMBEDDING_MODEL;
 
       const embedder = createEmbeddingProvider(embeddingType, embeddingModel);
       return new QdrantAdapter(collectionName, embedder, {
@@ -107,8 +110,7 @@ export function createVectorStore(config: VectorStoreConfig = {}): VectorStoreAd
         apiToken: config.cfApiToken || process.env.CLOUDFLARE_API_TOKEN,
       };
 
-      const embeddingModel = config.embeddingModel
-        || process.env.ORACLE_EMBEDDING_MODEL;
+      const embeddingModel = config.embeddingModel || process.env.ORACLE_EMBEDDING_MODEL;
 
       // Default to Cloudflare AI embeddings (same platform, zero egress)
       const embedder = new CloudflareAIEmbeddings({
@@ -121,7 +123,7 @@ export function createVectorStore(config: VectorStoreConfig = {}): VectorStoreAd
 
     case 'chroma':
     default: {
-      const dataPath = config.dataPath || path.join(home,'.chromadb');
+      const dataPath = config.dataPath || path.join(home, '.chromadb');
       const pythonVersion = config.pythonVersion || '3.12';
       return new ChromaMcpAdapter(collectionName, dataPath, pythonVersion);
     }
@@ -139,9 +141,15 @@ function homeDir(): string {
 }
 
 /** Known embedding model presets (resolved lazily to avoid import-time HOME access) */
-let _embeddingModels: Record<string, { collection: string; model: string; dataPath?: string }> | null = null;
+let _embeddingModels: Record<
+  string,
+  { collection: string; model: string; dataPath?: string }
+> | null = null;
 
-export function getEmbeddingModels(): Record<string, { collection: string; model: string; dataPath?: string }> {
+export function getEmbeddingModels(): Record<
+  string,
+  { collection: string; model: string; dataPath?: string }
+> {
   if (!_embeddingModels) {
     const home = homeDir();
     _embeddingModels = {
@@ -166,16 +174,25 @@ export function getEmbeddingModels(): Record<string, { collection: string; model
 }
 
 /** @deprecated Use getEmbeddingModels() — kept for backward compat */
-export const EMBEDDING_MODELS = new Proxy({} as Record<string, { collection: string; model: string; dataPath?: string }>, {
-  get(_, prop: string) { return getEmbeddingModels()[prop]; },
-  has(_, prop: string) { return prop in getEmbeddingModels(); },
-  ownKeys() { return Object.keys(getEmbeddingModels()); },
-  getOwnPropertyDescriptor(_, prop: string) {
-    const models = getEmbeddingModels();
-    if (prop in models) return { configurable: true, enumerable: true, value: models[prop] };
-    return undefined;
+export const EMBEDDING_MODELS = new Proxy(
+  {} as Record<string, { collection: string; model: string; dataPath?: string }>,
+  {
+    get(_, prop: string) {
+      return getEmbeddingModels()[prop];
+    },
+    has(_, prop: string) {
+      return prop in getEmbeddingModels();
+    },
+    ownKeys() {
+      return Object.keys(getEmbeddingModels());
+    },
+    getOwnPropertyDescriptor(_, prop: string) {
+      const models = getEmbeddingModels();
+      if (prop in models) return { configurable: true, enumerable: true, value: models[prop] };
+      return undefined;
+    },
   },
-});
+);
 
 const modelStoreCache = new Map<string, VectorStoreAdapter>();
 
@@ -200,9 +217,17 @@ export function getVectorStoreByModel(model?: string): VectorStoreAdapter {
     });
     modelStoreCache.set(key, store);
     // Auto-connect in background (non-blocking)
-    connectPromises.set(key, store.connect().catch(e =>
-      console.warn(`[VectorRegistry] Failed to connect ${key}:`, e instanceof Error ? e.message : String(e))
-    ));
+    connectPromises.set(
+      key,
+      store
+        .connect()
+        .catch((e) =>
+          console.warn(
+            `[VectorRegistry] Failed to connect ${key}:`,
+            e instanceof Error ? e.message : String(e),
+          ),
+        ),
+    );
   }
   return store;
 }

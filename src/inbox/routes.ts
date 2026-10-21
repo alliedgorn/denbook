@@ -26,13 +26,16 @@ export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       const timeStr = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
 
       // Generate slug
-      const slug = data.slug || data.content
-        .substring(0, 50)
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '') || 'handoff';
+      const slug =
+        data.slug ||
+        data.content
+          .substring(0, 50)
+          .toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, '')
+          .replace(/\s+/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '') ||
+        'handoff';
 
       const filename = `${dateStr}_${timeStr}_${slug}.md`;
       const dirPath = path.join(REPO_ROOT, 'ψ/inbox/handoff');
@@ -47,9 +50,14 @@ export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       let restedBeast: string | null = null;
       const asParam = c.req.query('as')?.toLowerCase();
       if (asParam && isTrustedRequest(c)) {
-        const beastRow = sqlite.prepare('SELECT name FROM beast_profiles WHERE name = ?').get(asParam) as any;
+        const beastRow = sqlite
+          .prepare('SELECT name FROM beast_profiles WHERE name = ?')
+          .get(asParam) as any;
         if (beastRow) {
-          sqlite.prepare("UPDATE beast_profiles SET rest_status = 'rest', updated_at = ? WHERE name = ?")
+          sqlite
+            .prepare(
+              "UPDATE beast_profiles SET rest_status = 'rest', updated_at = ? WHERE name = ?",
+            )
             .run(Date.now(), asParam);
           restedBeast = asParam;
           console.log(`[Handoff] ${asParam} → rest_status=rest`);
@@ -57,18 +65,24 @@ export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         }
       }
 
-      return c.json({
-        success: true,
-        file: `ψ/inbox/handoff/${filename}`,
-        rested_beast: restedBeast,
-        message: restedBeast
-          ? `Handoff written. ${restedBeast} → rest_status=rest. Schedules paused until /wake.`
-          : 'Handoff written.'
-      }, 201);
+      return c.json(
+        {
+          success: true,
+          file: `ψ/inbox/handoff/${filename}`,
+          rested_beast: restedBeast,
+          message: restedBeast
+            ? `Handoff written. ${restedBeast} → rest_status=rest. Schedules paused until /wake.`
+            : 'Handoff written.',
+        },
+        201,
+      );
     } catch (error) {
-      return c.json({
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }, 500);
+      return c.json(
+        {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        500,
+      );
     }
   });
 
@@ -78,13 +92,20 @@ export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const type = c.req.query('type') || 'all';
 
     const inboxDir = path.join(REPO_ROOT, 'ψ/inbox');
-    const results: Array<{ filename: string; path: string; created: string; preview: string; type: string }> = [];
+    const results: Array<{
+      filename: string;
+      path: string;
+      created: string;
+      preview: string;
+      type: string;
+    }> = [];
 
     if (type === 'all' || type === 'handoff') {
       const handoffDir = path.join(inboxDir, 'handoff');
       if (fs.existsSync(handoffDir)) {
-        const files = fs.readdirSync(handoffDir)
-          .filter(f => f.endsWith('.md'))
+        const files = fs
+          .readdirSync(handoffDir)
+          .filter((f) => f.endsWith('.md'))
           .sort()
           .reverse();
 
@@ -123,15 +144,18 @@ export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         data.pattern,
         data.source,
         data.concepts,
-        data.origin,   // 'mother' | 'arthur' | 'volt' | 'human' (null = universal)
-        data.project,  // ghq-style project path (null = universal)
-        data.cwd       // Auto-detect project from cwd
+        data.origin, // 'mother' | 'arthur' | 'volt' | 'human' (null = universal)
+        data.project, // ghq-style project path (null = universal)
+        data.cwd, // Auto-detect project from cwd
       );
       return c.json(result);
     } catch (error) {
-      return c.json({
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }, 500);
+      return c.json(
+        {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        500,
+      );
     }
   });
 }

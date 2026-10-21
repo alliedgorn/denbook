@@ -5,20 +5,38 @@ import * as path from 'path';
 import { getFullThread, handleThreadMessage } from '../forum/handler.ts';
 import { sendDm, getMessages as getDmMessages } from '../dm/handler.ts';
 import { getBeastProfile } from '../db/index.ts';
-import { getGuestByUsername, changeGuestPassword, updateGuestProfile } from '../server/guest-accounts.ts';
-import { checkGuestPostRate, checkGuestDmRate, checkGuestContentLength, scanForInjection } from '../server/guest-safety.ts';
+import {
+  getGuestByUsername,
+  changeGuestPassword,
+  updateGuestProfile,
+} from '../server/guest-accounts.ts';
+import {
+  checkGuestPostRate,
+  checkGuestDmRate,
+  checkGuestContentLength,
+  scanForInjection,
+} from '../server/guest-safety.ts';
 import { logSecurityEvent } from '../server/security-logger.ts';
 
 interface GuestHelpers {
   wsBroadcast: (event: string, data: any) => void;
   withRetry: <T>(fn: () => T | Promise<T>, maxRetries?: number, delayMs?: number) => Promise<T>;
-  getTmuxStatus: () => { tmuxStatus: Map<string, string>; contextPctMap: Map<string, number | null> };
+  getTmuxStatus: () => {
+    tmuxStatus: Map<string, string>;
+    contextPctMap: Map<string, number | null>;
+  };
   normalizeAvatarUrl: (url: string | null) => string | null;
   uploadsDir: string;
 }
 
 export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers: GuestHelpers) {
-  const { wsBroadcast, withRetry, getTmuxStatus, normalizeAvatarUrl, uploadsDir: UPLOADS_DIR } = helpers;
+  const {
+    wsBroadcast,
+    withRetry,
+    getTmuxStatus,
+    normalizeAvatarUrl,
+    uploadsDir: UPLOADS_DIR,
+  } = helpers;
 
   // Password change rate limiting: max 5 attempts per guest per 15 minutes
   const passwordChangeAttempts = new Map<string, { count: number; firstAttempt: number }>();
@@ -27,7 +45,9 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // Resolve guest display name from username
   function getGuestDisplayName(username: string): string {
-    const guest = sqlite.query('SELECT display_name FROM guest_accounts WHERE username = ?').get(username) as any;
+    const guest = sqlite
+      .query('SELECT display_name FROM guest_accounts WHERE username = ?')
+      .get(username) as any;
     return guest?.display_name || username;
   }
 
@@ -35,40 +55,56 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
   app.get('/api/guest/dashboard', (c) => {
     const guestUsername = (c.get as any)('guestUsername') as string | undefined;
 
-    const publicThreads = sqlite.prepare(
-      "SELECT id, title, status, created_at, (SELECT COUNT(*) FROM forum_messages WHERE thread_id = forum_threads.id) as msg_count FROM forum_threads WHERE visibility = 'public' ORDER BY updated_at DESC LIMIT 10"
-    ).all() as any[];
+    const publicThreads = sqlite
+      .prepare(
+        "SELECT id, title, status, created_at, (SELECT COUNT(*) FROM forum_messages WHERE thread_id = forum_threads.id) as msg_count FROM forum_threads WHERE visibility = 'public' ORDER BY updated_at DESC LIMIT 10",
+      )
+      .all() as any[];
 
-    const beasts = sqlite.prepare(
-      "SELECT name, display_name, animal, role, bio, theme_color FROM beast_profiles ORDER BY name"
-    ).all() as any[];
+    const beasts = sqlite
+      .prepare(
+        'SELECT name, display_name, animal, role, bio, theme_color FROM beast_profiles ORDER BY name',
+      )
+      .all() as any[];
 
     let dmSummary: any[] = [];
     let dmUnreadTotal = 0;
     if (guestUsername) {
       const guestDisplayName = getGuestDisplayName(guestUsername);
       const guestTag = `[Guest] ${guestDisplayName}`;
-      const convos = sqlite.prepare(
-        "SELECT c.id, CASE WHEN participant1 = ? THEN participant2 ELSE participant1 END as other, (SELECT content FROM dm_messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message, (SELECT created_at FROM dm_messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_at FROM dm_conversations c WHERE participant1 = ? OR participant2 = ? ORDER BY last_at DESC LIMIT 10"
-      ).all(guestTag, guestTag, guestTag) as any[];
+      const convos = sqlite
+        .prepare(
+          'SELECT c.id, CASE WHEN participant1 = ? THEN participant2 ELSE participant1 END as other, (SELECT content FROM dm_messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message, (SELECT created_at FROM dm_messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_at FROM dm_conversations c WHERE participant1 = ? OR participant2 = ? ORDER BY last_at DESC LIMIT 10',
+        )
+        .all(guestTag, guestTag, guestTag) as any[];
       for (const conv of convos) {
-        const unread = (sqlite.prepare(
-          "SELECT COUNT(*) as c FROM dm_messages WHERE conversation_id = ? AND LOWER(sender) != ? AND read_at IS NULL"
-        ).get(conv.id, guestTag.toLowerCase()) as any)?.c || 0;
-        dmSummary.push({ other: conv.other, last_message: conv.last_message, last_at: conv.last_at, unread });
+        const unread =
+          (
+            sqlite
+              .prepare(
+                'SELECT COUNT(*) as c FROM dm_messages WHERE conversation_id = ? AND LOWER(sender) != ? AND read_at IS NULL',
+              )
+              .get(conv.id, guestTag.toLowerCase()) as any
+          )?.c || 0;
+        dmSummary.push({
+          other: conv.other,
+          last_message: conv.last_message,
+          last_at: conv.last_at,
+          unread,
+        });
         dmUnreadTotal += unread;
       }
     }
 
     return c.json({
-      publicThreads: publicThreads.map(t => ({
+      publicThreads: publicThreads.map((t) => ({
         id: t.id,
         title: t.title,
         status: t.status,
         message_count: t.msg_count || 0,
         created_at: new Date(t.created_at).toISOString(),
       })),
-      pack: beasts.map(b => ({
+      pack: beasts.map((b) => ({
         name: b.name,
         displayName: b.display_name,
         animal: b.animal,
@@ -86,19 +122,28 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const limit = parseInt(c.req.query('limit') || '50');
     const offset = parseInt(c.req.query('offset') || '0');
 
-    const rows = sqlite.prepare(
-      "SELECT *, (SELECT COUNT(*) FROM forum_messages WHERE thread_id = forum_threads.id) as msg_count FROM forum_threads WHERE visibility = 'public' AND deleted_at IS NULL ORDER BY COALESCE(pinned, 0) DESC, updated_at DESC LIMIT ? OFFSET ?"
-    ).all(limit, offset) as any[];
+    const rows = sqlite
+      .prepare(
+        "SELECT *, (SELECT COUNT(*) FROM forum_messages WHERE thread_id = forum_threads.id) as msg_count FROM forum_threads WHERE visibility = 'public' AND deleted_at IS NULL ORDER BY COALESCE(pinned, 0) DESC, updated_at DESC LIMIT ? OFFSET ?",
+      )
+      .all(limit, offset) as any[];
 
-    const total = (sqlite.prepare("SELECT COUNT(*) as total FROM forum_threads WHERE visibility = 'public' AND deleted_at IS NULL").get() as any)?.total || 0;
+    const total =
+      (
+        sqlite
+          .prepare(
+            "SELECT COUNT(*) as total FROM forum_threads WHERE visibility = 'public' AND deleted_at IS NULL",
+          )
+          .get() as any
+      )?.total || 0;
 
     return c.json({
-      threads: rows.map(t => ({
+      threads: rows.map((t) => ({
         id: t.id,
         title: t.title,
         status: t.status || 'active',
         category: t.category || 'discussion',
-        pinned: !!(t.pinned),
+        pinned: !!t.pinned,
         message_count: t.msg_count || 0,
         created_at: new Date(t.created_at).toISOString(),
         visibility: 'public',
@@ -112,7 +157,9 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const threadId = parseInt(c.req.param('id'), 10);
     if (isNaN(threadId)) return c.json({ error: 'Invalid thread ID' }, 400);
 
-    const threadRow = sqlite.prepare('SELECT * FROM forum_threads WHERE id = ? AND visibility = ?').get(threadId, 'public') as any;
+    const threadRow = sqlite
+      .prepare('SELECT * FROM forum_threads WHERE id = ? AND visibility = ?')
+      .get(threadId, 'public') as any;
     if (!threadRow) return c.json({ error: 'Thread not found' }, 404);
 
     const rawLimit = c.req.query('limit');
@@ -132,15 +179,23 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         status: threadData.thread.status,
         created_at: new Date(threadData.thread.createdAt).toISOString(),
       },
-      messages: threadData.messages.map(m => {
-        const raw = sqlite.prepare('SELECT reply_to_id FROM forum_messages WHERE id = ?').get(m.id) as any;
-        const reactionRows = sqlite.prepare(
-          'SELECT emoji, GROUP_CONCAT(beast_name) as beasts, COUNT(*) as count FROM forum_reactions WHERE message_id = ? GROUP BY emoji'
-        ).all(m.id) as any[];
+      messages: threadData.messages.map((m) => {
+        const raw = sqlite
+          .prepare('SELECT reply_to_id FROM forum_messages WHERE id = ?')
+          .get(m.id) as any;
+        const reactionRows = sqlite
+          .prepare(
+            'SELECT emoji, GROUP_CONCAT(beast_name) as beasts, COUNT(*) as count FROM forum_reactions WHERE message_id = ? GROUP BY emoji',
+          )
+          .all(m.id) as any[];
         let authorAvatarUrl: string | null = null;
         if (m.author?.startsWith('[Guest]')) {
           const guestName = m.author.replace('[Guest] ', '').replace('[Guest]', '').trim();
-          const guest = sqlite.prepare('SELECT avatar_url FROM guest_accounts WHERE LOWER(display_name) = ? OR LOWER(username) = ?').get(guestName.toLowerCase(), guestName.toLowerCase()) as any;
+          const guest = sqlite
+            .prepare(
+              'SELECT avatar_url FROM guest_accounts WHERE LOWER(display_name) = ? OR LOWER(username) = ?',
+            )
+            .get(guestName.toLowerCase(), guestName.toLowerCase()) as any;
           authorAvatarUrl = guest?.avatar_url || null;
         }
         return {
@@ -153,7 +208,11 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
           principles_found: m.principlesFound,
           patterns_found: m.patternsFound,
           created_at: new Date(m.createdAt).toISOString(),
-          reactions: reactionRows.map(r => ({ emoji: r.emoji, beasts: r.beasts.split(','), count: r.count })),
+          reactions: reactionRows.map((r) => ({
+            emoji: r.emoji,
+            beasts: r.beasts.split(','),
+            count: r.count,
+          })),
         };
       }),
       total: threadData.total,
@@ -165,7 +224,9 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const threadId = parseInt(c.req.param('id'), 10);
     if (isNaN(threadId)) return c.json({ error: 'Invalid thread ID' }, 400);
 
-    const threadRow = sqlite.prepare('SELECT visibility FROM forum_threads WHERE id = ?').get(threadId) as any;
+    const threadRow = sqlite
+      .prepare('SELECT visibility FROM forum_threads WHERE id = ?')
+      .get(threadId) as any;
     if (!threadRow || threadRow.visibility !== 'public') {
       return c.json({ error: 'Thread not found' }, 404);
     }
@@ -196,17 +257,23 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
     const guestDisplayName = getGuestDisplayName(guestUsername);
     const author = `[Guest] ${guestDisplayName}`;
-    const result = await withRetry(() => handleThreadMessage({
-      message: data.message,
-      threadId,
-      role: 'human',
-      author,
-    }));
+    const result = await withRetry(() =>
+      handleThreadMessage({
+        message: data.message,
+        threadId,
+        role: 'human',
+        author,
+      }),
+    );
 
     if (result.messageId) {
-      sqlite.prepare('UPDATE forum_messages SET author_role = ? WHERE id = ?').run('guest', result.messageId);
+      sqlite
+        .prepare('UPDATE forum_messages SET author_role = ? WHERE id = ?')
+        .run('guest', result.messageId);
       if (data.reply_to_id) {
-        sqlite.prepare('UPDATE forum_messages SET reply_to_id = ? WHERE id = ?').run(data.reply_to_id, result.messageId);
+        sqlite
+          .prepare('UPDATE forum_messages SET reply_to_id = ? WHERE id = ?')
+          .run(data.reply_to_id, result.messageId);
       }
     }
 
@@ -235,7 +302,10 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         actor: guestUsername,
         actorType: 'guest',
         target: '/api/guest/thread',
-        details: { patterns: scan.patterns, content_preview: (data.title + ': ' + data.message).slice(0, 200) },
+        details: {
+          patterns: scan.patterns,
+          content_preview: (data.title + ': ' + data.message).slice(0, 200),
+        },
         ipSource: c.req.header('x-real-ip') || 'local',
         requestId: (c.get as any)('requestId'),
       });
@@ -243,46 +313,69 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
     const guestDisplayName = getGuestDisplayName(guestUsername);
     const author = `[Guest] ${guestDisplayName}`;
-    const result = await withRetry(() => handleThreadMessage({
-      message: data.message,
-      title: data.title,
-      role: 'human',
-      author,
-    }));
+    const result = await withRetry(() =>
+      handleThreadMessage({
+        message: data.message,
+        title: data.title,
+        role: 'human',
+        author,
+      }),
+    );
 
     if (result.threadId) {
-      sqlite.prepare('UPDATE forum_threads SET visibility = ? WHERE id = ?').run('public', result.threadId);
+      sqlite
+        .prepare('UPDATE forum_threads SET visibility = ? WHERE id = ?')
+        .run('public', result.threadId);
 
       if (!data.thread_id) {
         try {
           const { getOracleRegistry, notifyMentioned } = await import('../forum/mentions.ts');
           const registry = getOracleRegistry();
           const threadTitle = data.title || data.message?.slice(0, 50) || 'New thread';
-          const allBeasts = Object.keys(registry).filter(name => name !== 'gorn');
-          notifyMentioned(allBeasts, result.threadId, threadTitle, author, `New public thread from guest: ${threadTitle}`, undefined, new Set(allBeasts));
-        } catch { /* best effort */ }
+          const allBeasts = Object.keys(registry).filter((name) => name !== 'gorn');
+          notifyMentioned(
+            allBeasts,
+            result.threadId,
+            threadTitle,
+            author,
+            `New public thread from guest: ${threadTitle}`,
+            undefined,
+            new Set(allBeasts),
+          );
+        } catch {
+          /* best effort */
+        }
       }
     }
     if (result.messageId) {
-      sqlite.prepare('UPDATE forum_messages SET author_role = ? WHERE id = ?').run('guest', result.messageId);
+      sqlite
+        .prepare('UPDATE forum_messages SET author_role = ? WHERE id = ?')
+        .run('guest', result.messageId);
     }
 
-    wsBroadcast('new_message', { thread_id: result.threadId, message_id: result.messageId, author });
+    wsBroadcast('new_message', {
+      thread_id: result.threadId,
+      message_id: result.messageId,
+      author,
+    });
     return c.json({ thread_id: result.threadId, message_id: result.messageId }, 201);
   });
 
   // Guest pack — Beast profiles (T#559)
   app.get('/api/guest/pack', (c) => {
-    const beasts = sqlite.prepare(
-      "SELECT name, display_name, animal, role, bio, theme_color, avatar_url, interests, sex, birthdate FROM beast_profiles ORDER BY name"
-    ).all() as any[];
+    const beasts = sqlite
+      .prepare(
+        'SELECT name, display_name, animal, role, bio, theme_color, avatar_url, interests, sex, birthdate FROM beast_profiles ORDER BY name',
+      )
+      .all() as any[];
 
     const { tmuxStatus } = getTmuxStatus();
 
     return c.json({
-      beasts: beasts.map(b => {
+      beasts: beasts.map((b) => {
         const sessionName = b.name.charAt(0).toUpperCase() + b.name.slice(1);
-        const rawStatus = tmuxStatus.get(sessionName.toLowerCase()) || tmuxStatus.get(b.name) || 'offline';
+        const rawStatus =
+          tmuxStatus.get(sessionName.toLowerCase()) || tmuxStatus.get(b.name) || 'offline';
         return {
           name: b.name,
           displayName: b.display_name,
@@ -310,12 +403,18 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const guestDisplayName = getGuestDisplayName(guestUsername);
     const guestTag = `[Guest] ${guestDisplayName}`;
 
-    if (fromParam !== guestTag && toParam !== guestTag && fromParam !== guestUsername && toParam !== guestUsername) {
+    if (
+      fromParam !== guestTag &&
+      toParam !== guestTag &&
+      fromParam !== guestUsername &&
+      toParam !== guestUsername
+    ) {
       return c.json({ error: 'Access denied' }, 403);
     }
 
-    const from = (fromParam === guestUsername || fromParam === guestDisplayName) ? guestTag : fromParam;
-    const to = (toParam === guestUsername || toParam === guestDisplayName) ? guestTag : toParam;
+    const from =
+      fromParam === guestUsername || fromParam === guestDisplayName ? guestTag : fromParam;
+    const to = toParam === guestUsername || toParam === guestDisplayName ? guestTag : toParam;
 
     const limit = parseInt(c.req.query('limit') || '50');
     const offset = parseInt(c.req.query('offset') || '0');
@@ -329,8 +428,8 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
     return c.json({
       conversation_id: data.conversationId,
-      participants: data.participants.map(p => normalizeGuestSender(p)),
-      messages: data.messages.map(m => ({
+      participants: data.participants.map((p) => normalizeGuestSender(p)),
+      messages: data.messages.map((m) => ({
         id: m.id,
         sender: normalizeGuestSender(m.sender),
         message: m.content,
@@ -350,7 +449,10 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const recipientBeast = getBeastProfile(data.to);
     const isOwner = data.to.toLowerCase() === 'gorn';
     if (!recipientBeast && !isOwner) {
-      return c.json({ error: `Recipient "${data.to}" not found. Must be a valid beast name.` }, 404);
+      return c.json(
+        { error: `Recipient "${data.to}" not found. Must be a valid beast name.` },
+        404,
+      );
     }
 
     const rateCheck = checkGuestDmRate(guestUsername);
@@ -375,12 +477,18 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
     const guestDisplayName = getGuestDisplayName(guestUsername);
     const guestTag = `[Guest] ${guestDisplayName}`;
-    const result = await withRetry(() => sendDm(guestTag, data.to, data.message, `[Guest] ${guestUsername}`));
+    const result = await withRetry(() =>
+      sendDm(guestTag, data.to, data.message, `[Guest] ${guestUsername}`),
+    );
 
     if (result.messageId) {
       try {
-        sqlite.prepare('UPDATE dm_messages SET author_role = ? WHERE id = ?').run('guest', result.messageId);
-      } catch { /* column may not exist */ }
+        sqlite
+          .prepare('UPDATE dm_messages SET author_role = ? WHERE id = ?')
+          .run('guest', result.messageId);
+      } catch {
+        /* column may not exist */
+      }
     }
 
     wsBroadcast('new_dm', { conversation_id: result.conversationId });
@@ -401,7 +509,9 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       if (now - attempts.firstAttempt > PASSWORD_CHANGE_RATE_WINDOW_MS) {
         passwordChangeAttempts.delete(guestUsername);
       } else if (attempts.count >= PASSWORD_CHANGE_RATE_LIMIT) {
-        const retryAfter = Math.ceil((attempts.firstAttempt + PASSWORD_CHANGE_RATE_WINDOW_MS - now) / 1000);
+        const retryAfter = Math.ceil(
+          (attempts.firstAttempt + PASSWORD_CHANGE_RATE_WINDOW_MS - now) / 1000,
+        );
         logSecurityEvent({
           eventType: 'rate_limited',
           severity: 'warning',
@@ -409,10 +519,18 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
           actorType: 'guest',
           target: '/api/guest/change-password',
           details: { attempts: attempts.count, window_ms: PASSWORD_CHANGE_RATE_WINDOW_MS },
-          ipSource: c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
+          ipSource:
+            c.req.header('x-real-ip') ||
+            c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+            '127.0.0.1',
           requestId: (c.get as any)('requestId'),
         });
-        return c.json({ error: `Too many password change attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes.` }, 429);
+        return c.json(
+          {
+            error: `Too many password change attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes.`,
+          },
+          429,
+        );
       }
     }
 
@@ -421,7 +539,12 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       return c.json({ error: 'current_password and new_password required' }, 400);
     }
 
-    const result = await changeGuestPassword(sqlite, guest, body.current_password, body.new_password);
+    const result = await changeGuestPassword(
+      sqlite,
+      guest,
+      body.current_password,
+      body.new_password,
+    );
     if (!result.success) {
       const existing = passwordChangeAttempts.get(guestUsername);
       if (existing) {
@@ -450,7 +573,9 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       if (now - attempts.firstAttempt > PASSWORD_CHANGE_RATE_WINDOW_MS) {
         passwordChangeAttempts.delete(guestUsername);
       } else if (attempts.count >= PASSWORD_CHANGE_RATE_LIMIT) {
-        const retryAfter = Math.ceil((attempts.firstAttempt + PASSWORD_CHANGE_RATE_WINDOW_MS - now) / 1000);
+        const retryAfter = Math.ceil(
+          (attempts.firstAttempt + PASSWORD_CHANGE_RATE_WINDOW_MS - now) / 1000,
+        );
         logSecurityEvent({
           eventType: 'rate_limited',
           severity: 'warning',
@@ -458,10 +583,18 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
           actorType: 'guest',
           target: '/api/guest/reset-password',
           details: { attempts: attempts.count, window_ms: PASSWORD_CHANGE_RATE_WINDOW_MS },
-          ipSource: c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
+          ipSource:
+            c.req.header('x-real-ip') ||
+            c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+            '127.0.0.1',
           requestId: (c.get as any)('requestId'),
         });
-        return c.json({ error: `Too many password change attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes.` }, 429);
+        return c.json(
+          {
+            error: `Too many password change attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes.`,
+          },
+          429,
+        );
       }
     }
 
@@ -470,10 +603,19 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       return c.json({ error: 'current_password and new_password required' }, 400);
     }
 
-    const result = await changeGuestPassword(sqlite, guest, body.current_password, body.new_password);
+    const result = await changeGuestPassword(
+      sqlite,
+      guest,
+      body.current_password,
+      body.new_password,
+    );
     if (!result.success) {
       const existing = passwordChangeAttempts.get(guestUsername);
-      if (existing) { existing.count++; } else { passwordChangeAttempts.set(guestUsername, { count: 1, firstAttempt: now }); }
+      if (existing) {
+        existing.count++;
+      } else {
+        passwordChangeAttempts.set(guestUsername, { count: 1, firstAttempt: now });
+      }
       return c.json({ error: result.error }, 400);
     }
 
@@ -515,8 +657,26 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     }
     if (body.display_name !== undefined) {
       const RESERVED_NAMES = new Set([
-        'karo','rax','mara','leonard','bertus','gnarl','zaghnal','pip','nyx','dex',
-        'flint','quill','snap','vigil','talon','sable','gorn','admin','administrator','system',
+        'karo',
+        'rax',
+        'mara',
+        'leonard',
+        'bertus',
+        'gnarl',
+        'zaghnal',
+        'pip',
+        'nyx',
+        'dex',
+        'flint',
+        'quill',
+        'snap',
+        'vigil',
+        'talon',
+        'sable',
+        'gorn',
+        'admin',
+        'administrator',
+        'system',
       ]);
       if (RESERVED_NAMES.has(body.display_name.toLowerCase().trim())) {
         return c.json({ error: 'That display name is reserved' }, 400);
@@ -569,10 +729,17 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
-    const isJpeg = bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF;
-    const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
-    const isWebp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
-      && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+    const isWebp =
+      bytes[0] === 0x52 &&
+      bytes[1] === 0x49 &&
+      bytes[2] === 0x46 &&
+      bytes[3] === 0x46 &&
+      bytes[8] === 0x57 &&
+      bytes[9] === 0x45 &&
+      bytes[10] === 0x42 &&
+      bytes[11] === 0x50;
     if (!isJpeg && !isPng && !isWebp) {
       return c.json({ error: 'File content does not match an allowed image type' }, 400);
     }

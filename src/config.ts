@@ -25,7 +25,8 @@ export const DB_PATH = process.env.ORACLE_DB_PATH || path.join(ORACLE_DATA_DIR, 
 // When running from source: defaults to project root (where ψ/ lives)
 // When running via bunx: set ORACLE_REPO_ROOT explicitly
 // Fallback: ~/.oracle for bunx installs
-export const REPO_ROOT = process.env.ORACLE_REPO_ROOT ||
+export const REPO_ROOT =
+  process.env.ORACLE_REPO_ROOT ||
   (fs.existsSync(path.join(PROJECT_ROOT, 'ψ')) ? PROJECT_ROOT : ORACLE_DATA_DIR);
 
 // Ensure data directory exists (for fresh installs via bunx)

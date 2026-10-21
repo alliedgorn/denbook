@@ -49,20 +49,27 @@ function perBeastDrainAlive(pidPath: string): boolean {
     const pid = parseInt(fs.readFileSync(pidPath, 'utf-8').trim(), 10);
     if (!pid || isNaN(pid)) return false;
     // Layer 1: process exists?
-    try { process.kill(pid, 0); }
-    catch { return false; } // ESRCH = process gone
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return false;
+    } // ESRCH = process gone
     // Layer 2: process is actually notify-drain.sh? (PID-reuse defense)
     try {
       const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf-8');
       return cmdline.includes('notify-drain.sh');
-    } catch { return false; } // /proc gone or unreadable = treat as dead
-  } catch { return false; }
+    } catch {
+      return false;
+    } // /proc gone or unreadable = treat as dead
+  } catch {
+    return false;
+  }
 }
 
 function runDrainCycle() {
   try {
     if (!fs.existsSync(DRAIN_DIR)) return;
-    const files = fs.readdirSync(DRAIN_DIR).filter(f => f.endsWith('.queue'));
+    const files = fs.readdirSync(DRAIN_DIR).filter((f) => f.endsWith('.queue'));
 
     for (const file of files) {
       const beast = file.replace('.queue', '');
@@ -80,7 +87,9 @@ function runDrainCycle() {
       // T#738 / Spec #54 Phase 5 Window 2: log-only-warning when server-drain
       // falls back to handling a queue that should be per-Beast-drained.
       // After 7 days of zero warnings → Window 3 removes runDrainCycle entirely.
-      console.warn(`[Notify] WINDOW-2-WARNING: server-drain fallback for ${beast} — per-Beast drain NOT alive (pid: ${pidPath})`);
+      console.warn(
+        `[Notify] WINDOW-2-WARNING: server-drain fallback for ${beast} — per-Beast drain NOT alive (pid: ${pidPath})`,
+      );
 
       // Check spacing — don't send to same Beast within DRAIN_SPACING
       const lastSent = drainLastSent.get(beast) || 0;
@@ -90,12 +99,16 @@ function runDrainCycle() {
       try {
         const stat = fs.statSync(queuePath);
         if (stat.size === 0) continue;
-      } catch { continue; }
+      } catch {
+        continue;
+      }
 
       // Read and remove first line atomically via flock
       try {
-        const result = Bun.spawnSync(['bash', '-c',
-          `flock "${lockPath}" bash -c "head -1 '${queuePath}' && sed -i '1d' '${queuePath}'"`
+        const result = Bun.spawnSync([
+          'bash',
+          '-c',
+          `flock "${lockPath}" bash -c "head -1 '${queuePath}' && sed -i '1d' '${queuePath}'"`,
         ]);
         const encoded = result.stdout.toString().trim();
         if (!encoded) continue;
@@ -112,10 +125,14 @@ function runDrainCycle() {
         if (hasSession.exitCode !== 0) {
           // Beast offline — re-append to tail of queue so it retries next cycle
           try {
-            Bun.spawnSync(['bash', '-c',
-              `umask 0077 && flock "${lockPath}" bash -c "echo '${encoded}' >> '${queuePath}'"`
+            Bun.spawnSync([
+              'bash',
+              '-c',
+              `umask 0077 && flock "${lockPath}" bash -c "echo '${encoded}' >> '${queuePath}'"`,
             ]);
-          } catch { /* best effort re-queue */ }
+          } catch {
+            /* best effort re-queue */
+          }
           drainLastSent.set(beast, Date.now()); // avoid spinning on offline Beasts
           continue;
         }
@@ -135,7 +152,9 @@ function runDrainCycle() {
         // Silent — don't spam logs on queue errors
       }
     }
-  } catch { /* DRAIN_DIR doesn't exist yet */ }
+  } catch {
+    /* DRAIN_DIR doesn't exist yet */
+  }
 }
 
 // Startup setInterval/setTimeout for runDrainCycle moved into initDaemons() — see bottom.
@@ -154,9 +173,9 @@ function runDbMaintenance() {
     const cutoff = `-${DB_RETENTION_DAYS} days`;
 
     // Prune audit_log older than retention period
-    const auditResult = sqlite.prepare(
-      `DELETE FROM audit_log WHERE timestamp < datetime('now', ?)`
-    ).run(cutoff);
+    const auditResult = sqlite
+      .prepare(`DELETE FROM audit_log WHERE timestamp < datetime('now', ?)`)
+      .run(cutoff);
 
     // Prune security_events older than 90-day retention period
     const securityPruned = pruneSecurityEvents();
@@ -169,7 +188,9 @@ function runDbMaintenance() {
     if (pruned > 0) {
       // VACUUM to reclaim space after large deletes
       sqlite.exec('VACUUM');
-      console.log(`[DB Maintenance] Pruned ${auditResult.changes} audit rows (>${DB_RETENTION_DAYS}d), ${securityPruned} security events (>${SECURITY_RETENTION_DAYS}d), ${tokensPruned} expired tokens. VACUUM complete.`);
+      console.log(
+        `[DB Maintenance] Pruned ${auditResult.changes} audit rows (>${DB_RETENTION_DAYS}d), ${securityPruned} security events (>${SECURITY_RETENTION_DAYS}d), ${tokensPruned} expired tokens. VACUUM complete.`,
+      );
     } else {
       console.log(`[DB Maintenance] Nothing to prune.`);
     }
@@ -177,7 +198,6 @@ function runDbMaintenance() {
     console.error(`[DB Maintenance] Error: ${err}`);
   }
 }
-
 
 // ── File Archive Cycle (T#533) ──────────────────────────────────────
 // Moves soft-deleted files to compressed tar.gz archives after 7-day grace period.
@@ -190,13 +210,20 @@ function runFileArchive() {
   if (!moduleSqlite) return;
   const sqlite: Database = moduleSqlite;
   try {
-    const graceCutoff = Date.now() - (FILE_ARCHIVE_GRACE_DAYS * 24 * 60 * 60 * 1000);
+    const graceCutoff = Date.now() - FILE_ARCHIVE_GRACE_DAYS * 24 * 60 * 60 * 1000;
 
     // Find files deleted more than 7 days ago that haven't been archived yet
-    const filesToArchive = sqlite.prepare(
-      `SELECT id, filename, original_name, size_bytes FROM files
-       WHERE deleted_at IS NOT NULL AND deleted_at < ? AND archived_at IS NULL`
-    ).all(graceCutoff) as { id: number; filename: string; original_name: string; size_bytes: number }[];
+    const filesToArchive = sqlite
+      .prepare(
+        `SELECT id, filename, original_name, size_bytes FROM files
+       WHERE deleted_at IS NOT NULL AND deleted_at < ? AND archived_at IS NULL`,
+      )
+      .all(graceCutoff) as {
+      id: number;
+      filename: string;
+      original_name: string;
+      size_bytes: number;
+    }[];
 
     if (filesToArchive.length === 0) return;
 
@@ -234,11 +261,14 @@ function runFileArchive() {
       const suffix = Date.now().toString(36);
       finalArchivePath = path.join(archiveDir, `archive-${dateStr}-${suffix}.tar.gz`);
     }
-    const finalRelativePath = path.relative(path.join(ORACLE_DATA_DIR, 'uploads'), finalArchivePath);
+    const finalRelativePath = path.relative(
+      path.join(ORACLE_DATA_DIR, 'uploads'),
+      finalArchivePath,
+    );
 
     // Create a file list for tar
     const fileListPath = path.join(archiveDir, `.archive-list-${Date.now()}.txt`);
-    fs.writeFileSync(fileListPath, existingFiles.map(f => f.filename).join('\n'));
+    fs.writeFileSync(fileListPath, existingFiles.map((f) => f.filename).join('\n'));
 
     const { execSync } = require('child_process');
     execSync(`tar -czf "${finalArchivePath}" -C "${UPLOADS_DIR}" -T "${fileListPath}"`, {
@@ -258,7 +288,9 @@ function runFileArchive() {
 
     // Update DB: mark files as archived, remove originals
     const archiveTimestamp = Date.now();
-    const updateStmt = sqlite.prepare('UPDATE files SET archived_at = ?, archive_path = ? WHERE id = ?');
+    const updateStmt = sqlite.prepare(
+      'UPDATE files SET archived_at = ?, archive_path = ? WHERE id = ?',
+    );
     let totalFreed = 0;
 
     for (const f of existingFiles) {
@@ -272,13 +304,13 @@ function runFileArchive() {
       }
     }
 
-    console.log(`[File Archive] Archived ${existingFiles.length} files → ${finalRelativePath} (${(archiveSize / 1024).toFixed(1)}KB archive, ${(totalFreed / 1024 / 1024).toFixed(1)}MB freed)`);
+    console.log(
+      `[File Archive] Archived ${existingFiles.length} files → ${finalRelativePath} (${(archiveSize / 1024).toFixed(1)}KB archive, ${(totalFreed / 1024 / 1024).toFixed(1)}MB freed)`,
+    );
   } catch (err) {
     console.error(`[File Archive] Error:`, err);
   }
 }
-
-
 
 // ============================================================================
 // initDaemons — server startup entry: capture sqlite + start all daemons once
@@ -314,7 +346,11 @@ interface DaemonHelpers {
   isTrustedRequest: (c: Context) => boolean;
 }
 
-export function registerDaemonRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: DaemonHelpers): void {
+export function registerDaemonRoutes(
+  app: OpenAPIHono,
+  sqliteDb: Database,
+  helpers: DaemonHelpers,
+): void {
   // Shadow module-level sqlite (Database | null) with non-null local
   const sqlite: Database = sqliteDb;
   const { hasSessionAuth, isTrustedRequest } = helpers;
@@ -323,7 +359,10 @@ export function registerDaemonRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
   // Closes DAEMON-1..4 — missing-auth or broken Gorn-only checks.
   const requireOwner = (c: Context) => {
     if (!hasSessionAuth(c) && !isTrustedRequest(c)) {
-      return c.json({ error: 'Gorn-only — session or trusted-request required', requiresAuth: true }, 403);
+      return c.json(
+        { error: 'Gorn-only — session or trusted-request required', requiresAuth: true },
+        403,
+      );
     }
     return null;
   };
@@ -343,12 +382,16 @@ export function registerDaemonRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
     // T#789 DAEMON-4 — owner-only read (table sizes are info-disclosure surface).
     const gate = requireOwner(c);
     if (gate) return gate;
-    const tables = sqlite.prepare(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`
-    ).all() as { name: string }[];
+    const tables = sqlite
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`,
+      )
+      .all() as { name: string }[];
 
     const stats = tables.map((t) => {
-      const row = sqlite.prepare(`SELECT COUNT(*) as cnt FROM "${t.name}"`).get() as { cnt: number };
+      const row = sqlite.prepare(`SELECT COUNT(*) as cnt FROM "${t.name}"`).get() as {
+        cnt: number;
+      };
       return { table: t.name, rows: row.cnt };
     });
 
@@ -367,21 +410,24 @@ export function registerDaemonRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
   // Run maintenance on boot (after 30s) and every 6 hours
   setTimeout(runDbMaintenance, 30_000);
 
-
   // File archive routes
   // GET /api/files/archive/stats — archive statistics
   app.get('/api/files/archive/stats', (c) => {
     // T#789 DAEMON-4 — owner-only read (archive bundle filenames are info-disclosure surface).
     const gate = requireOwner(c);
     if (gate) return gate;
-    const archived = sqlite.prepare(
-      `SELECT COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as original_size FROM files WHERE archived_at IS NOT NULL`
-    ).get() as any;
+    const archived = sqlite
+      .prepare(
+        `SELECT COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as original_size FROM files WHERE archived_at IS NOT NULL`,
+      )
+      .get() as any;
 
-    const pending = sqlite.prepare(
-      `SELECT COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as total_size FROM files
-       WHERE deleted_at IS NOT NULL AND archived_at IS NULL`
-    ).get() as any;
+    const pending = sqlite
+      .prepare(
+        `SELECT COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as total_size FROM files
+       WHERE deleted_at IS NOT NULL AND archived_at IS NULL`,
+      )
+      .get() as any;
 
     // List archive bundles on disk
     const bundles: { path: string; size: number; created: string }[] = [];
@@ -457,7 +503,16 @@ export function registerDaemonRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
     }
 
     // Clear deleted_at and archived_at
-    sqlite.prepare('UPDATE files SET deleted_at = NULL, archived_at = NULL, archive_path = NULL WHERE id = ?').run(id);
-    return c.json({ restored: true, id, filename: file.filename, original_name: file.original_name });
+    sqlite
+      .prepare(
+        'UPDATE files SET deleted_at = NULL, archived_at = NULL, archive_path = NULL WHERE id = ?',
+      )
+      .run(id);
+    return c.json({
+      restored: true,
+      id,
+      filename: file.filename,
+      original_name: file.original_name,
+    });
   });
 }

@@ -57,27 +57,33 @@ const SERVER_PATH = join(SRC_ROOT, 'server.ts');
 const FORBIDDEN_IN_ERROR_BODY: Array<{ term: string; reason: string }> = [
   {
     term: 'browser',
-    reason: 'Reveals that auth is browser-based (session cookies). Attacker learns to target cookie theft rather than token theft.',
+    reason:
+      'Reveals that auth is browser-based (session cookies). Attacker learns to target cookie theft rather than token theft.',
   },
   {
     term: 'session',
-    reason: 'Reveals session-based auth mechanism. Generic "Access denied" or "Forbidden" gives nothing away.',
+    reason:
+      'Reveals session-based auth mechanism. Generic "Access denied" or "Forbidden" gives nothing away.',
   },
   {
     term: 'cookie',
-    reason: 'Reveals cookie-based auth. Same as "session" — tells attacker exactly what credential to steal.',
+    reason:
+      'Reveals cookie-based auth. Same as "session" — tells attacker exactly what credential to steal.',
   },
   {
     term: 'bearer',
-    reason: 'Reveals bearer token auth. Attacker knows to look for Authorization headers or token storage.',
+    reason:
+      'Reveals bearer token auth. Attacker knows to look for Authorization headers or token storage.',
   },
   {
     term: 'as=',
-    reason: 'Reveals the ?as= identity parameter. Attacker learns they can impersonate Beasts if they find a valid name.',
+    reason:
+      'Reveals the ?as= identity parameter. Attacker learns they can impersonate Beasts if they find a valid name.',
   },
   {
     term: 'local network',
-    reason: 'Reveals network topology restriction. Attacker learns the endpoint works from localhost, suggesting SSRF as a bypass.',
+    reason:
+      'Reveals network topology restriction. Attacker learns the endpoint works from localhost, suggesting SSRF as a bypass.',
   },
   {
     term: 'local access',
@@ -91,9 +97,7 @@ const FORBIDDEN_IN_ERROR_BODY: Array<{ term: string; reason: string }> = [
  * e.g. /api/auth/tokens — "Token creation requires..." is about the token
  * CRUD API, not revealing how auth works.
  */
-const TOKEN_TERM_EXEMPT_PATHS = [
-  '/api/auth/tokens',
-];
+const TOKEN_TERM_EXEMPT_PATHS = ['/api/auth/tokens'];
 
 /**
  * Spoof-detection 403 responses ("Identity spoof blocked. ?as=/body.beast must
@@ -161,7 +165,10 @@ function scanForInfoDisclosure(): { beastMatches: ErrorMatch[]; otherMatches: Er
     for (const forbidden of FORBIDDEN_IN_ERROR_BODY) {
       if (errorText.toLowerCase().includes(forbidden.term.toLowerCase())) {
         // Check token exemption
-        if (forbidden.term === 'token' && TOKEN_TERM_EXEMPT_PATHS.some(p => routePath.startsWith(p))) {
+        if (
+          forbidden.term === 'token' &&
+          TOKEN_TERM_EXEMPT_PATHS.some((p) => routePath.startsWith(p))
+        ) {
           continue;
         }
 
@@ -194,7 +201,7 @@ test('T#673: no info-disclosure in 403 responses on /api/beast/:name/* endpoints
         (m) =>
           `  server.ts:${m.line} [${m.routePath}]\n` +
           `    error: "${m.errorText}"\n` +
-          `    forbidden term: "${m.term}" — ${m.reason}`
+          `    forbidden term: "${m.term}" — ${m.reason}`,
       )
       .join('\n\n');
 
@@ -206,7 +213,7 @@ test('T#673: no info-disclosure in 403 responses on /api/beast/:name/* endpoints
         `If a specific message is intentional and reviewed:\n` +
         `  1. Document the security rationale in a comment at the call site\n` +
         `  2. Add an exemption in this test with a link to the review\n` +
-        `  3. Do not disable the test wholesale`
+        `  3. Do not disable the test wholesale`,
     );
   }
 
@@ -218,9 +225,7 @@ test('T#679: no info-disclosure in 403 responses on non-beast endpoints (post-T#
 
   // Filter out spoof-detection messages — owner-debug-affordance, not external
   // attack surface. See SPOOF_DETECTION_PATTERN definition for rationale.
-  const enforceableMatches = otherMatches.filter(
-    (m) => !SPOOF_DETECTION_PATTERN.test(m.errorText)
-  );
+  const enforceableMatches = otherMatches.filter((m) => !SPOOF_DETECTION_PATTERN.test(m.errorText));
 
   if (enforceableMatches.length > 0) {
     const summary = enforceableMatches
@@ -230,7 +235,7 @@ test('T#679: no info-disclosure in 403 responses on non-beast endpoints (post-T#
     throw new Error(
       `[T#679] Found ${enforceableMatches.length} info-disclosure leak(s) in non-beast 403 responses ` +
         `(spoof-detection messages excluded — see SPOOF_DETECTION_PATTERN):\n${summary}\n` +
-        `Replace verbose 403 message with { error: 'forbidden' } per T#679.\n`
+        `Replace verbose 403 message with { error: 'forbidden' } per T#679.\n`,
     );
   }
 

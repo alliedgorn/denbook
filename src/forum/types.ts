@@ -17,12 +17,12 @@ export interface ForumThread {
   title: string;
   createdBy: string;
   status: ThreadStatus;
-  issueUrl?: string;      // GitHub mirror (optional)
+  issueUrl?: string; // GitHub mirror (optional)
   issueNumber?: number;
-  project?: string;       // Which project context
+  project?: string; // Which project context
   createdAt: number;
   updatedAt: number;
-  syncedAt?: number;      // Last GitHub sync
+  syncedAt?: number; // Last GitHub sync
 }
 
 export interface ForumMessage {
@@ -30,7 +30,7 @@ export interface ForumMessage {
   threadId: number;
   role: MessageRole;
   content: string;
-  author?: string;        // GitHub username or "oracle"
+  author?: string; // GitHub username or "oracle"
 
   // Oracle response metadata
   principlesFound?: number;
@@ -38,7 +38,7 @@ export interface ForumMessage {
   searchQuery?: string;
 
   // GitHub mirror
-  commentId?: number;     // GitHub comment ID if synced
+  commentId?: number; // GitHub comment ID if synced
 
   createdAt: number;
 }
@@ -61,7 +61,7 @@ export function parseIssueUrl(url: string): ParsedIssueUrl | null {
     owner: match[1],
     repo: match[2],
     issueNumber: parseInt(match[3], 10),
-    url
+    url,
   };
 }
 
@@ -76,11 +76,11 @@ export function buildIssueUrl(owner: string, repo: string, issueNumber: number):
 // Start new thread or add to existing
 export interface OracleThreadInput {
   message: string;
-  threadId?: number;      // If continuing existing thread
-  title?: string;         // For new threads
-  role?: MessageRole;     // Default: 'human'
-  model?: string;         // e.g., 'opus', 'sonnet' for Claude calls
-  author?: string;        // Override author (e.g., 'karo' from HTTP callers)
+  threadId?: number; // If continuing existing thread
+  title?: string; // For new threads
+  role?: MessageRole; // Default: 'human'
+  model?: string; // e.g., 'opus', 'sonnet' for Claude calls
+  author?: string; // Override author (e.g., 'karo' from HTTP callers)
 }
 
 export interface OracleThreadOutput {
@@ -99,7 +99,7 @@ export interface OracleThreadOutput {
 // Sync thread to GitHub Issue
 export interface OracleSyncInput {
   threadId: number;
-  createIssue?: boolean;  // Create new issue if not exists
+  createIssue?: boolean; // Create new issue if not exists
 }
 
 export interface OracleSyncOutput {
@@ -134,8 +134,8 @@ export interface OracleListThreadsOutput {
 
 export interface ForumConfig {
   defaultRepo: string;
-  autoAnswer: boolean;      // Oracle auto-responds to questions
-  autoSync: boolean;        // Auto-sync to GitHub
+  autoAnswer: boolean; // Oracle auto-responds to questions
+  autoSync: boolean; // Auto-sync to GitHub
   labels: {
     question: string;
     answered: string;
@@ -146,10 +146,10 @@ export interface ForumConfig {
 export const DEFAULT_FORUM_CONFIG: ForumConfig = {
   defaultRepo: process.env.ORACLE_FORUM_REPO || 'laris-co/Nat-s-Agents',
   autoAnswer: true,
-  autoSync: false,  // Manual sync by default
+  autoSync: false, // Manual sync by default
   labels: {
     question: 'oracle-thread',
     answered: 'oracle-answered',
-    pending: 'oracle-pending'
-  }
+    pending: 'oracle-pending',
+  },
 };

@@ -26,8 +26,11 @@ export function registerRemoteRoutes(app: OpenAPIHono, helpers: RemoteHelpers) {
         // Check if window 1 still exists (beast is still linked)
         const windows = execSync(
           `tmux list-windows -t ${JSON.stringify(REMOTE_SESSION)} -F "#{window_index}"`,
-          { timeout: 2000 }
-        ).toString().trim().split('\n');
+          { timeout: 2000 },
+        )
+          .toString()
+          .trim()
+          .split('\n');
         if (!windows.includes('1')) {
           attachedBeastName = null; // Window was unlinked externally
         }
@@ -69,11 +72,16 @@ export function registerRemoteRoutes(app: OpenAPIHono, helpers: RemoteHelpers) {
       try {
         const windows = execSync(
           `tmux list-windows -t ${JSON.stringify(sessionName)} -F "#{window_index}:#{pane_current_command}"`,
-          { timeout: 2000 }
-        ).toString().trim().split('\n');
-        const claudeWin = windows.find(w => w.includes(':claude'));
+          { timeout: 2000 },
+        )
+          .toString()
+          .trim()
+          .split('\n');
+        const claudeWin = windows.find((w) => w.includes(':claude'));
         if (claudeWin) claudeWindow = claudeWin.split(':')[0];
-      } catch { /* default to 1 */ }
+      } catch {
+        /* default to 1 */
+      }
 
       // Ensure Remote session exists
       try {
@@ -85,12 +93,14 @@ export function registerRemoteRoutes(app: OpenAPIHono, helpers: RemoteHelpers) {
       // Unlink any existing beast window (window index 1)
       try {
         execSync(`tmux unlink-window -k -t ${JSON.stringify(REMOTE_SESSION)}:1`, { timeout: 2000 });
-      } catch { /* no window to unlink */ }
+      } catch {
+        /* no window to unlink */
+      }
 
       // Link the beast's claude window
       execSync(
         `tmux link-window -s ${JSON.stringify(sessionName)}:${claudeWindow} -t ${JSON.stringify(REMOTE_SESSION)}:1`,
-        { timeout: 2000 }
+        { timeout: 2000 },
       );
 
       // Switch to the linked window
@@ -107,7 +117,9 @@ export function registerRemoteRoutes(app: OpenAPIHono, helpers: RemoteHelpers) {
   app.openapi(remoteDetachRoute, ((c: Context) => {
     try {
       execSync(`tmux unlink-window -k -t ${JSON.stringify(REMOTE_SESSION)}:1`, { timeout: 2000 });
-    } catch { /* already detached */ }
+    } catch {
+      /* already detached */
+    }
     attachedBeastName = null;
     return c.json({ detached: true as const }, 200);
   }) as any);

@@ -26,7 +26,9 @@ describe('normalizeProject', () => {
 
   it('should normalize local ghq paths', () => {
     expect(normalizeProject('/Users/nat/Code/github.com/owner/repo')).toBe('github.com/owner/repo');
-    expect(normalizeProject('~/Code/github.com/owner/repo/src/file.ts')).toBe('github.com/owner/repo');
+    expect(normalizeProject('~/Code/github.com/owner/repo/src/file.ts')).toBe(
+      'github.com/owner/repo',
+    );
   });
 
   it('should normalize short owner/repo format', () => {
@@ -34,7 +36,9 @@ describe('normalizeProject', () => {
   });
 
   it('should normalize to lowercase', () => {
-    expect(normalizeProject('github.com/Soul-Brews-Studio/Oracle-V2')).toBe('github.com/soul-brews-studio/oracle-v2');
+    expect(normalizeProject('github.com/Soul-Brews-Studio/Oracle-V2')).toBe(
+      'github.com/soul-brews-studio/oracle-v2',
+    );
     expect(normalizeProject('https://github.com/Owner/Repo')).toBe('github.com/owner/repo');
     expect(normalizeProject('Owner/Repo')).toBe('github.com/owner/repo');
   });
@@ -56,18 +60,21 @@ describe('extractProjectFromSource', () => {
   });
 
   it('should extract from "oracle_learn from github.com/owner/repo" format', () => {
-    expect(extractProjectFromSource('oracle_learn from github.com/owner/repo session 42'))
-      .toBe('github.com/owner/repo');
+    expect(extractProjectFromSource('oracle_learn from github.com/owner/repo session 42')).toBe(
+      'github.com/owner/repo',
+    );
   });
 
   it('should extract from "rrr: org/repo" format', () => {
-    expect(extractProjectFromSource('rrr: Soul-Brews-Studio/oracle-v2'))
-      .toBe('github.com/soul-brews-studio/oracle-v2');
+    expect(extractProjectFromSource('rrr: Soul-Brews-Studio/oracle-v2')).toBe(
+      'github.com/soul-brews-studio/oracle-v2',
+    );
   });
 
   it('should extract direct github.com reference', () => {
-    expect(extractProjectFromSource('some text github.com/foo/bar more text'))
-      .toBe('github.com/foo/bar');
+    expect(extractProjectFromSource('some text github.com/foo/bar more text')).toBe(
+      'github.com/foo/bar',
+    );
   });
 
   it('should return null when no project found', () => {

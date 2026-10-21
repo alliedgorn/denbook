@@ -8,10 +8,10 @@
  *
  * Author: Pip (QA/Chaos Testing)
  */
-import { describe, test, expect, beforeAll } from "bun:test";
+import { describe, test, expect, beforeAll } from 'bun:test';
 
-const BASE_URL = "http://localhost:47778";
-const TEST_BEAST = "pip";
+const BASE_URL = 'http://localhost:47778';
+const TEST_BEAST = 'pip';
 
 async function isServerRunning(): Promise<boolean> {
   try {
@@ -22,86 +22,86 @@ async function isServerRunning(): Promise<boolean> {
   }
 }
 
-describe("Audit Logging API Integration", () => {
+describe('Audit Logging API Integration', () => {
   beforeAll(async () => {
     if (!(await isServerRunning())) {
-      throw new Error("Server not running on port 47778");
+      throw new Error('Server not running on port 47778');
     }
   });
 
   // =====================
   // Access Control (Regression Guards)
   // =====================
-  describe("Access Control — Gorn + Security Team", () => {
-    test("GET /api/audit rejects unauthenticated requests", async () => {
+  describe('Access Control — Gorn + Security Team', () => {
+    test('GET /api/audit rejects unauthenticated requests', async () => {
       const res = await fetch(`${BASE_URL}/api/audit`);
       expect(res.ok).toBe(false);
       const data = await res.json();
-      expect(data.error).toContain("restricted");
+      expect(data.error).toContain('restricted');
     });
 
-    test("GET /api/audit/stats rejects unauthenticated requests", async () => {
+    test('GET /api/audit/stats rejects unauthenticated requests', async () => {
       const res = await fetch(`${BASE_URL}/api/audit/stats`);
       expect(res.ok).toBe(false);
       const data = await res.json();
-      expect(data.error).toContain("restricted");
+      expect(data.error).toContain('restricted');
     });
 
-    test("GET /api/audit with ?as=pip rejects Beast identity", async () => {
+    test('GET /api/audit with ?as=pip rejects Beast identity', async () => {
       const res = await fetch(`${BASE_URL}/api/audit?as=${TEST_BEAST}`);
       expect(res.ok).toBe(false);
       const data = await res.json();
-      expect(data.error).toContain("restricted");
+      expect(data.error).toContain('restricted');
     });
 
-    test("GET /api/audit/stats with ?as=pip rejects Beast identity", async () => {
+    test('GET /api/audit/stats with ?as=pip rejects Beast identity', async () => {
       const res = await fetch(`${BASE_URL}/api/audit/stats?as=${TEST_BEAST}`);
       expect(res.ok).toBe(false);
       const data = await res.json();
-      expect(data.error).toContain("restricted");
+      expect(data.error).toContain('restricted');
     });
 
-    test("GET /api/audit with fake X-Beast header is rejected", async () => {
+    test('GET /api/audit with fake X-Beast header is rejected', async () => {
       const res = await fetch(`${BASE_URL}/api/audit`, {
-        headers: { "X-Beast": "gorn" },
+        headers: { 'X-Beast': 'gorn' },
       });
       expect(res.ok).toBe(false);
       const data = await res.json();
-      expect(data.error).toContain("restricted");
+      expect(data.error).toContain('restricted');
     });
 
-    test("GET /api/audit with ?as=karo rejects non-security Beast", async () => {
+    test('GET /api/audit with ?as=karo rejects non-security Beast', async () => {
       const res = await fetch(`${BASE_URL}/api/audit?as=karo`);
       expect(res.ok).toBe(false);
       const data = await res.json();
-      expect(data.error).toContain("restricted");
+      expect(data.error).toContain('restricted');
     });
   });
 
   // =====================
   // Security Team Access (Allowlist)
   // =====================
-  describe("Security Team Access", () => {
-    test("GET /api/audit with ?as=bertus allows security team", async () => {
+  describe('Security Team Access', () => {
+    test('GET /api/audit with ?as=bertus allows security team', async () => {
       const res = await fetch(`${BASE_URL}/api/audit?as=bertus`);
       expect(res.ok).toBe(true);
       const data = await res.json();
       expect(data.audit || data).toBeTruthy();
     });
 
-    test("GET /api/audit with ?as=talon allows security team", async () => {
+    test('GET /api/audit with ?as=talon allows security team', async () => {
       const res = await fetch(`${BASE_URL}/api/audit?as=talon`);
       expect(res.ok).toBe(true);
       const data = await res.json();
       expect(data.audit || data).toBeTruthy();
     });
 
-    test("GET /api/audit/stats with ?as=bertus allows security team", async () => {
+    test('GET /api/audit/stats with ?as=bertus allows security team', async () => {
       const res = await fetch(`${BASE_URL}/api/audit/stats?as=bertus`);
       expect(res.ok).toBe(true);
     });
 
-    test("Audit entries have expected fields", async () => {
+    test('Audit entries have expected fields', async () => {
       const res = await fetch(`${BASE_URL}/api/audit?as=bertus`);
       const data = await res.json();
       const entries = data.audit || data;
@@ -113,12 +113,12 @@ describe("Audit Logging API Integration", () => {
       }
     });
 
-    test("Actor field is populated (not all unknown)", async () => {
+    test('Actor field is populated (not all unknown)', async () => {
       const res = await fetch(`${BASE_URL}/api/audit?as=bertus`);
       const data = await res.json();
       const entries = data.audit || data;
       if (Array.isArray(entries) && entries.length > 0) {
-        const knownActors = entries.filter((e: any) => e.actor && e.actor !== "unknown");
+        const knownActors = entries.filter((e: any) => e.actor && e.actor !== 'unknown');
         // At least some entries should have known actors after the fix
         expect(knownActors.length).toBeGreaterThan(0);
       }
@@ -128,27 +128,25 @@ describe("Audit Logging API Integration", () => {
   // =====================
   // Actor Extraction (Indirect Verification)
   // =====================
-  describe("Actor Extraction — Indirect", () => {
-    test("API calls with ?as= param capture actor", async () => {
+  describe('Actor Extraction — Indirect', () => {
+    test('API calls with ?as= param capture actor', async () => {
       // Make a request that should log with actor=pip
       // (notifications endpoint was removed — use threads listing instead)
-      const res = await fetch(
-        `${BASE_URL}/api/threads?as=${TEST_BEAST}`
-      );
+      const res = await fetch(`${BASE_URL}/api/threads?as=${TEST_BEAST}`);
       expect(res.ok).toBe(true);
       // We can't read audit logs to verify, but if the request succeeded
       // the middleware should have captured actor=pip from ?as= param
     });
 
-    test("API calls with body author capture actor", async () => {
+    test('API calls with body author capture actor', async () => {
       // Forum post includes author in body
       const res = await fetch(`${BASE_URL}/api/thread`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           thread_id: 81,
           message: `test_audit_actor_${Date.now()}`,
-          role: "claude",
+          role: 'claude',
           author: TEST_BEAST,
         }),
       });
@@ -160,19 +158,15 @@ describe("Audit Logging API Integration", () => {
   // =====================
   // Edge Cases
   // =====================
-  describe("Edge Cases", () => {
+  describe('Edge Cases', () => {
     test("GET /api/audit with invalid query params doesn't crash", async () => {
-      const res = await fetch(
-        `${BASE_URL}/api/audit?limit=abc&offset=-1`
-      );
+      const res = await fetch(`${BASE_URL}/api/audit?limit=abc&offset=-1`);
       // Should still return the auth error, not a 500
       expect(res.status).toBeLessThan(500);
     });
 
     test("GET /api/audit/stats with invalid params doesn't crash", async () => {
-      const res = await fetch(
-        `${BASE_URL}/api/audit/stats?from=invalid&to=also-invalid`
-      );
+      const res = await fetch(`${BASE_URL}/api/audit/stats?from=invalid&to=also-invalid`);
       expect(res.status).toBeLessThan(500);
     });
   });

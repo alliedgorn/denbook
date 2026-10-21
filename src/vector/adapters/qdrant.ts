@@ -5,7 +5,12 @@
  * Uses EmbeddingProvider since Qdrant stores pre-computed vectors.
  */
 
-import type { VectorStoreAdapter, VectorDocument, VectorQueryResult, EmbeddingProvider } from '../types.ts';
+import type {
+  VectorStoreAdapter,
+  VectorDocument,
+  VectorQueryResult,
+  EmbeddingProvider,
+} from '../types.ts';
 
 export class QdrantAdapter implements VectorStoreAdapter {
   readonly name = 'qdrant';
@@ -18,7 +23,7 @@ export class QdrantAdapter implements VectorStoreAdapter {
   constructor(
     collectionName: string,
     embedder: EmbeddingProvider,
-    config: { url?: string; apiKey?: string } = {}
+    config: { url?: string; apiKey?: string } = {},
   ) {
     this.collectionName = collectionName;
     this.embedder = embedder;
@@ -57,7 +62,9 @@ export class QdrantAdapter implements VectorStoreAdapter {
       });
     }
 
-    console.log(`[Qdrant] Collection '${this.collectionName}' ready (${this.embedder.dimensions} dims)`);
+    console.log(
+      `[Qdrant] Collection '${this.collectionName}' ready (${this.embedder.dimensions} dims)`,
+    );
   }
 
   async deleteCollection(): Promise<void> {
@@ -75,7 +82,7 @@ export class QdrantAdapter implements VectorStoreAdapter {
     if (docs.length === 0) return;
     if (!this.client) throw new Error('Qdrant not connected');
 
-    const texts = docs.map(d => d.document);
+    const texts = docs.map((d) => d.document);
     const embeddings = await this.embedder.embed(texts);
 
     const points = docs.map((doc, i) => ({
@@ -92,17 +99,23 @@ export class QdrantAdapter implements VectorStoreAdapter {
     console.log(`[Qdrant] Added ${docs.length} documents`);
   }
 
-  async query(text: string, limit: number = 10, where?: Record<string, any>): Promise<VectorQueryResult> {
+  async query(
+    text: string,
+    limit: number = 10,
+    where?: Record<string, any>,
+  ): Promise<VectorQueryResult> {
     if (!this.client) throw new Error('Qdrant not connected');
 
     const [queryEmbedding] = await this.embedder.embed([text]);
 
-    const filter = where ? {
-      must: Object.entries(where).map(([key, value]) => ({
-        key,
-        match: { value },
-      })),
-    } : undefined;
+    const filter = where
+      ? {
+          must: Object.entries(where).map(([key, value]) => ({
+            key,
+            match: { value },
+          })),
+        }
+      : undefined;
 
     const results = await this.client.search(this.collectionName, {
       vector: queryEmbedding,

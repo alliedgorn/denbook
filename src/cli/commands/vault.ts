@@ -7,9 +7,7 @@ import path from 'path';
 import fs from 'fs';
 
 export function registerVault(program: Command): void {
-  const vault = program
-    .command('vault')
-    .description('Manage Oracle knowledge vault');
+  const vault = program.command('vault').description('Manage Oracle knowledge vault');
 
   const repoRoot = process.env.ORACLE_REPO_ROOT || process.cwd();
 
@@ -57,7 +55,9 @@ export function registerVault(program: Command): void {
       if (result.lastSync) console.log(`Last sync: ${result.lastSync}`);
       if (result.pending && result.pending.total > 0) {
         console.log(`\nPending changes: ${result.pending.total}`);
-        console.log(`  Added: ${result.pending.added}  Modified: ${result.pending.modified}  Deleted: ${result.pending.deleted}`);
+        console.log(
+          `  Added: ${result.pending.added}  Modified: ${result.pending.modified}  Deleted: ${result.pending.deleted}`,
+        );
       }
     });
 
@@ -98,18 +98,21 @@ export function registerVault(program: Command): void {
       }
 
       if (opts.dryRun) console.error('[Vault] DRY RUN — no files will be copied\n');
-      if (opts.symlink) console.error('[Vault] SYMLINK MODE — local psi will be replaced with symlinks\n');
+      if (opts.symlink)
+        console.error('[Vault] SYMLINK MODE — local psi will be replaced with symlinks\n');
       const result = migrate({ dryRun: opts.dryRun, symlink: opts.symlink });
       if (opts.json) return printJson(result);
       console.log(JSON.stringify(result, null, 2));
     });
 
   // Default action: status
-  vault.action(async (opts) => {
-    const result = vaultStatus(repoRoot);
-    if (opts.json) return printJson(result);
-    console.log(`Vault: ${result.enabled ? 'enabled' : 'disabled'}`);
-    if (result.repo) console.log(`Repo:  ${result.repo}`);
-    if (result.vaultPath) console.log(`Path:  ${result.vaultPath}`);
-  }).option('--json', 'Output raw JSON');
+  vault
+    .action(async (opts) => {
+      const result = vaultStatus(repoRoot);
+      if (opts.json) return printJson(result);
+      console.log(`Vault: ${result.enabled ? 'enabled' : 'disabled'}`);
+      if (result.repo) console.log(`Repo:  ${result.repo}`);
+      if (result.vaultPath) console.log(`Path:  ${result.vaultPath}`);
+    })
+    .option('--json', 'Output raw JSON');
 }

@@ -34,11 +34,18 @@ function parseTelegramBots(): TelegramBot[] {
             token: b.token,
             beast: b.beast,
             chatId: b.chatId || TG_CHAT_ID,
-            offset: 0, lastMessageAt: null, messageCount: 0, active: false, timer: null, polling: false,
+            offset: 0,
+            lastMessageAt: null,
+            messageCount: 0,
+            active: false,
+            timer: null,
+            polling: false,
           });
         }
       }
-    } catch (e) { console.error('[Telegram] Failed to parse TELEGRAM_BOTS:', e); }
+    } catch (e) {
+      console.error('[Telegram] Failed to parse TELEGRAM_BOTS:', e);
+    }
   }
 
   if (bots.length === 0) {
@@ -46,8 +53,15 @@ function parseTelegramBots(): TelegramBot[] {
     const beast = process.env.TELEGRAM_FORWARD_TO || 'karo';
     if (token && TG_CHAT_ID) {
       bots.push({
-        token, beast, chatId: TG_CHAT_ID,
-        offset: 0, lastMessageAt: null, messageCount: 0, active: false, timer: null, polling: false,
+        token,
+        beast,
+        chatId: TG_CHAT_ID,
+        offset: 0,
+        lastMessageAt: null,
+        messageCount: 0,
+        active: false,
+        timer: null,
+        polling: false,
       });
     }
   }
@@ -57,7 +71,11 @@ function parseTelegramBots(): TelegramBot[] {
 
 const telegramBots = parseTelegramBots();
 
-async function tgApi(token: string, method: string, params: Record<string, string> = {}): Promise<any> {
+async function tgApi(
+  token: string,
+  method: string,
+  params: Record<string, string> = {},
+): Promise<any> {
   const url = new URL(`https://api.telegram.org/bot${token}/${method}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   const res = await fetch(url.toString());
@@ -68,9 +86,16 @@ async function tgSendReply(token: string, chatId: string, text: string): Promise
   await tgApi(token, 'sendMessage', { chat_id: chatId, text });
 }
 
-async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Database, uploadsDir: string): Promise<void> {
+async function handleTelegramMessage(
+  bot: TelegramBot,
+  msg: any,
+  sqlite: Database,
+  uploadsDir: string,
+): Promise<void> {
   if (String(msg.chat.id) !== bot.chatId) {
-    console.log(`[Telegram:${bot.beast}] Rejected: chat_id ${msg.chat.id} !== expected ${bot.chatId}`);
+    console.log(
+      `[Telegram:${bot.beast}] Rejected: chat_id ${msg.chat.id} !== expected ${bot.chatId}`,
+    );
     return;
   }
 
@@ -88,21 +113,27 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
       };
       stripEphemeral(sanitized);
       const rawJson = JSON.stringify(sanitized);
-      sqlite.prepare(
-        'INSERT OR IGNORE INTO telegram_messages (chat_id, id, from_id, text, caption, photo_file_id, date_unix, received_at, raw_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(
-        String(msg.chat.id),
-        msgId,
-        msg.from?.id ? String(msg.from.id) : null,
-        msg.text || null,
-        msg.caption || null,
-        msg.photo && msg.photo.length > 0 ? (msg.photo[msg.photo.length - 1].file_id || null) : null,
-        msg.date || Math.floor(Date.now() / 1000),
-        Date.now(),
-        rawJson
-      );
+      sqlite
+        .prepare(
+          'INSERT OR IGNORE INTO telegram_messages (chat_id, id, from_id, text, caption, photo_file_id, date_unix, received_at, raw_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          String(msg.chat.id),
+          msgId,
+          msg.from?.id ? String(msg.from.id) : null,
+          msg.text || null,
+          msg.caption || null,
+          msg.photo && msg.photo.length > 0
+            ? msg.photo[msg.photo.length - 1].file_id || null
+            : null,
+          msg.date || Math.floor(Date.now() / 1000),
+          Date.now(),
+          rawJson,
+        );
     } else {
-      console.warn(`[Telegram:${bot.beast} T#712] dropping cache — malformed message_id: ${JSON.stringify(msgId)}`);
+      console.warn(
+        `[Telegram:${bot.beast} T#712] dropping cache — malformed message_id: ${JSON.stringify(msgId)}`,
+      );
     }
   } catch (cacheErr) {
     console.warn(`[Telegram:${bot.beast} T#712] dropping cache — persist error:`, cacheErr);
@@ -117,7 +148,8 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
       const replied = msg.reply_to_message;
       const repliedId = typeof replied.message_id === 'number' ? replied.message_id : '?';
       const repliedText = replied.text || replied.caption || '[media]';
-      const repliedPreview = repliedText.length > 80 ? repliedText.slice(0, 80) + '...' : repliedText;
+      const repliedPreview =
+        repliedText.length > 80 ? repliedText.slice(0, 80) + '...' : repliedText;
       replyContext = `(replying to TG#${repliedId}: "${repliedPreview}")\\n`;
     }
 
@@ -138,25 +170,51 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
                 const sharp = require('sharp');
                 const metadata = await sharp(buffer).metadata();
                 if (metadata.width && metadata.width > 1920) {
-                  processedBuffer = await sharp(buffer).rotate().resize(1920, null, { withoutEnlargement: true }).jpeg({ quality: 95 }).withMetadata({ orientation: undefined }).toBuffer();
+                  processedBuffer = await sharp(buffer)
+                    .rotate()
+                    .resize(1920, null, { withoutEnlargement: true })
+                    .jpeg({ quality: 95 })
+                    .withMetadata({ orientation: undefined })
+                    .toBuffer();
                   ext = '.jpg';
                 } else {
-                  processedBuffer = await sharp(buffer).rotate().withMetadata({ orientation: undefined }).toBuffer();
+                  processedBuffer = await sharp(buffer)
+                    .rotate()
+                    .withMetadata({ orientation: undefined })
+                    .toBuffer();
                 }
-              } catch { /* sharp not available */ }
+              } catch {
+                /* sharp not available */
+              }
 
               if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
               const filename = `telegram_${crypto.randomUUID()}${ext}`;
               fs.writeFileSync(path.join(uploadsDir, filename), processedBuffer);
               try {
-                sqlite.prepare('INSERT INTO files (filename, original_name, mime_type, size_bytes, uploaded_by, context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(filename, `telegram_photo${ext}`, ext === '.jpg' ? 'image/jpeg' : 'image/png', processedBuffer.length, 'gorn', 'telegram', Date.now());
-              } catch { /* files table may not have all columns */ }
+                sqlite
+                  .prepare(
+                    'INSERT INTO files (filename, original_name, mime_type, size_bytes, uploaded_by, context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                  )
+                  .run(
+                    filename,
+                    `telegram_photo${ext}`,
+                    ext === '.jpg' ? 'image/jpeg' : 'image/png',
+                    processedBuffer.length,
+                    'gorn',
+                    'telegram',
+                    Date.now(),
+                  );
+              } catch {
+                /* files table may not have all columns */
+              }
               photoUrl = `https://denbook.online/api/f/${filename}`;
               console.log(`[Telegram:${bot.beast}] Photo saved: ${filename}`);
             }
           }
         }
-      } catch (e) { console.error(`[Telegram:${bot.beast}] Photo download error:`, e); }
+      } catch (e) {
+        console.error(`[Telegram:${bot.beast}] Photo download error:`, e);
+      }
 
       const caption = msg.caption || '';
       if (photoUrl) {
@@ -169,25 +227,20 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
           : `[Telegram from Gorn] ${replyContext}Photo received (download failed)`;
       }
       confirmText = `✓ Notified ${bot.beast}`;
-
     } else if (msg.text) {
       notifyText = `[Telegram from Gorn] ${replyContext}${msg.text}`;
       confirmText = `✓ Notified ${bot.beast}`;
-
     } else if (msg.document) {
       const docName = msg.document.file_name || 'unknown';
       notifyText = `[Telegram from Gorn] ${replyContext}Document: ${docName}${msg.caption ? ' — ' + msg.caption : ''}`;
       confirmText = `✓ Notified ${bot.beast}`;
-
     } else if (msg.voice) {
       notifyText = `[Telegram from Gorn] ${replyContext}Voice message`;
       confirmText = `✓ Notified ${bot.beast}`;
-
     } else if (msg.sticker) {
       const emoji = msg.sticker.emoji || '';
       notifyText = `[Telegram from Gorn] ${replyContext}Sticker ${emoji}`;
       confirmText = `✓ Notified ${bot.beast}`;
-
     } else {
       notifyText = `[Telegram from Gorn] ${replyContext}Message received`;
       confirmText = `✓ Notified ${bot.beast}`;
@@ -200,13 +253,16 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
     console.log(`[Telegram:${bot.beast}] Notified: ${notifyText.slice(0, 80)}`);
     bot.messageCount++;
     bot.lastMessageAt = new Date().toISOString();
-
   } catch (err) {
     console.error(`[Telegram:${bot.beast}] Error handling message:`, err);
   }
 }
 
-async function pollTelegramBot(bot: TelegramBot, sqlite: Database, uploadsDir: string): Promise<void> {
+async function pollTelegramBot(
+  bot: TelegramBot,
+  sqlite: Database,
+  uploadsDir: string,
+): Promise<void> {
   if (bot.polling) return;
   bot.polling = true;
   try {
@@ -221,7 +277,9 @@ async function pollTelegramBot(bot: TelegramBot, sqlite: Database, uploadsDir: s
         bot.offset = update.update_id + 1;
         const msg = update.message;
         if (msg) {
-          console.log(`[Telegram:${bot.beast}] Update ${update.update_id}: chat_id=${msg.chat?.id} from=${msg.from?.username || msg.from?.id} text=${(msg.text || '[non-text]').slice(0, 50)}`);
+          console.log(
+            `[Telegram:${bot.beast}] Update ${update.update_id}: chat_id=${msg.chat?.id} from=${msg.from?.username || msg.from?.id} text=${(msg.text || '[non-text]').slice(0, 50)}`,
+          );
           await handleTelegramMessage(bot, msg, sqlite, uploadsDir);
         }
       }
@@ -237,10 +295,14 @@ const TELEGRAM_READ_MODES: Record<string, 'read'> = {
   sable: 'read',
 };
 
-function isTelegramAuthorized(c: any, hasSessionAuth: (c: Context) => boolean, isTrustedRequest: (c: Context) => boolean): boolean {
+function isTelegramAuthorized(
+  c: any,
+  hasSessionAuth: (c: Context) => boolean,
+  isTrustedRequest: (c: Context) => boolean,
+): boolean {
   if (hasSessionAuth(c)) return true;
   const actor = (c.get as any)('actor') as string | undefined;
-  if (actor && telegramBots.some(b => b.beast === actor)) return true;
+  if (actor && telegramBots.some((b) => b.beast === actor)) return true;
   if (isTrustedRequest(c)) {
     const as = (c.req.query('as') || '').toLowerCase();
     return TELEGRAM_READ_MODES[as] === 'read';
@@ -254,7 +316,11 @@ interface TelegramHelpers {
   uploadsDir: string;
 }
 
-export function registerTelegramRoutes(app: OpenAPIHono, sqlite: Database, helpers: TelegramHelpers) {
+export function registerTelegramRoutes(
+  app: OpenAPIHono,
+  sqlite: Database,
+  helpers: TelegramHelpers,
+) {
   const { hasSessionAuth, isTrustedRequest, uploadsDir } = helpers;
 
   // GET /api/telegram/status — polling status (owner only)
@@ -262,7 +328,7 @@ export function registerTelegramRoutes(app: OpenAPIHono, sqlite: Database, helpe
     if (!hasSessionAuth(c) && !isTrustedRequest(c)) return c.json({ error: 'Auth required' }, 403);
 
     return c.json({
-      bots: telegramBots.map(b => ({
+      bots: telegramBots.map((b) => ({
         beast: b.beast,
         polling: b.active,
         chat_id: b.chatId ? `${b.chatId.slice(0, 4)}****` : null,
@@ -276,21 +342,28 @@ export function registerTelegramRoutes(app: OpenAPIHono, sqlite: Database, helpe
 
   // T#712: GET /api/telegram/message/:id — fetch cached inbound TG message body
   app.get('/api/telegram/message/:id', (c) => {
-    if (!isTelegramAuthorized(c, hasSessionAuth, isTrustedRequest)) return c.json({ error: 'Telegram cache is private' }, 403);
+    if (!isTelegramAuthorized(c, hasSessionAuth, isTrustedRequest))
+      return c.json({ error: 'Telegram cache is private' }, 403);
     const idParam = c.req.param('id');
     const msgId = parseInt(idParam, 10);
     if (!Number.isFinite(msgId) || String(msgId) !== idParam) {
       return c.json({ error: 'id must be an integer' }, 400);
     }
-    const validChatIds = telegramBots.map(b => b.chatId).filter(Boolean);
+    const validChatIds = telegramBots.map((b) => b.chatId).filter(Boolean);
     if (validChatIds.length === 0) return c.json({ error: 'no telegram bots configured' }, 503);
     const placeholders = validChatIds.map(() => '?').join(',');
-    const row = sqlite.prepare(
-      `SELECT chat_id, id, from_id, text, caption, photo_file_id, date_unix, received_at, raw_json FROM telegram_messages WHERE chat_id IN (${placeholders}) AND id = ? LIMIT 1`
-    ).get(...validChatIds, msgId) as any;
+    const row = sqlite
+      .prepare(
+        `SELECT chat_id, id, from_id, text, caption, photo_file_id, date_unix, received_at, raw_json FROM telegram_messages WHERE chat_id IN (${placeholders}) AND id = ? LIMIT 1`,
+      )
+      .get(...validChatIds, msgId) as any;
     if (!row) return c.json({ error: 'message not found' }, 404);
     let raw: any = null;
-    try { raw = JSON.parse(row.raw_json); } catch { /* leave null on parse fail */ }
+    try {
+      raw = JSON.parse(row.raw_json);
+    } catch {
+      /* leave null on parse fail */
+    }
     return c.json({
       chat_id: row.chat_id,
       id: row.id,

@@ -98,10 +98,10 @@ function cleanupStalePidFile(verbose = false): void {
 async function isServerHealthy(): Promise<boolean> {
   try {
     const response = await fetch(HEALTH_URL, {
-      signal: AbortSignal.timeout(2000)
+      signal: AbortSignal.timeout(2000),
     });
     if (response.ok) {
-      const data = await response.json() as import('./server/types.js').HealthResponse;
+      const data = (await response.json()) as import('./server/types.js').HealthResponse;
       return data.status === 'ok';
     }
     return false;
@@ -129,7 +129,8 @@ export async function ensureServerRunning(options: EnsureServerOptions = {}): Pr
   // 2. Check PID file - maybe process exists but not healthy yet
   const pidInfo = readPidFile();
   if (pidInfo && isProcessAlive(pidInfo.pid)) {
-    if (verbose) console.log(`🔮 Oracle server process exists (PID ${pidInfo.pid}), waiting for health...`);
+    if (verbose)
+      console.log(`🔮 Oracle server process exists (PID ${pidInfo.pid}), waiting for health...`);
 
     // Wait for it to become healthy
     const healthy = await waitForHealthWithTimeout(timeout);
@@ -211,7 +212,7 @@ async function waitForHealthWithTimeout(timeoutMs: number): Promise<boolean> {
     if (await isServerHealthy()) {
       return true;
     }
-    await new Promise(r => setTimeout(r, checkInterval));
+    await new Promise((r) => setTimeout(r, checkInterval));
   }
 
   return false;

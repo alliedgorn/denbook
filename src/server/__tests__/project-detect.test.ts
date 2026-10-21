@@ -33,9 +33,7 @@ describe('detectProject — GitHub paths', () => {
   });
 
   it('should detect project from GitHub root (no trailing subdir)', () => {
-    expect(detectProject('/Users/nat/Code/github.com/owner/repo')).toBe(
-      'github.com/owner/repo',
-    );
+    expect(detectProject('/Users/nat/Code/github.com/owner/repo')).toBe('github.com/owner/repo');
   });
 });
 
@@ -45,9 +43,7 @@ describe('detectProject — GitHub paths', () => {
 
 describe('detectProject — GitLab paths', () => {
   it('should detect project from ghq GitLab path', () => {
-    expect(detectProject('/Users/nat/Code/gitlab.com/owner/repo')).toBe(
-      'gitlab.com/owner/repo',
-    );
+    expect(detectProject('/Users/nat/Code/gitlab.com/owner/repo')).toBe('gitlab.com/owner/repo');
   });
 });
 
@@ -57,15 +53,13 @@ describe('detectProject — GitLab paths', () => {
 
 describe('detectProject — nested subdirectories', () => {
   it('should extract project from deep nested path', () => {
-    expect(
-      detectProject('/Users/nat/Code/github.com/org/project/src/deep/path'),
-    ).toBe('github.com/org/project');
+    expect(detectProject('/Users/nat/Code/github.com/org/project/src/deep/path')).toBe(
+      'github.com/org/project',
+    );
   });
 
   it('should not include extra path segments beyond owner/repo', () => {
-    const result = detectProject(
-      '/Users/nat/Code/github.com/org/project/packages/core/lib',
-    );
+    const result = detectProject('/Users/nat/Code/github.com/org/project/packages/core/lib');
     expect(result).toBe('github.com/org/project');
   });
 });

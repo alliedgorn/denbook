@@ -76,25 +76,31 @@ export class ChromaMcpClient {
       this.transport = new StdioClientTransport({
         command: 'uvx',
         args: [
-          '--python', this.pythonVersion,
+          '--python',
+          this.pythonVersion,
           'chroma-mcp',
-          '--client-type', 'persistent',
-          '--data-dir', this.dataDir
+          '--client-type',
+          'persistent',
+          '--data-dir',
+          this.dataDir,
         ],
-        stderr: 'ignore'
+        stderr: 'ignore',
       });
 
-      this.client = new Client({
-        name: 'denbook-chroma',
-        version: '1.0.0'
-      }, {
-        capabilities: {}
-      });
+      this.client = new Client(
+        {
+          name: 'denbook-chroma',
+          version: '1.0.0',
+        },
+        {
+          capabilities: {},
+        },
+      );
 
       await Promise.race([
         this.client.connect(this.transport),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Chroma connection timeout (${timeout}ms)`)), timeout)
+          setTimeout(() => reject(new Error(`Chroma connection timeout (${timeout}ms)`)), timeout),
         ),
       ]);
       this.connected = true;
@@ -102,7 +108,9 @@ export class ChromaMcpClient {
       console.log('Connected to chroma-mcp server');
     } catch (error) {
       this.resetConnection();
-      throw new Error(`Chroma connection failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Chroma connection failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -129,7 +137,10 @@ export class ChromaMcpClient {
       try {
         await this.client.close();
       } catch (e) {
-        console.warn('[ChromaMCP] client.close() error:', e instanceof Error ? e.message : String(e));
+        console.warn(
+          '[ChromaMCP] client.close() error:',
+          e instanceof Error ? e.message : String(e),
+        );
       }
     }
 
@@ -138,7 +149,10 @@ export class ChromaMcpClient {
       try {
         await this.transport.close();
       } catch (e) {
-        console.warn('[ChromaMCP] transport.close() error:', e instanceof Error ? e.message : String(e));
+        console.warn(
+          '[ChromaMCP] transport.close() error:',
+          e instanceof Error ? e.message : String(e),
+        );
       }
     }
 
@@ -161,20 +175,23 @@ export class ChromaMcpClient {
       await this.client.callTool({
         name: 'chroma_get_collection_info',
         arguments: {
-          collection_name: this.collectionName
-        }
+          collection_name: this.collectionName,
+        },
       });
       console.log(`Collection '${this.collectionName}' exists`);
     } catch (error) {
       // Collection may not exist — or this could be a connection error
-      console.warn('[ChromaMCP] ensureCollection get failed, attempting create:', error instanceof Error ? error.message : String(error));
+      console.warn(
+        '[ChromaMCP] ensureCollection get failed, attempting create:',
+        error instanceof Error ? error.message : String(error),
+      );
       console.log(`Creating collection '${this.collectionName}'...`);
       await this.client.callTool({
         name: 'chroma_create_collection',
         arguments: {
           collection_name: this.collectionName,
-          embedding_function_name: 'default'
-        }
+          embedding_function_name: 'default',
+        },
       });
       console.log(`Collection '${this.collectionName}' created`);
     }
@@ -194,12 +211,15 @@ export class ChromaMcpClient {
       await this.client.callTool({
         name: 'chroma_delete_collection',
         arguments: {
-          collection_name: this.collectionName
-        }
+          collection_name: this.collectionName,
+        },
       });
       console.log(`Collection '${this.collectionName}' deleted`);
     } catch (error) {
-      console.warn('[ChromaMCP] deleteCollection failed (may not exist):', error instanceof Error ? error.message : String(error));
+      console.warn(
+        '[ChromaMCP] deleteCollection failed (may not exist):',
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
@@ -221,10 +241,10 @@ export class ChromaMcpClient {
       name: 'chroma_add_documents',
       arguments: {
         collection_name: this.collectionName,
-        documents: documents.map(d => d.document),
-        ids: documents.map(d => d.id),
-        metadatas: documents.map(d => d.metadata)
-      }
+        documents: documents.map((d) => d.document),
+        ids: documents.map((d) => d.id),
+        metadatas: documents.map((d) => d.metadata),
+      },
     });
 
     console.log(`Added ${documents.length} documents to collection`);
@@ -237,7 +257,7 @@ export class ChromaMcpClient {
   async query(
     queryText: string,
     limit: number = 10,
-    whereFilter?: Record<string, any>
+    whereFilter?: Record<string, any>,
   ): Promise<{ ids: string[]; documents: string[]; distances: number[]; metadatas: any[] }> {
     // Reconnect if connection died
     try {
@@ -256,7 +276,7 @@ export class ChromaMcpClient {
       collection_name: this.collectionName,
       query_texts: [queryText],
       n_results: limit,
-      include: ['documents', 'metadatas', 'distances']
+      include: ['documents', 'metadatas', 'distances'],
     };
 
     if (whereFilter) {
@@ -267,7 +287,7 @@ export class ChromaMcpClient {
     try {
       result = await this.client.callTool({
         name: 'chroma_query_documents',
-        arguments: args
+        arguments: args,
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -278,7 +298,7 @@ export class ChromaMcpClient {
         await this.connect();
         result = await this.client!.callTool({
           name: 'chroma_query_documents',
-          arguments: args
+          arguments: args,
         });
       } else {
         throw error;
@@ -297,7 +317,7 @@ export class ChromaMcpClient {
       ids: parsed.ids?.[0] || [],
       documents: parsed.documents?.[0] || [],
       distances: parsed.distances?.[0] || [],
-      metadatas: parsed.metadatas?.[0] || []
+      metadatas: parsed.metadatas?.[0] || [],
     };
   }
 
@@ -318,23 +338,28 @@ export class ChromaMcpClient {
       const result = await this.client.callTool({
         name: 'chroma_get_collection_count',
         arguments: {
-          collection_name: this.collectionName
-        }
+          collection_name: this.collectionName,
+        },
       });
 
       const content = result.content as Array<{ type: string; text?: string }>;
       const text = content[0]?.text ?? '0';
       // Response may be just a number or a JSON with count field
-      const count = parseInt(text, 10) || (() => {
-        try {
-          return safeJsonParse(text).count ?? 0;
-        } catch {
-          return 0;
-        }
-      })();
+      const count =
+        parseInt(text, 10) ||
+        (() => {
+          try {
+            return safeJsonParse(text).count ?? 0;
+          } catch {
+            return 0;
+          }
+        })();
       return { count };
     } catch (error) {
-      console.warn('[ChromaMCP] getStats failed:', error instanceof Error ? error.message : String(error));
+      console.warn(
+        '[ChromaMCP] getStats failed:',
+        error instanceof Error ? error.message : String(error),
+      );
       return { count: 0 };
     }
   }
@@ -344,7 +369,7 @@ export class ChromaMcpClient {
    */
   async queryById(
     docId: string,
-    nResults: number = 5
+    nResults: number = 5,
   ): Promise<{ ids: string[]; documents: string[]; distances: number[]; metadatas: any[] }> {
     // First get the document's embedding, then query by it
     await this.connect();
@@ -359,8 +384,8 @@ export class ChromaMcpClient {
       arguments: {
         collection_name: this.collectionName,
         ids: [docId],
-        include: ['embeddings', 'documents', 'metadatas']
-      }
+        include: ['embeddings', 'documents', 'metadatas'],
+      },
     });
 
     const getContent = getResult.content as Array<{ type: string; text?: string }>;
@@ -382,8 +407,8 @@ export class ChromaMcpClient {
         collection_name: this.collectionName,
         query_embeddings: [embeddings],
         n_results: nResults + 1,
-        include: ['documents', 'metadatas', 'distances']
-      }
+        include: ['documents', 'metadatas', 'distances'],
+      },
     });
 
     const queryContent = queryResult.content as Array<{ type: string; text?: string }>;
@@ -399,22 +424,25 @@ export class ChromaMcpClient {
     const metadatas = queryParsed.metadatas?.[0] || [];
 
     // Filter out the source document itself
-    const filtered = ids.reduce((acc: any, id: string, i: number) => {
-      if (id !== docId) {
-        acc.ids.push(id);
-        acc.documents.push(documents[i]);
-        acc.distances.push(distances[i]);
-        acc.metadatas.push(metadatas[i]);
-      }
-      return acc;
-    }, { ids: [], documents: [], distances: [], metadatas: [] });
+    const filtered = ids.reduce(
+      (acc: any, id: string, i: number) => {
+        if (id !== docId) {
+          acc.ids.push(id);
+          acc.documents.push(documents[i]);
+          acc.distances.push(distances[i]);
+          acc.metadatas.push(metadatas[i]);
+        }
+        return acc;
+      },
+      { ids: [], documents: [], distances: [], metadatas: [] },
+    );
 
     // Trim to requested count
     return {
       ids: filtered.ids.slice(0, nResults),
       documents: filtered.documents.slice(0, nResults),
       distances: filtered.distances.slice(0, nResults),
-      metadatas: filtered.metadatas.slice(0, nResults)
+      metadatas: filtered.metadatas.slice(0, nResults),
     };
   }
 
@@ -432,8 +460,8 @@ export class ChromaMcpClient {
       const result = await this.client.callTool({
         name: 'chroma_get_collection_info',
         arguments: {
-          collection_name: this.collectionName
-        }
+          collection_name: this.collectionName,
+        },
       });
 
       const content = result.content as Array<{ type: string; text?: string }>;
@@ -445,10 +473,13 @@ export class ChromaMcpClient {
       const parsed = safeJsonParse(data.text);
       return {
         count: parsed.count || 0,
-        name: this.collectionName
+        name: this.collectionName,
       };
     } catch (error) {
-      console.warn('[ChromaMCP] getCollectionInfo failed:', error instanceof Error ? error.message : String(error));
+      console.warn(
+        '[ChromaMCP] getCollectionInfo failed:',
+        error instanceof Error ? error.message : String(error),
+      );
       return { count: 0, name: this.collectionName };
     }
   }
@@ -473,8 +504,8 @@ export class ChromaMcpClient {
       arguments: {
         collection_name: this.collectionName,
         limit,
-        include: ['embeddings', 'metadatas']
-      }
+        include: ['embeddings', 'metadatas'],
+      },
     });
 
     const content = result.content as Array<{ type: string; text?: string }>;
@@ -487,7 +518,7 @@ export class ChromaMcpClient {
     return {
       ids: parsed.ids || [],
       embeddings: parsed.embeddings || [],
-      metadatas: parsed.metadatas || []
+      metadatas: parsed.metadatas || [],
     };
   }
 }

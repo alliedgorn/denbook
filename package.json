@@ -29,6 +29,9 @@
     "serve": "bun dist/server.js",
     "index": "bun src/indexer.ts",
     "build": "tsc --noEmit",
+    "format": "biome format --write ./src",
+    "format:check": "biome format ./src",
+    "lint": "biome lint ./src",
     "start": "bun dist/index.js",
     "test": "bun run test:unit && bun run test:integration",
     "test:unit": "ORACLE_DB_PATH=:memory: ORACLE_DATA_DIR=/tmp/oracle-test-data bun test src/tools/__tests__/ src/server/__tests__/ src/vault/__tests__/ src/drizzle-migration.test.ts src/indexer-preservation.test.ts",
@@ -67,6 +70,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.19.39",
     "better-sqlite3": "^12.9.0",

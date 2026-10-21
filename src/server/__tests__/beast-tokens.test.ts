@@ -181,9 +181,9 @@ describe('validateToken', () => {
     const created = createToken('karo', 'gorn');
     if ('token' in created) {
       // Expire token 7h ago — past the 6h grace window
-      sqlite.prepare(
-        `UPDATE beast_tokens SET expires_at = datetime('now', '-7 hours') WHERE id = ?`
-      ).run(created.id);
+      sqlite
+        .prepare(`UPDATE beast_tokens SET expires_at = datetime('now', '-7 hours') WHERE id = ?`)
+        .run(created.id);
       const result = validateToken(created.token);
       expect(result.valid).toBe(false);
       if (!result.valid) {
@@ -196,9 +196,9 @@ describe('validateToken', () => {
     const created = createToken('karo', 'gorn');
     if ('token' in created) {
       // Expire token 1h ago — within the 6h grace window
-      sqlite.prepare(
-        `UPDATE beast_tokens SET expires_at = datetime('now', '-1 hour') WHERE id = ?`
-      ).run(created.id);
+      sqlite
+        .prepare(`UPDATE beast_tokens SET expires_at = datetime('now', '-1 hour') WHERE id = ?`)
+        .run(created.id);
       const result = validateToken(created.token);
       expect(result.valid).toBe(true);
       if (result.valid) {
@@ -211,9 +211,11 @@ describe('validateToken', () => {
     const created = createToken('karo', 'gorn');
     if ('token' in created) {
       // 5h59m — safely within the 6h grace window
-      sqlite.prepare(
-        `UPDATE beast_tokens SET expires_at = datetime('now', '-359 minutes') WHERE id = ?`
-      ).run(created.id);
+      sqlite
+        .prepare(
+          `UPDATE beast_tokens SET expires_at = datetime('now', '-359 minutes') WHERE id = ?`,
+        )
+        .run(created.id);
       const result = validateToken(created.token);
       expect(result.valid).toBe(true);
       if (result.valid) {
@@ -226,9 +228,11 @@ describe('validateToken', () => {
     const created = createToken('karo', 'gorn');
     if ('token' in created) {
       // 6h1m — just past the 6h grace window
-      sqlite.prepare(
-        `UPDATE beast_tokens SET expires_at = datetime('now', '-361 minutes') WHERE id = ?`
-      ).run(created.id);
+      sqlite
+        .prepare(
+          `UPDATE beast_tokens SET expires_at = datetime('now', '-361 minutes') WHERE id = ?`,
+        )
+        .run(created.id);
       const result = validateToken(created.token);
       expect(result.valid).toBe(false);
       if (!result.valid) {
@@ -244,9 +248,11 @@ describe('validateToken', () => {
       const rotated = selfRotateToken(created.id, 'karo');
       expect('token' in rotated).toBe(true);
       // Force expiry to 1h ago (within grace) AND rotated_at to 30s ago (outside 10s rotation grace)
-      sqlite.prepare(
-        `UPDATE beast_tokens SET expires_at = datetime('now', '-1 hour'), rotated_at = datetime('now', '-30 seconds') WHERE id = ?`
-      ).run(created.id);
+      sqlite
+        .prepare(
+          `UPDATE beast_tokens SET expires_at = datetime('now', '-1 hour'), rotated_at = datetime('now', '-30 seconds') WHERE id = ?`,
+        )
+        .run(created.id);
       const result = validateToken(created.token);
       // Chain-compromise detection fires before expired-grace check
       expect(result.valid).toBe(false);
@@ -260,9 +266,11 @@ describe('validateToken', () => {
     const created = createToken('karo', 'gorn');
     if ('token' in created) {
       // expires_at 1h ago (within 6h grace), max_lifetime_at 2h ago (should be hard ceiling)
-      sqlite.prepare(
-        `UPDATE beast_tokens SET expires_at = datetime('now', '-1 hour'), max_lifetime_at = datetime('now', '-2 hours') WHERE id = ?`
-      ).run(created.id);
+      sqlite
+        .prepare(
+          `UPDATE beast_tokens SET expires_at = datetime('now', '-1 hour'), max_lifetime_at = datetime('now', '-2 hours') WHERE id = ?`,
+        )
+        .run(created.id);
       const result = validateToken(created.token);
       // GAP: expired-grace early-return at line 352 skips the max_lifetime check at line 356.
       // Token is valid despite being past its absolute lifetime ceiling.
@@ -422,8 +430,8 @@ describe('listTokens', () => {
     }
     createToken('karo', 'gorn');
     const tokens = listTokens();
-    const active = tokens.filter(t => t.active);
-    const inactive = tokens.filter(t => !t.active);
+    const active = tokens.filter((t) => t.active);
+    const inactive = tokens.filter((t) => !t.active);
     expect(active.length).toBe(1);
     expect(inactive.length).toBe(1);
   });
@@ -451,9 +459,11 @@ describe('pruneBeastTokens', () => {
   it('prunes tokens expired beyond grace period', () => {
     createToken('karo', 'gorn');
     // Manually backdate a token to expired 8 days ago (grace period is 7 days)
-    sqlite.prepare(
-      `UPDATE beast_tokens SET expires_at = datetime('now', '-8 days') WHERE beast = 'karo'`
-    ).run();
+    sqlite
+      .prepare(
+        `UPDATE beast_tokens SET expires_at = datetime('now', '-8 days') WHERE beast = 'karo'`,
+      )
+      .run();
     const pruned = pruneBeastTokens();
     expect(pruned).toBe(1);
     expect(listTokens().length).toBe(0);
@@ -464,9 +474,9 @@ describe('pruneBeastTokens', () => {
     if ('token' in created) {
       revokeToken(created.id, 'gorn');
       // Backdate revocation to 8 days ago
-      sqlite.prepare(
-        `UPDATE beast_tokens SET revoked_at = datetime('now', '-8 days') WHERE id = ?`
-      ).run(created.id);
+      sqlite
+        .prepare(`UPDATE beast_tokens SET revoked_at = datetime('now', '-8 days') WHERE id = ?`)
+        .run(created.id);
     }
     const pruned = pruneBeastTokens();
     expect(pruned).toBe(1);
@@ -477,9 +487,9 @@ describe('pruneBeastTokens', () => {
     if ('token' in created) {
       revokeToken(created.id, 'gorn');
       // Revoked 3 days ago — within 7-day grace
-      sqlite.prepare(
-        `UPDATE beast_tokens SET revoked_at = datetime('now', '-3 days') WHERE id = ?`
-      ).run(created.id);
+      sqlite
+        .prepare(`UPDATE beast_tokens SET revoked_at = datetime('now', '-3 days') WHERE id = ?`)
+        .run(created.id);
     }
     const pruned = pruneBeastTokens();
     expect(pruned).toBe(0);
@@ -524,13 +534,19 @@ describe('auto-refresh (Spec #51)', () => {
     if (!('token' in created)) throw new Error('createToken failed');
     // Move expiry to 1h from now (well inside the 6h refresh window) and clear
     // last_used_at so the throttle does not block.
-    sqlite.prepare(
-      `UPDATE beast_tokens SET expires_at = datetime('now', '+1 hour'), last_used_at = NULL WHERE id = ?`
-    ).run(created.id);
-    const before = sqlite.prepare(`SELECT expires_at FROM beast_tokens WHERE id = ?`).get(created.id) as { expires_at: string };
+    sqlite
+      .prepare(
+        `UPDATE beast_tokens SET expires_at = datetime('now', '+1 hour'), last_used_at = NULL WHERE id = ?`,
+      )
+      .run(created.id);
+    const before = sqlite
+      .prepare(`SELECT expires_at FROM beast_tokens WHERE id = ?`)
+      .get(created.id) as { expires_at: string };
     const result = validateToken(created.token);
     expect(result.valid).toBe(true);
-    const after = sqlite.prepare(`SELECT expires_at FROM beast_tokens WHERE id = ?`).get(created.id) as { expires_at: string };
+    const after = sqlite
+      .prepare(`SELECT expires_at FROM beast_tokens WHERE id = ?`)
+      .get(created.id) as { expires_at: string };
     expect(after.expires_at > before.expires_at).toBe(true);
   });
 
@@ -539,12 +555,16 @@ describe('auto-refresh (Spec #51)', () => {
     if (!('token' in created)) throw new Error('createToken failed');
     // Default TTL is 24h; that is well outside the 6h refresh window.
     // Force last_used_at older than throttle so the throttle is not the gate.
-    sqlite.prepare(
-      `UPDATE beast_tokens SET last_used_at = datetime('now', '-10 minutes') WHERE id = ?`
-    ).run(created.id);
-    const before = sqlite.prepare(`SELECT expires_at FROM beast_tokens WHERE id = ?`).get(created.id) as { expires_at: string };
+    sqlite
+      .prepare(`UPDATE beast_tokens SET last_used_at = datetime('now', '-10 minutes') WHERE id = ?`)
+      .run(created.id);
+    const before = sqlite
+      .prepare(`SELECT expires_at FROM beast_tokens WHERE id = ?`)
+      .get(created.id) as { expires_at: string };
     validateToken(created.token);
-    const after = sqlite.prepare(`SELECT expires_at FROM beast_tokens WHERE id = ?`).get(created.id) as { expires_at: string };
+    const after = sqlite
+      .prepare(`SELECT expires_at FROM beast_tokens WHERE id = ?`)
+      .get(created.id) as { expires_at: string };
     expect(after.expires_at).toBe(before.expires_at);
   });
 
@@ -553,17 +573,19 @@ describe('auto-refresh (Spec #51)', () => {
     if (!('token' in created)) throw new Error('createToken failed');
     // Set max_lifetime_at to 2 hours from now and expires_at to 1 hour.
     // Refresh should clamp the new expires_at at +2h, not +24h.
-    sqlite.prepare(
-      `UPDATE beast_tokens
+    sqlite
+      .prepare(
+        `UPDATE beast_tokens
          SET expires_at = datetime('now', '+1 hour'),
              max_lifetime_at = datetime('now', '+2 hours'),
              last_used_at = NULL
-         WHERE id = ?`
-    ).run(created.id);
+         WHERE id = ?`,
+      )
+      .run(created.id);
     validateToken(created.token);
-    const after = sqlite.prepare(
-      `SELECT expires_at, max_lifetime_at FROM beast_tokens WHERE id = ?`
-    ).get(created.id) as { expires_at: string; max_lifetime_at: string };
+    const after = sqlite
+      .prepare(`SELECT expires_at, max_lifetime_at FROM beast_tokens WHERE id = ?`)
+      .get(created.id) as { expires_at: string; max_lifetime_at: string };
     expect(after.expires_at <= after.max_lifetime_at).toBe(true);
   });
 
@@ -575,12 +597,14 @@ describe('auto-refresh (Spec #51)', () => {
     // max_lifetime branch we need expires_at in the future but max_lifetime in
     // the past. That's a state the system shouldn't reach naturally, but we
     // simulate it to verify the branch.
-    sqlite.prepare(
-      `UPDATE beast_tokens
+    sqlite
+      .prepare(
+        `UPDATE beast_tokens
          SET expires_at = datetime('now', '+1 hour'),
              max_lifetime_at = datetime('now', '-1 hour')
-         WHERE id = ?`
-    ).run(created.id);
+         WHERE id = ?`,
+      )
+      .run(created.id);
     const result = validateToken(created.token);
     expect(result.valid).toBe(false);
     if (!result.valid) expect(result.reason).toBe('max_lifetime_reached');
@@ -600,9 +624,13 @@ describe('selfRotateToken (Spec #52)', () => {
     if (!('token' in rotated)) return;
     expect(rotated.token).not.toBe(created.token);
     // Old row should have rotated_at + next_token_id set, NOT revoked.
-    const oldRow = sqlite.prepare(
-      `SELECT rotated_at, next_token_id, revoked_at FROM beast_tokens WHERE id = ?`
-    ).get(created.id) as { rotated_at: string | null; next_token_id: number | null; revoked_at: string | null };
+    const oldRow = sqlite
+      .prepare(`SELECT rotated_at, next_token_id, revoked_at FROM beast_tokens WHERE id = ?`)
+      .get(created.id) as {
+      rotated_at: string | null;
+      next_token_id: number | null;
+      revoked_at: string | null;
+    };
     expect(oldRow.rotated_at).toBeTruthy();
     expect(oldRow.next_token_id).toBe(rotated.id);
     expect(oldRow.revoked_at).toBeNull();
@@ -612,9 +640,9 @@ describe('selfRotateToken (Spec #52)', () => {
     const created = createToken('karo', 'gorn');
     if (!('token' in created)) throw new Error('createToken failed');
     // Expire 7h ago — past the 6h post-expiry grace window
-    sqlite.prepare(
-      `UPDATE beast_tokens SET expires_at = datetime('now', '-7 hours') WHERE id = ?`
-    ).run(created.id);
+    sqlite
+      .prepare(`UPDATE beast_tokens SET expires_at = datetime('now', '-7 hours') WHERE id = ?`)
+      .run(created.id);
     const result = selfRotateToken(created.id, 'karo');
     expect('error' in result).toBe(true);
     if ('error' in result) expect(result.code).toBe('rotate_window_expired');
@@ -624,9 +652,9 @@ describe('selfRotateToken (Spec #52)', () => {
     const created = createToken('karo', 'gorn');
     if (!('token' in created)) throw new Error('createToken failed');
     // Expire 2h ago — within the 6h grace window
-    sqlite.prepare(
-      `UPDATE beast_tokens SET expires_at = datetime('now', '-2 hours') WHERE id = ?`
-    ).run(created.id);
+    sqlite
+      .prepare(`UPDATE beast_tokens SET expires_at = datetime('now', '-2 hours') WHERE id = ?`)
+      .run(created.id);
     const result = selfRotateToken(created.id, 'karo');
     expect('token' in result).toBe(true);
   });
@@ -635,9 +663,9 @@ describe('selfRotateToken (Spec #52)', () => {
     const created = createToken('karo', 'gorn');
     if (!('token' in created)) throw new Error('createToken failed');
     // 5h59m — safely within the 6h grace window
-    sqlite.prepare(
-      `UPDATE beast_tokens SET expires_at = datetime('now', '-359 minutes') WHERE id = ?`
-    ).run(created.id);
+    sqlite
+      .prepare(`UPDATE beast_tokens SET expires_at = datetime('now', '-359 minutes') WHERE id = ?`)
+      .run(created.id);
     const result = selfRotateToken(created.id, 'karo');
     expect('token' in result).toBe(true);
   });
@@ -646,9 +674,9 @@ describe('selfRotateToken (Spec #52)', () => {
     const created = createToken('karo', 'gorn');
     if (!('token' in created)) throw new Error('createToken failed');
     // 6h1m — past the 6h grace window
-    sqlite.prepare(
-      `UPDATE beast_tokens SET expires_at = datetime('now', '-361 minutes') WHERE id = ?`
-    ).run(created.id);
+    sqlite
+      .prepare(`UPDATE beast_tokens SET expires_at = datetime('now', '-361 minutes') WHERE id = ?`)
+      .run(created.id);
     const result = selfRotateToken(created.id, 'karo');
     expect('error' in result).toBe(true);
     if ('error' in result) expect(result.code).toBe('rotate_window_expired');
@@ -658,9 +686,9 @@ describe('selfRotateToken (Spec #52)', () => {
     const created = createToken('karo', 'gorn');
     if (!('token' in created)) throw new Error('createToken failed');
     // Expire 1h ago (within grace), then rotate once
-    sqlite.prepare(
-      `UPDATE beast_tokens SET expires_at = datetime('now', '-1 hour') WHERE id = ?`
-    ).run(created.id);
+    sqlite
+      .prepare(`UPDATE beast_tokens SET expires_at = datetime('now', '-1 hour') WHERE id = ?`)
+      .run(created.id);
     const first = selfRotateToken(created.id, 'karo');
     expect('token' in first).toBe(true);
     // Second rotate on same token — should be locked
@@ -685,17 +713,17 @@ describe('selfRotateToken (Spec #52)', () => {
     const rotated = selfRotateToken(created.id, 'karo');
     if (!('token' in rotated)) throw new Error('selfRotateToken failed');
     // Force rotated_at on old token to 30s ago (outside 10s grace).
-    sqlite.prepare(
-      `UPDATE beast_tokens SET rotated_at = datetime('now', '-30 seconds') WHERE id = ?`
-    ).run(created.id);
+    sqlite
+      .prepare(`UPDATE beast_tokens SET rotated_at = datetime('now', '-30 seconds') WHERE id = ?`)
+      .run(created.id);
     // Replay the OLD (rotated-away) token.
     const result = validateToken(created.token);
     expect(result.valid).toBe(false);
     if (!result.valid) expect(result.reason).toBe('chain_compromised');
     // The new token should also be revoked as part of the chain walk.
-    const newRow = sqlite.prepare(
-      `SELECT revoked_at FROM beast_tokens WHERE id = ?`
-    ).get(rotated.id) as { revoked_at: string | null };
+    const newRow = sqlite
+      .prepare(`SELECT revoked_at FROM beast_tokens WHERE id = ?`)
+      .get(rotated.id) as { revoked_at: string | null };
     expect(newRow.revoked_at).toBeTruthy();
   });
 
@@ -709,9 +737,9 @@ describe('selfRotateToken (Spec #52)', () => {
     expect(result.valid).toBe(true);
     if (result.valid) expect(result.rotationGrace).toBe(true);
     // No chain revoke in grace path.
-    const newRow = sqlite.prepare(
-      `SELECT revoked_at FROM beast_tokens WHERE id = ?`
-    ).get(rotated.id) as { revoked_at: string | null };
+    const newRow = sqlite
+      .prepare(`SELECT revoked_at FROM beast_tokens WHERE id = ?`)
+      .get(rotated.id) as { revoked_at: string | null };
     expect(newRow.revoked_at).toBeNull();
   });
 });
@@ -766,9 +794,11 @@ describe('rotation_recommended flag (Spec #52 Phase 4)', () => {
     const created = createToken('karo', 'gorn');
     if (!('token' in created)) throw new Error('createToken failed');
     // Age token to 13h (past 12h trigger, before 24h door-close).
-    sqlite.prepare(
-      `UPDATE beast_tokens SET created_at = datetime('now', '-13 hours'), expires_at = datetime('now', '+11 hours') WHERE id = ?`
-    ).run(created.id);
+    sqlite
+      .prepare(
+        `UPDATE beast_tokens SET created_at = datetime('now', '-13 hours'), expires_at = datetime('now', '+11 hours') WHERE id = ?`,
+      )
+      .run(created.id);
     const result = validateToken(created.token);
     expect(result.valid).toBe(true);
     if (result.valid) expect(result.rotationRecommended).toBe(true);
@@ -783,9 +813,9 @@ describe('revokeBeastChain (Spec #52)', () => {
     if (!('token' in t2)) throw new Error('selfRotateToken failed');
     const result = revokeBeastChain('karo', 'gorn');
     expect(result.revoked.length).toBe(2);
-    const rows = sqlite.prepare(
-      `SELECT id, revoked_at FROM beast_tokens WHERE beast = ?`
-    ).all('karo') as Array<{ id: number; revoked_at: string | null }>;
-    expect(rows.every(r => r.revoked_at !== null)).toBe(true);
+    const rows = sqlite
+      .prepare(`SELECT id, revoked_at FROM beast_tokens WHERE beast = ?`)
+      .all('karo') as Array<{ id: number; revoked_at: string | null }>;
+    expect(rows.every((r) => r.revoked_at !== null)).toBe(true);
   });
 });

@@ -13,7 +13,8 @@ export function registerTeamsRoutes(app: OpenAPIHono, sqlite: Database, helpers:
   function validateTeamName(name: string): string | null {
     if (!name || name.trim().length === 0) return 'name required';
     if (name.length > 100) return 'name too long (max 100 chars)';
-    if (!/^[a-zA-Z0-9 _-]+$/.test(name)) return 'name contains invalid characters (use letters, numbers, spaces, hyphens only)';
+    if (!/^[a-zA-Z0-9 _-]+$/.test(name))
+      return 'name contains invalid characters (use letters, numbers, spaces, hyphens only)';
     return null;
   }
 
@@ -24,19 +25,23 @@ export function registerTeamsRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // Helper: check if beast exists
   function beastExists(name: string): boolean {
-    const row = sqlite.prepare('SELECT name FROM beast_profiles WHERE name = ?').get(name.toLowerCase());
+    const row = sqlite
+      .prepare('SELECT name FROM beast_profiles WHERE name = ?')
+      .get(name.toLowerCase());
     return !!row;
   }
 
   // GET /api/teams — list all teams with member counts
   app.get('/api/teams', (c) => {
-    const teams = sqlite.prepare(`
+    const teams = sqlite
+      .prepare(`
       SELECT t.*, COUNT(tm.beast) as member_count
       FROM teams t
       LEFT JOIN team_members tm ON tm.team_id = t.id
       GROUP BY t.id
       ORDER BY t.name
-    `).all() as any[];
+    `)
+      .all() as any[];
     return c.json({ teams, total: teams.length });
   });
 
@@ -49,11 +54,13 @@ export function registerTeamsRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const name = sanitizeInput(data.name);
     const description = data.description ? sanitizeInput(data.description) : null;
     try {
-      const result = sqlite.prepare(
-        'INSERT INTO teams (name, description, created_by) VALUES (?, ?, ?)'
-      ).run(name, description, data.created_by);
+      const result = sqlite
+        .prepare('INSERT INTO teams (name, description, created_by) VALUES (?, ?, ?)')
+        .run(name, description, data.created_by);
       // Auto-add creator as lead
-      sqlite.prepare('INSERT INTO team_members (team_id, beast, role) VALUES (?, ?, ?)').run(result.lastInsertRowid, data.created_by, 'lead');
+      sqlite
+        .prepare('INSERT INTO team_members (team_id, beast, role) VALUES (?, ?, ?)')
+        .run(result.lastInsertRowid, data.created_by, 'lead');
       const team = sqlite.prepare('SELECT * FROM teams WHERE id = ?').get(result.lastInsertRowid);
       return c.json(team, 201);
     } catch (e: any) {
@@ -68,8 +75,12 @@ export function registerTeamsRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
     const team = sqlite.prepare('SELECT * FROM teams WHERE id = ?').get(id) as any;
     if (!team) return c.json({ error: 'Team not found' }, 404);
-    const members = sqlite.prepare('SELECT beast, role, joined_at FROM team_members WHERE team_id = ?').all(id);
-    const projects = sqlite.prepare('SELECT project_id FROM team_projects WHERE team_id = ?').all(id);
+    const members = sqlite
+      .prepare('SELECT beast, role, joined_at FROM team_members WHERE team_id = ?')
+      .all(id);
+    const projects = sqlite
+      .prepare('SELECT project_id FROM team_projects WHERE team_id = ?')
+      .all(id);
     return c.json({ ...team, members, projects });
   });
 
@@ -85,7 +96,10 @@ export function registerTeamsRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       if (nameErr) return c.json({ error: nameErr }, 400);
       sqlite.prepare('UPDATE teams SET name = ? WHERE id = ?').run(sanitizeInput(data.name), id);
     }
-    if (data.description !== undefined) sqlite.prepare('UPDATE teams SET description = ? WHERE id = ?').run(sanitizeInput(data.description || ''), id);
+    if (data.description !== undefined)
+      sqlite
+        .prepare('UPDATE teams SET description = ? WHERE id = ?')
+        .run(sanitizeInput(data.description || ''), id);
     const updated = sqlite.prepare('SELECT * FROM teams WHERE id = ?').get(id);
     return c.json(updated);
   });
@@ -100,10 +114,16 @@ export function registerTeamsRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     if (!data.beast) return c.json({ error: 'beast required' }, 400);
     if (!beastExists(data.beast)) return c.json({ error: `Beast '${data.beast}' not found` }, 404);
     try {
-      sqlite.prepare('INSERT INTO team_members (team_id, beast, role) VALUES (?, ?, ?)').run(id, data.beast.toLowerCase(), data.role || 'member');
-      return c.json({ team_id: id, beast: data.beast.toLowerCase(), role: data.role || 'member' }, 201);
+      sqlite
+        .prepare('INSERT INTO team_members (team_id, beast, role) VALUES (?, ?, ?)')
+        .run(id, data.beast.toLowerCase(), data.role || 'member');
+      return c.json(
+        { team_id: id, beast: data.beast.toLowerCase(), role: data.role || 'member' },
+        201,
+      );
     } catch (e: any) {
-      if (e.message?.includes('UNIQUE') || e.message?.includes('PRIMARY')) return c.json({ error: 'Beast already in team' }, 409);
+      if (e.message?.includes('UNIQUE') || e.message?.includes('PRIMARY'))
+        return c.json({ error: 'Beast already in team' }, 409);
       throw e;
     }
   });
@@ -113,7 +133,9 @@ export function registerTeamsRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const id = parseInt(c.req.param('id'));
     const beast = c.req.param('beast').toLowerCase();
     if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
-    const result = sqlite.prepare('DELETE FROM team_members WHERE team_id = ? AND beast = ?').run(id, beast);
+    const result = sqlite
+      .prepare('DELETE FROM team_members WHERE team_id = ? AND beast = ?')
+      .run(id, beast);
     if (result.changes === 0) return c.json({ error: 'Member not found in team' }, 404);
     return c.json({ removed: beast, team_id: id });
   });
@@ -125,10 +147,13 @@ export function registerTeamsRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const data = await c.req.json();
     if (!data.project_id) return c.json({ error: 'project_id required' }, 400);
     try {
-      sqlite.prepare('INSERT INTO team_projects (team_id, project_id) VALUES (?, ?)').run(id, data.project_id);
+      sqlite
+        .prepare('INSERT INTO team_projects (team_id, project_id) VALUES (?, ?)')
+        .run(id, data.project_id);
       return c.json({ team_id: id, project_id: data.project_id }, 201);
     } catch (e: any) {
-      if (e.message?.includes('UNIQUE') || e.message?.includes('PRIMARY')) return c.json({ error: 'Project already linked' }, 409);
+      if (e.message?.includes('UNIQUE') || e.message?.includes('PRIMARY'))
+        return c.json({ error: 'Project already linked' }, 409);
       throw e;
     }
   });
@@ -138,7 +163,9 @@ export function registerTeamsRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const id = parseInt(c.req.param('id'));
     const projectId = parseInt(c.req.param('projectId'));
     if (isNaN(id) || isNaN(projectId)) return c.json({ error: 'Invalid ID' }, 400);
-    const result = sqlite.prepare('DELETE FROM team_projects WHERE team_id = ? AND project_id = ?').run(id, projectId);
+    const result = sqlite
+      .prepare('DELETE FROM team_projects WHERE team_id = ? AND project_id = ?')
+      .run(id, projectId);
     if (result.changes === 0) return c.json({ error: 'Project not linked to team' }, 404);
     return c.json({ removed_project: projectId, team_id: id });
   });
@@ -165,13 +192,15 @@ export function registerTeamsRoutes(app: OpenAPIHono, sqlite: Database, helpers:
   // GET /api/teams/beast/:beast — list teams for a specific Beast
   app.get('/api/teams/beast/:beast', (c) => {
     const beast = c.req.param('beast').toLowerCase();
-    const teams = sqlite.prepare(`
+    const teams = sqlite
+      .prepare(`
       SELECT t.*, tm.role
       FROM teams t
       JOIN team_members tm ON tm.team_id = t.id
       WHERE tm.beast = ?
       ORDER BY t.name
-    `).all(beast) as any[];
+    `)
+      .all(beast) as any[];
     return c.json({ beast, teams, total: teams.length });
   });
 }

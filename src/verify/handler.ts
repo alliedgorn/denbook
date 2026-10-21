@@ -81,21 +81,23 @@ export function verifyKnowledgeBase(opts: {
   // 2. Query DB for all indexed documents
   const typeFilter = type && type !== 'all' ? type : undefined;
   const dbRows = typeFilter
-    ? db.select({
-        id: oracleDocuments.id,
-        sourceFile: oracleDocuments.sourceFile,
-        indexedAt: oracleDocuments.indexedAt,
-        type: oracleDocuments.type,
-      })
+    ? db
+        .select({
+          id: oracleDocuments.id,
+          sourceFile: oracleDocuments.sourceFile,
+          indexedAt: oracleDocuments.indexedAt,
+          type: oracleDocuments.type,
+        })
         .from(oracleDocuments)
         .where(eq(oracleDocuments.type, typeFilter))
         .all()
-    : db.select({
-        id: oracleDocuments.id,
-        sourceFile: oracleDocuments.sourceFile,
-        indexedAt: oracleDocuments.indexedAt,
-        type: oracleDocuments.type,
-      })
+    : db
+        .select({
+          id: oracleDocuments.id,
+          sourceFile: oracleDocuments.sourceFile,
+          indexedAt: oracleDocuments.indexedAt,
+          type: oracleDocuments.type,
+        })
         .from(oracleDocuments)
         .all();
 

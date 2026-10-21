@@ -66,11 +66,7 @@ function cleanEmptyDirs(dir: string, stopAt: string): void {
 }
 
 // Categories that get project-nested in the vault
-const PROJECT_CATEGORIES = [
-  'ψ/memory/learnings/',
-  'ψ/memory/retrospectives/',
-  'ψ/inbox/handoff/',
-];
+const PROJECT_CATEGORIES = ['ψ/memory/learnings/', 'ψ/memory/retrospectives/', 'ψ/inbox/handoff/'];
 
 // Universal categories — no project prefix
 const UNIVERSAL_CATEGORIES = [
@@ -248,10 +244,7 @@ export interface SyncResult {
   project?: string | null;
 }
 
-export function syncVault(opts: {
-  dryRun?: boolean;
-  repoRoot: string;
-}): SyncResult {
+export function syncVault(opts: { dryRun?: boolean; repoRoot: string }): SyncResult {
   const { dryRun = false, repoRoot } = opts;
 
   const repo = getSetting('vault_repo');
@@ -334,7 +327,10 @@ export function syncVault(opts: {
 
   // 6. Commit + push
   const now = new Date();
-  const ts = now.toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
+  const ts = now
+    .toISOString()
+    .replace('T', ' ')
+    .replace(/\.\d+Z$/, '');
   const parts: string[] = [];
   if (added) parts.push(`+${added}`);
   if (modified) parts.push(`~${modified}`);
@@ -357,9 +353,7 @@ export function syncVault(opts: {
   // 7. Update settings
   setSetting('vault_last_sync', String(now.getTime()));
 
-  console.error(
-    `[Vault] Synced: +${added} ~${modified} -${deleted} (${commitHash})`,
-  );
+  console.error(`[Vault] Synced: +${added} ~${modified} -${deleted} (${commitHash})`);
 
   return { dryRun: false, added, modified, deleted, commitHash, project };
 }
@@ -369,9 +363,7 @@ export interface PullResult {
   project: string;
 }
 
-export function pullVault(opts: {
-  repoRoot: string;
-}): PullResult {
+export function pullVault(opts: { repoRoot: string }): PullResult {
   const { repoRoot } = opts;
 
   const repo = getSetting('vault_repo');

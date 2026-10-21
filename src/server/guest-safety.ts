@@ -57,9 +57,9 @@ interface RateWindow {
 }
 
 // In-memory rate limiters (reset on server restart — acceptable for MVP)
-const guestPostRates = new Map<string, RateWindow>();   // per guest username
-const guestDailyRates = new Map<string, RateWindow>();  // per guest username
-const guestDmRates = new Map<string, RateWindow>();     // per guest username
+const guestPostRates = new Map<string, RateWindow>(); // per guest username
+const guestDailyRates = new Map<string, RateWindow>(); // per guest username
+const guestDmRates = new Map<string, RateWindow>(); // per guest username
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -70,7 +70,12 @@ const LIMITS = {
   dmsPerHour: 100,
 };
 
-function checkRate(map: Map<string, RateWindow>, key: string, limit: number, windowMs: number): { allowed: boolean; remaining: number; retryAfterMs?: number } {
+function checkRate(
+  map: Map<string, RateWindow>,
+  key: string,
+  limit: number,
+  windowMs: number,
+): { allowed: boolean; remaining: number; retryAfterMs?: number } {
   const now = Date.now();
   const entry = map.get(key);
 
@@ -94,7 +99,10 @@ function checkRate(map: Map<string, RateWindow>, key: string, limit: number, win
 export function checkGuestPostRate(username: string): { allowed: boolean; error?: string } {
   const hourly = checkRate(guestPostRates, username, LIMITS.postsPerHour, HOUR_MS);
   if (!hourly.allowed) {
-    return { allowed: false, error: `You're posting a bit fast! Take a breather and try again shortly.` };
+    return {
+      allowed: false,
+      error: `You're posting a bit fast! Take a breather and try again shortly.`,
+    };
   }
 
   const daily = checkRate(guestDailyRates, username, LIMITS.postsPerDay, DAY_MS);
@@ -111,7 +119,10 @@ export function checkGuestPostRate(username: string): { allowed: boolean; error?
 export function checkGuestDmRate(username: string): { allowed: boolean; error?: string } {
   const hourly = checkRate(guestDmRates, username, LIMITS.dmsPerHour, HOUR_MS);
   if (!hourly.allowed) {
-    return { allowed: false, error: `You're sending messages a bit fast! Take a breather and try again shortly.` };
+    return {
+      allowed: false,
+      error: `You're sending messages a bit fast! Take a breather and try again shortly.`,
+    };
   }
   return { allowed: true };
 }
@@ -121,12 +132,15 @@ export function checkGuestDmRate(username: string): { allowed: boolean; error?: 
 // ============================================================================
 
 const GUEST_MAX_POST_LENGTH = 4000; // characters
-const GUEST_MAX_DM_LENGTH = 2000;   // characters
+const GUEST_MAX_DM_LENGTH = 2000; // characters
 
 /**
  * Check content length for guest posts.
  */
-export function checkGuestContentLength(content: string, type: 'post' | 'dm'): { allowed: boolean; error?: string } {
+export function checkGuestContentLength(
+  content: string,
+  type: 'post' | 'dm',
+): { allowed: boolean; error?: string } {
   const limit = type === 'post' ? GUEST_MAX_POST_LENGTH : GUEST_MAX_DM_LENGTH;
   if (content.length > limit) {
     return { allowed: false, error: `Message too long (${content.length}/${limit} characters)` };

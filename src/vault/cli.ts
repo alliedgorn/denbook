@@ -130,7 +130,8 @@ switch (command) {
       const dryRun = args.includes('--dry-run');
       const symlink = args.includes('--symlink');
       if (dryRun) console.error('[Vault] DRY RUN — no files will be copied\n');
-      if (symlink) console.error('[Vault] SYMLINK MODE — local ψ/ will be replaced with symlinks\n');
+      if (symlink)
+        console.error('[Vault] SYMLINK MODE — local ψ/ will be replaced with symlinks\n');
       const result = migrate({ dryRun, symlink });
       console.log(JSON.stringify(result, null, 2));
     }

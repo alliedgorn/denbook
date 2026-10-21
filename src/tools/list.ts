@@ -10,7 +10,8 @@ import type { ToolContext, ToolResponse, OracleListInput } from './types.ts';
 
 export const listToolDef = {
   name: 'oracle_list',
-  description: 'List all documents in Oracle knowledge base. Browse without searching - useful for exploring what knowledge exists. Supports pagination and type filtering.',
+  description:
+    'List all documents in Oracle knowledge base. Browse without searching - useful for exploring what knowledge exists. Supports pagination and type filtering.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -18,21 +19,21 @@ export const listToolDef = {
         type: 'string',
         enum: ['principle', 'pattern', 'learning', 'retro', 'all'],
         description: 'Filter by document type',
-        default: 'all'
+        default: 'all',
       },
       limit: {
         type: 'number',
         description: 'Maximum number of documents to return (1-100)',
-        default: 10
+        default: 10,
       },
       offset: {
         type: 'number',
         description: 'Number of documents to skip (for pagination)',
-        default: 0
-      }
+        default: 0,
+      },
     },
-    required: []
-  }
+    required: [],
+  },
 };
 
 export async function handleList(ctx: ToolContext, input: OracleListInput): Promise<ToolResponse> {
@@ -50,20 +51,26 @@ export async function handleList(ctx: ToolContext, input: OracleListInput): Prom
     throw new Error(`Invalid type: ${type}. Must be one of: ${validTypes.join(', ')}`);
   }
 
-  const countResult = type === 'all'
-    ? ctx.db.select({ total: sql<number>`count(*)` }).from(oracleDocuments).get()
-    : ctx.db.select({ total: sql<number>`count(*)` }).from(oracleDocuments).where(eq(oracleDocuments.type, type)).get();
+  const countResult =
+    type === 'all'
+      ? ctx.db.select({ total: sql<number>`count(*)` }).from(oracleDocuments).get()
+      : ctx.db
+          .select({ total: sql<number>`count(*)` })
+          .from(oracleDocuments)
+          .where(eq(oracleDocuments.type, type))
+          .get();
   const total = countResult?.total ?? 0;
 
-  const listStmt = type === 'all'
-    ? ctx.sqlite.prepare(`
+  const listStmt =
+    type === 'all'
+      ? ctx.sqlite.prepare(`
         SELECT d.id, d.type, d.source_file, d.concepts, d.indexed_at, f.content
         FROM oracle_documents d
         JOIN oracle_fts f ON d.id = f.id
         ORDER BY d.indexed_at DESC
         LIMIT ? OFFSET ?
       `)
-    : ctx.sqlite.prepare(`
+      : ctx.sqlite.prepare(`
         SELECT d.id, d.type, d.source_file, d.concepts, d.indexed_at, f.content
         FROM oracle_documents d
         JOIN oracle_fts f ON d.id = f.id
@@ -72,9 +79,7 @@ export async function handleList(ctx: ToolContext, input: OracleListInput): Prom
         LIMIT ? OFFSET ?
       `);
 
-  const rows = type === 'all'
-    ? listStmt.all(limit, offset)
-    : listStmt.all(type, limit, offset);
+  const rows = type === 'all' ? listStmt.all(limit, offset) : listStmt.all(type, limit, offset);
 
   const documents = (rows as any[]).map((row) => ({
     id: row.id,
@@ -87,9 +92,11 @@ export async function handleList(ctx: ToolContext, input: OracleListInput): Prom
   }));
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({ documents, total, limit, offset, type }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({ documents, total, limit, offset, type }, null, 2),
+      },
+    ],
   };
 }

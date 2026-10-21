@@ -112,18 +112,50 @@ describe('parseConceptsFromMetadata', () => {
 
 describe('combineResults', () => {
   const ftsResults = [
-    { id: 'doc1', type: 'principle', content: 'Content 1', source_file: 'f1.md', concepts: ['trust'], score: 0.8, source: 'fts' as const },
-    { id: 'doc2', type: 'learning', content: 'Content 2', source_file: 'f2.md', concepts: ['pattern'], score: 0.6, source: 'fts' as const },
+    {
+      id: 'doc1',
+      type: 'principle',
+      content: 'Content 1',
+      source_file: 'f1.md',
+      concepts: ['trust'],
+      score: 0.8,
+      source: 'fts' as const,
+    },
+    {
+      id: 'doc2',
+      type: 'learning',
+      content: 'Content 2',
+      source_file: 'f2.md',
+      concepts: ['pattern'],
+      score: 0.6,
+      source: 'fts' as const,
+    },
   ];
 
   const vectorResults = [
-    { id: 'doc1', type: 'principle', content: 'Content 1', source_file: 'f1.md', concepts: ['trust'], score: 0.9, source: 'vector' as const },
-    { id: 'doc3', type: 'retro', content: 'Content 3', source_file: 'f3.md', concepts: ['decision'], score: 0.7, source: 'vector' as const },
+    {
+      id: 'doc1',
+      type: 'principle',
+      content: 'Content 1',
+      source_file: 'f1.md',
+      concepts: ['trust'],
+      score: 0.9,
+      source: 'vector' as const,
+    },
+    {
+      id: 'doc3',
+      type: 'retro',
+      content: 'Content 3',
+      source_file: 'f3.md',
+      concepts: ['decision'],
+      score: 0.7,
+      source: 'vector' as const,
+    },
   ];
 
   it('should mark duplicates as hybrid', () => {
     const combined = combineResults(ftsResults, vectorResults);
-    const doc1 = combined.find(r => r.id === 'doc1');
+    const doc1 = combined.find((r) => r.id === 'doc1');
     expect(doc1?.source).toBe('hybrid');
     expect(doc1?.ftsScore).toBe(0.8);
     expect(doc1?.vectorScore).toBe(0.9);
@@ -131,17 +163,17 @@ describe('combineResults', () => {
 
   it('should keep FTS-only as fts source', () => {
     const combined = combineResults(ftsResults, vectorResults);
-    expect(combined.find(r => r.id === 'doc2')?.source).toBe('fts');
+    expect(combined.find((r) => r.id === 'doc2')?.source).toBe('fts');
   });
 
   it('should keep vector-only as vector source', () => {
     const combined = combineResults(ftsResults, vectorResults);
-    expect(combined.find(r => r.id === 'doc3')?.source).toBe('vector');
+    expect(combined.find((r) => r.id === 'doc3')?.source).toBe('vector');
   });
 
   it('should apply 10% boost for hybrid results', () => {
     const combined = combineResults(ftsResults, vectorResults, 0.5, 0.5);
-    const doc1 = combined.find(r => r.id === 'doc1');
+    const doc1 = combined.find((r) => r.id === 'doc1');
     // ((0.5 * 0.8) + (0.5 * 0.9)) * 1.1 = 0.935
     expect(doc1?.score).toBeCloseTo(0.935, 2);
   });

@@ -3,9 +3,7 @@ import { oracleFetch } from '../http.ts';
 import { printJson, printSchedule } from '../format.ts';
 
 export function registerSchedule(program: Command): void {
-  const sched = program
-    .command('schedule')
-    .description('View and manage scheduled events');
+  const sched = program.command('schedule').description('View and manage scheduled events');
 
   sched
     .command('list')
@@ -56,9 +54,11 @@ export function registerSchedule(program: Command): void {
     });
 
   // Default action: list
-  sched.action(async (opts) => {
-    const data = await oracleFetch('/api/schedule');
-    if (opts.json) return printJson(data);
-    printSchedule(data.events || data.schedule || [], data.total || 0);
-  }).option('--json', 'Output raw JSON');
+  sched
+    .action(async (opts) => {
+      const data = await oracleFetch('/api/schedule');
+      if (opts.json) return printJson(data);
+      printSchedule(data.events || data.schedule || [], data.total || 0);
+    })
+    .option('--json', 'Output raw JSON');
 }

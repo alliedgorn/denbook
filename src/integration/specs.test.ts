@@ -4,10 +4,10 @@
  *
  * Author: Pip (QA/Chaos Testing)
  */
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 
-const BASE_URL = "http://localhost:47778";
-const TEST_PREFIX = "test_specs_";
+const BASE_URL = 'http://localhost:47778';
+const TEST_PREFIX = 'test_specs_';
 const TEST_RUN_ID = Date.now();
 const createdSpecIds: number[] = [];
 
@@ -20,17 +20,17 @@ async function isServerRunning(): Promise<boolean> {
   }
 }
 
-describe("Specs API Integration", () => {
+describe('Specs API Integration', () => {
   beforeAll(async () => {
     if (!(await isServerRunning())) {
-      throw new Error("Server not running on port 47778");
+      throw new Error('Server not running on port 47778');
     }
   });
 
   afterAll(async () => {
     for (const id of createdSpecIds) {
       try {
-        await fetch(`${BASE_URL}/api/specs/${id}?as=pip`, { method: "DELETE" });
+        await fetch(`${BASE_URL}/api/specs/${id}?as=pip`, { method: 'DELETE' });
       } catch {}
     }
   });
@@ -38,38 +38,36 @@ describe("Specs API Integration", () => {
   // =====================
   // List & Filter
   // =====================
-  describe("List & Filter", () => {
-    test("GET /api/specs returns spec list", async () => {
+  describe('List & Filter', () => {
+    test('GET /api/specs returns spec list', async () => {
       const res = await fetch(`${BASE_URL}/api/specs`);
       expect(res.ok).toBe(true);
       const data = await res.json();
       expect(data.specs).toBeInstanceOf(Array);
     });
 
-    test("GET /api/specs with status filter", async () => {
+    test('GET /api/specs with status filter', async () => {
       const res = await fetch(`${BASE_URL}/api/specs?status=approved`);
       expect(res.ok).toBe(true);
       const data = await res.json();
       expect(data.specs).toBeInstanceOf(Array);
       for (const spec of data.specs) {
-        expect(spec.status).toBe("approved");
+        expect(spec.status).toBe('approved');
       }
     });
 
-    test("GET /api/specs with repo filter", async () => {
+    test('GET /api/specs with repo filter', async () => {
       const res = await fetch(`${BASE_URL}/api/specs?repo=denbook`);
       expect(res.ok).toBe(true);
       const data = await res.json();
       expect(data.specs).toBeInstanceOf(Array);
       for (const spec of data.specs) {
-        expect(spec.repo).toBe("denbook");
+        expect(spec.repo).toBe('denbook');
       }
     });
 
-    test("GET /api/specs with both filters", async () => {
-      const res = await fetch(
-        `${BASE_URL}/api/specs?status=pending&repo=denbook`
-      );
+    test('GET /api/specs with both filters', async () => {
+      const res = await fetch(`${BASE_URL}/api/specs?status=pending&repo=denbook`);
       expect(res.ok).toBe(true);
       const data = await res.json();
       expect(data.specs).toBeInstanceOf(Array);
@@ -85,8 +83,8 @@ describe("Specs API Integration", () => {
   // =====================
   // Spec Detail
   // =====================
-  describe("Spec Detail", () => {
-    test("GET /api/specs/:id returns spec detail", async () => {
+  describe('Spec Detail', () => {
+    test('GET /api/specs/:id returns spec detail', async () => {
       // Get first spec
       const listRes = await fetch(`${BASE_URL}/api/specs`);
       const listData = await listRes.json();
@@ -102,12 +100,12 @@ describe("Specs API Integration", () => {
       expect(data.status).toBeTruthy();
     });
 
-    test("GET /api/specs/99999 returns 404", async () => {
+    test('GET /api/specs/99999 returns 404', async () => {
       const res = await fetch(`${BASE_URL}/api/specs/99999`);
       expect(res.status).toBe(404);
     });
 
-    test("GET /api/specs/:id/content returns raw markdown", async () => {
+    test('GET /api/specs/:id/content returns raw markdown', async () => {
       const listRes = await fetch(`${BASE_URL}/api/specs`);
       const listData = await listRes.json();
       if (listData.specs.length === 0) return;
@@ -123,7 +121,7 @@ describe("Specs API Integration", () => {
       }
     });
 
-    test("GET /api/specs/99999/content returns 404", async () => {
+    test('GET /api/specs/99999/content returns 404', async () => {
       const res = await fetch(`${BASE_URL}/api/specs/99999/content`);
       expect(res.status).toBe(404);
     });
@@ -132,77 +130,77 @@ describe("Specs API Integration", () => {
   // =====================
   // Spec Registration
   // =====================
-  describe("Spec Registration", () => {
-    test("POST /api/specs creates new spec", async () => {
+  describe('Spec Registration', () => {
+    test('POST /api/specs creates new spec', async () => {
       const res = await fetch(`${BASE_URL}/api/specs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          repo: "denbook",
+          repo: 'denbook',
           file_path: `docs/specs/${TEST_PREFIX}${TEST_RUN_ID}.md`,
-          task_id: "T999",
+          task_id: 'T999',
           title: `${TEST_PREFIX}Test Spec`,
-          author: "pip",
+          author: 'pip',
         }),
       });
       expect(res.status).toBe(201);
       const data = await res.json();
       expect(data.id).toBeTruthy();
-      expect(data.status).toBe("pending");
-      expect(data.author).toBe("pip");
+      expect(data.status).toBe('pending');
+      expect(data.author).toBe('pip');
       createdSpecIds.push(data.id);
     });
 
-    test("POST /api/specs rejects missing fields", async () => {
+    test('POST /api/specs rejects missing fields', async () => {
       const res = await fetch(`${BASE_URL}/api/specs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          repo: "denbook",
+          repo: 'denbook',
           // missing file_path, title, author
         }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("POST /api/specs rejects invalid repo", async () => {
+    test('POST /api/specs rejects invalid repo', async () => {
       const res = await fetch(`${BASE_URL}/api/specs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          repo: "evil-repo",
-          file_path: "docs/test.md",
-          title: "Evil Spec",
-          author: "pip",
+          repo: 'evil-repo',
+          file_path: 'docs/test.md',
+          title: 'Evil Spec',
+          author: 'pip',
         }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("POST /api/specs rejects duplicate repo+path", async () => {
+    test('POST /api/specs rejects duplicate repo+path', async () => {
       // Try to register the same spec again
       const res = await fetch(`${BASE_URL}/api/specs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          repo: "denbook",
+          repo: 'denbook',
           file_path: `docs/specs/${TEST_PREFIX}${TEST_RUN_ID}.md`,
           title: `${TEST_PREFIX}Duplicate`,
-          author: "pip",
+          author: 'pip',
         }),
       });
       expect(res.status).toBe(409);
     });
 
-    test("POST /api/specs rejects author mismatch", async () => {
+    test('POST /api/specs rejects author mismatch', async () => {
       const res = await fetch(`${BASE_URL}/api/specs?as=karo`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          repo: "denbook",
+          repo: 'denbook',
           file_path: `docs/specs/${TEST_PREFIX}mismatch_${TEST_RUN_ID}.md`,
-          title: "Mismatch Test",
-          author: "pip",
+          title: 'Mismatch Test',
+          author: 'pip',
         }),
       });
       expect(res.status).toBe(403);
@@ -212,8 +210,8 @@ describe("Specs API Integration", () => {
   // =====================
   // Spec History & Diff
   // =====================
-  describe("History & Diff", () => {
-    test("GET /api/specs/:id/history returns versions", async () => {
+  describe('History & Diff', () => {
+    test('GET /api/specs/:id/history returns versions', async () => {
       const listRes = await fetch(`${BASE_URL}/api/specs`);
       const listData = await listRes.json();
       if (listData.specs.length === 0) return;
@@ -226,12 +224,12 @@ describe("Specs API Integration", () => {
       expect(data.file_path).toBeTruthy();
     });
 
-    test("GET /api/specs/99999/history returns 404", async () => {
+    test('GET /api/specs/99999/history returns 404', async () => {
       const res = await fetch(`${BASE_URL}/api/specs/99999/history`);
       expect(res.status).toBe(404);
     });
 
-    test("GET /api/specs/:id/diff requires from param", async () => {
+    test('GET /api/specs/:id/diff requires from param', async () => {
       const listRes = await fetch(`${BASE_URL}/api/specs`);
       const listData = await listRes.json();
       if (listData.specs.length === 0) return;
@@ -240,41 +238,35 @@ describe("Specs API Integration", () => {
       const res = await fetch(`${BASE_URL}/api/specs/${specId}/diff`);
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data.error).toContain("from");
+      expect(data.error).toContain('from');
     });
 
-    test("GET /api/specs/:id/diff rejects invalid hash", async () => {
+    test('GET /api/specs/:id/diff rejects invalid hash', async () => {
       const listRes = await fetch(`${BASE_URL}/api/specs`);
       const listData = await listRes.json();
       if (listData.specs.length === 0) return;
 
       const specId = listData.specs[0].id;
-      const res = await fetch(
-        `${BASE_URL}/api/specs/${specId}/diff?from=; rm -rf /`
-      );
+      const res = await fetch(`${BASE_URL}/api/specs/${specId}/diff?from=; rm -rf /`);
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data.error).toContain("Invalid commit hash");
+      expect(data.error).toContain('Invalid commit hash');
     });
 
-    test("GET /api/specs/:id/diff with valid hashes", async () => {
+    test('GET /api/specs/:id/diff with valid hashes', async () => {
       const listRes = await fetch(`${BASE_URL}/api/specs`);
       const listData = await listRes.json();
       if (listData.specs.length === 0) return;
 
       // Find a spec with history
       const specId = listData.specs[0].id;
-      const histRes = await fetch(
-        `${BASE_URL}/api/specs/${specId}/history`
-      );
+      const histRes = await fetch(`${BASE_URL}/api/specs/${specId}/history`);
       const histData = await histRes.json();
       if (histData.versions.length < 2) return; // need 2 versions for diff
 
       const from = histData.versions[1].hash;
       const to = histData.versions[0].hash;
-      const res = await fetch(
-        `${BASE_URL}/api/specs/${specId}/diff?from=${from}&to=${to}`
-      );
+      const res = await fetch(`${BASE_URL}/api/specs/${specId}/diff?from=${from}&to=${to}`);
       expect(res.ok).toBe(true);
       const data = await res.json();
       expect(data.from).toBe(from);
@@ -285,47 +277,41 @@ describe("Specs API Integration", () => {
   // =====================
   // Review Workflow
   // =====================
-  describe("Review Workflow", () => {
-    test("POST /api/specs/:id/review requires auth", async () => {
+  describe('Review Workflow', () => {
+    test('POST /api/specs/:id/review requires auth', async () => {
       if (createdSpecIds.length === 0) return;
 
-      const res = await fetch(
-        `${BASE_URL}/api/specs/${createdSpecIds[0]}/review`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "approve" }),
-        }
-      );
+      const res = await fetch(`${BASE_URL}/api/specs/${createdSpecIds[0]}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve' }),
+      });
       expect(res.status).toBe(403);
     });
 
-    test("POST /api/specs/:id/review rejects invalid action", async () => {
+    test('POST /api/specs/:id/review rejects invalid action', async () => {
       if (createdSpecIds.length === 0) return;
 
-      const res = await fetch(
-        `${BASE_URL}/api/specs/${createdSpecIds[0]}/review`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Cookie: "session=gorn",
-          },
-          body: JSON.stringify({ action: "maybe" }),
-        }
-      );
+      const res = await fetch(`${BASE_URL}/api/specs/${createdSpecIds[0]}/review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: 'session=gorn',
+        },
+        body: JSON.stringify({ action: 'maybe' }),
+      });
       // Either 403 (no real session) or 400 (invalid action)
       expect(res.status).toBeGreaterThanOrEqual(400);
     });
 
-    test("POST /api/specs/99999/review returns 404", async () => {
+    test('POST /api/specs/99999/review returns 404', async () => {
       const res = await fetch(`${BASE_URL}/api/specs/99999/review`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          Cookie: "session=gorn",
+          'Content-Type': 'application/json',
+          Cookie: 'session=gorn',
         },
-        body: JSON.stringify({ action: "approve" }),
+        body: JSON.stringify({ action: 'approve' }),
       });
       // 403 (no auth) or 404 (not found)
       expect(res.status).toBeGreaterThanOrEqual(400);
@@ -335,101 +321,97 @@ describe("Specs API Integration", () => {
   // =====================
   // Resubmit
   // =====================
-  describe("Resubmit", () => {
-    test("POST /api/specs/:id/resubmit only works on rejected specs", async () => {
+  describe('Resubmit', () => {
+    test('POST /api/specs/:id/resubmit only works on rejected specs', async () => {
       if (createdSpecIds.length === 0) return;
 
       // Our test spec is pending, not rejected
-      const res = await fetch(
-        `${BASE_URL}/api/specs/${createdSpecIds[0]}/resubmit`,
-        { method: "POST" }
-      );
+      const res = await fetch(`${BASE_URL}/api/specs/${createdSpecIds[0]}/resubmit`, {
+        method: 'POST',
+      });
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data.error).toContain("rejected");
+      expect(data.error).toContain('rejected');
     });
 
-    test("POST /api/specs/99999/resubmit returns 404", async () => {
+    test('POST /api/specs/99999/resubmit returns 404', async () => {
       const res = await fetch(`${BASE_URL}/api/specs/99999/resubmit`, {
-        method: "POST",
+        method: 'POST',
       });
       expect(res.status).toBe(404);
     });
   });
 
   // T#754 / Spec #57 Phase 1 — reopen endpoint + version chain
-  describe("Reopen + Version Chain (Spec #57)", () => {
-    test("POST /api/specs/99999/reopen returns 404", async () => {
+  describe('Reopen + Version Chain (Spec #57)', () => {
+    test('POST /api/specs/99999/reopen returns 404', async () => {
       const res = await fetch(`${BASE_URL}/api/specs/99999/reopen`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ author: "karo", reason: "test" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: 'karo', reason: 'test' }),
       });
       expect(res.status).toBe(404);
     });
 
-    test("POST /api/specs/:id/reopen rejects non-approved specs", async () => {
+    test('POST /api/specs/:id/reopen rejects non-approved specs', async () => {
       if (createdSpecIds.length === 0) return;
       // Test spec is pending, not approved
-      const res = await fetch(
-        `${BASE_URL}/api/specs/${createdSpecIds[0]}/reopen`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ author: "pip", reason: "test" }),
-        }
-      );
+      const res = await fetch(`${BASE_URL}/api/specs/${createdSpecIds[0]}/reopen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: 'pip', reason: 'test' }),
+      });
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data.error).toContain("approved specs");
+      expect(data.error).toContain('approved specs');
     });
 
-    test("POST /api/specs/:id/reopen requires reason", async () => {
+    test('POST /api/specs/:id/reopen requires reason', async () => {
       const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
       const approvedData = await approvedRes.json();
       if (!approvedData.specs || approvedData.specs.length === 0) return;
       const specId = approvedData.specs[0].id;
       const res = await fetch(`${BASE_URL}/api/specs/${specId}/reopen`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ author: "gorn" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: 'gorn' }),
       });
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data.error).toContain("reason required");
+      expect(data.error).toContain('reason required');
     });
 
-    test("POST /api/specs/:id/reopen requires identity", async () => {
+    test('POST /api/specs/:id/reopen requires identity', async () => {
       const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
       const approvedData = await approvedRes.json();
       if (!approvedData.specs || approvedData.specs.length === 0) return;
       const specId = approvedData.specs[0].id;
       const res = await fetch(`${BASE_URL}/api/specs/${specId}/reopen`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: "test" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'test' }),
       });
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data.error).toContain("Identity required");
+      expect(data.error).toContain('Identity required');
     });
 
-    test("POST /api/specs/:id/reopen rejects unauthorized requester", async () => {
+    test('POST /api/specs/:id/reopen rejects unauthorized requester', async () => {
       const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
       const approvedData = await approvedRes.json();
       if (!approvedData.specs || approvedData.specs.length === 0) return;
       const specId = approvedData.specs[0].id;
       // bertus is not author/sable/gorn — should be rejected
       const res = await fetch(`${BASE_URL}/api/specs/${specId}/reopen`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ author: "bertus", reason: "unauthorized test" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: 'bertus', reason: 'unauthorized test' }),
       });
       expect(res.status).toBe(403);
     });
 
     // T#755 / Spec #57 Phase 2 — version endpoints
-    test("GET /api/specs/:id/versions returns version list", async () => {
+    test('GET /api/specs/:id/versions returns version list', async () => {
       const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
       const approvedData = await approvedRes.json();
       if (!approvedData.specs || approvedData.specs.length === 0) return;
@@ -442,7 +424,7 @@ describe("Specs API Integration", () => {
       expect(data.current_version).toBeTruthy();
     });
 
-    test("GET /api/specs/:id/content?version=v1 returns v1 snapshot", async () => {
+    test('GET /api/specs/:id/content?version=v1 returns v1 snapshot', async () => {
       const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
       const approvedData = await approvedRes.json();
       if (!approvedData.specs || approvedData.specs.length === 0) return;
@@ -453,11 +435,11 @@ describe("Specs API Integration", () => {
       const res = await fetch(`${BASE_URL}/api/specs/${specId}/content?version=v1`);
       expect(res.ok).toBe(true);
       const data = await res.json();
-      expect(data.version).toBe("v1");
+      expect(data.version).toBe('v1');
       expect(data.content).toBeTruthy();
     });
 
-    test("GET /api/specs/:id/content?version=v999 returns 404", async () => {
+    test('GET /api/specs/:id/content?version=v999 returns 404', async () => {
       const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
       const approvedData = await approvedRes.json();
       if (!approvedData.specs || approvedData.specs.length === 0) return;
@@ -466,24 +448,24 @@ describe("Specs API Integration", () => {
       expect(res.status).toBe(404);
     });
 
-    test("GET /api/specs/99999/versions returns 404", async () => {
+    test('GET /api/specs/99999/versions returns 404', async () => {
       const res = await fetch(`${BASE_URL}/api/specs/99999/versions`);
       expect(res.status).toBe(404);
     });
 
-    test("POST /api/specs/:id/resubmit on approved spec points at reopen", async () => {
+    test('POST /api/specs/:id/resubmit on approved spec points at reopen', async () => {
       const approvedRes = await fetch(`${BASE_URL}/api/specs?status=approved`);
       const approvedData = await approvedRes.json();
       if (!approvedData.specs || approvedData.specs.length === 0) return;
       const specId = approvedData.specs[0].id;
       const res = await fetch(`${BASE_URL}/api/specs/${specId}/resubmit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ author: "karo" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: 'karo' }),
       });
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data.error).toContain("reopen");
+      expect(data.error).toContain('reopen');
     });
   });
 });

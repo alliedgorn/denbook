@@ -12,7 +12,12 @@ import { db, sqlite, oracleDocuments, indexingStatus } from '../db/index.ts';
 import { REPO_ROOT } from '../config.ts';
 import { logSearch, logDocumentAccess, logLearning } from './logging.ts';
 import type { SearchResult, SearchResponse } from './types.ts';
-import { getVectorStoreByModel, ensureVectorStoreConnected, getEmbeddingModels, EMBEDDING_MODELS } from '../vector/factory.ts';
+import {
+  getVectorStoreByModel,
+  ensureVectorStoreConnected,
+  getEmbeddingModels,
+  EMBEDDING_MODELS,
+} from '../vector/factory.ts';
 import type { VectorStoreAdapter } from '../vector/types.ts';
 import { detectProject } from './project-detect.ts';
 import { coerceConcepts } from '../tools/learn.ts';
@@ -32,15 +37,18 @@ export async function handleSearch(
   limit: number = 10,
   offset: number = 0,
   mode: 'hybrid' | 'fts' | 'vector' = 'hybrid',
-  project?: string,  // If set: project + universal. If null/undefined: universal only
-  cwd?: string,      // Auto-detect project from cwd if project not specified
-  model?: string     // Embedding model: 'bge-m3' (default, multilingual) or 'nomic' (fast)
+  project?: string, // If set: project + universal. If null/undefined: universal only
+  cwd?: string, // Auto-detect project from cwd if project not specified
+  model?: string, // Embedding model: 'bge-m3' (default, multilingual) or 'nomic' (fast)
 ): Promise<SearchResponse & { mode?: string; warning?: string; model?: string }> {
   // Auto-detect project from cwd if not explicitly specified
   const resolvedProject = (project ?? detectProject(cwd))?.toLowerCase() ?? null;
   const startTime = Date.now();
   // Remove FTS5 special characters: ? * + - ( ) ^ ~ " ' : (colon is column prefix)
-  const safeQuery = query.replace(/[?*+\-()^~"':]/g, ' ').replace(/\s+/g, ' ').trim();
+  const safeQuery = query
+    .replace(/[?*+\-()^~"':]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
   let warning: string | undefined;
 
@@ -50,9 +58,7 @@ export async function handleSearch(
 
   // Project filter: if project specified, include project + universal (NULL)
   // If no project, return ALL documents (no filter)
-  const projectFilter = resolvedProject
-    ? '(d.project = ? OR d.project IS NULL)'
-    : '1=1';
+  const projectFilter = resolvedProject ? '(d.project = ? OR d.project IS NULL)' : '1=1';
   const projectParams = resolvedProject ? [resolvedProject] : [];
 
   // FTS5 search must use raw SQL (Drizzle doesn't support virtual tables)
@@ -82,7 +88,7 @@ export async function handleSearch(
         concepts: JSON.parse(row.concepts || '[]'),
         project: row.project,
         source: 'fts' as const,
-        score: normalizeRank(row.score)
+        score: normalizeRank(row.score),
       }));
     } else {
       const countStmt = sqlite.prepare(`
@@ -109,7 +115,7 @@ export async function handleSearch(
         concepts: JSON.parse(row.concepts || '[]'),
         project: row.project,
         source: 'fts' as const,
-        score: normalizeRank(row.score)
+        score: normalizeRank(row.score),
       }));
     }
   }
@@ -136,12 +142,13 @@ export async function handleSearch(
         if (!chromaResults.ids || chromaResults.ids.length === 0) return [];
 
         // Get project metadata
-        const rows = db.select({ id: oracleDocuments.id, project: oracleDocuments.project })
+        const rows = db
+          .select({ id: oracleDocuments.id, project: oracleDocuments.project })
           .from(oracleDocuments)
           .where(inArray(oracleDocuments.id, chromaResults.ids))
           .all();
         const projectMap = new Map<string, string | null>();
-        rows.forEach(r => projectMap.set(r.id, r.project));
+        rows.forEach((r) => projectMap.set(r.id, r.project));
 
         return chromaResults.ids
           .map((id: string, i: number) => {
@@ -158,14 +165,14 @@ export async function handleSearch(
               source: 'vector' as const,
               score: similarity,
               distance,
-              model: modelName
+              model: modelName,
             };
           })
-          .filter(r => {
+          .filter((r) => {
             if (!resolvedProject) return true;
             return r.project === resolvedProject || r.project === null;
           });
-      })
+      }),
     );
 
     // Merge results from all models
@@ -190,16 +197,20 @@ export async function handleSearch(
           bestByDoc.set(r.id, {
             ...r,
             score: Math.min(1, (r.score || 0) + multiBoost),
-            source: existing ? 'hybrid' as const : r.source,
+            source: existing ? ('hybrid' as const) : r.source,
           });
         }
       }
       vectorResults = Array.from(bestByDoc.values());
-      console.log(`[Multi] Merged ${vectorResults.length} unique results from ${modelsToQuery.length} models`);
+      console.log(
+        `[Multi] Merged ${vectorResults.length} unique results from ${modelsToQuery.length} models`,
+      );
     }
 
     if (vectorResults.length > 0) {
-      console.log(`[Vector] ${vectorResults.length} results, top scores: ${vectorResults.slice(0, 3).map(r => r.score?.toFixed(3))}`);
+      console.log(
+        `[Vector] ${vectorResults.length} results, top scores: ${vectorResults.slice(0, 3).map((r) => r.score?.toFixed(3))}`,
+      );
     }
   }
 
@@ -214,7 +225,10 @@ export async function handleSearch(
       const stats = await client.getStats();
       if (stats.count > 0) total = stats.count;
     } catch (error) {
-      console.warn('[Hybrid] getStats for vector-only total failed:', error instanceof Error ? error.message : String(error));
+      console.warn(
+        '[Hybrid] getStats for vector-only total failed:',
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
@@ -224,7 +238,7 @@ export async function handleSearch(
   // Log search
   const searchTime = Date.now() - startTime;
   logSearch(query, type, mode, total, searchTime, results);
-  results.forEach(r => logDocumentAccess(r.id, 'search'));
+  results.forEach((r) => logDocumentAccess(r.id, 'search'));
 
   return {
     results,
@@ -233,7 +247,7 @@ export async function handleSearch(
     limit,
     mode,
     ...(model === 'multi' ? { model: 'multi' } : model && EMBEDDING_MODELS[model] ? { model } : {}),
-    ...(warning && { warning })
+    ...(warning && { warning }),
   };
 }
 
@@ -269,7 +283,7 @@ function combineSearchResults(fts: SearchResult[], vector: SearchResult[]): Sear
         score: Math.min(1, maxScore + bonus), // Cap at 1.0
         source: 'hybrid' as const,
         distance: r.distance,
-        model: r.model
+        model: r.model,
       });
     } else {
       seen.set(r.id, r);
@@ -285,17 +299,15 @@ function combineSearchResults(fts: SearchResult[], vector: SearchResult[]): Sear
  */
 export function handleReflect() {
   // Get random document using Drizzle
-  const randomDoc = db.select({
-    id: oracleDocuments.id,
-    type: oracleDocuments.type,
-    sourceFile: oracleDocuments.sourceFile,
-    concepts: oracleDocuments.concepts
-  })
+  const randomDoc = db
+    .select({
+      id: oracleDocuments.id,
+      type: oracleDocuments.type,
+      sourceFile: oracleDocuments.sourceFile,
+      concepts: oracleDocuments.concepts,
+    })
     .from(oracleDocuments)
-    .where(or(
-      eq(oracleDocuments.type, 'principle'),
-      eq(oracleDocuments.type, 'learning')
-    ))
+    .where(or(eq(oracleDocuments.type, 'principle'), eq(oracleDocuments.type, 'learning')))
     .orderBy(sql`RANDOM()`)
     .limit(1)
     .get();
@@ -305,9 +317,11 @@ export function handleReflect() {
   }
 
   // Get content from FTS (must use raw SQL)
-  const content = sqlite.prepare(`
+  const content = sqlite
+    .prepare(`
     SELECT content FROM oracle_fts WHERE id = ?
-  `).get(randomDoc.id) as { content: string } | undefined;
+  `)
+    .get(randomDoc.id) as { content: string } | undefined;
 
   if (!content) {
     return { error: 'Document content not found in FTS index' };
@@ -318,7 +332,7 @@ export function handleReflect() {
     type: randomDoc.type,
     content: content.content,
     source_file: randomDoc.sourceFile,
-    concepts: JSON.parse(randomDoc.concepts || '[]')
+    concepts: JSON.parse(randomDoc.concepts || '[]'),
   };
 }
 
@@ -329,7 +343,12 @@ export function handleReflect() {
  * Note: Uses raw SQL for FTS JOIN since Drizzle doesn't support virtual tables.
  * Count queries use Drizzle where possible.
  */
-export function handleList(type: string = 'all', limit: number = 10, offset: number = 0, groupByFile: boolean = true): SearchResponse {
+export function handleList(
+  type: string = 'all',
+  limit: number = 10,
+  offset: number = 0,
+  groupByFile: boolean = true,
+): SearchResponse {
   // Validate
   if (limit < 1 || limit > 100) limit = 10;
   if (offset < 0) offset = 0;
@@ -338,7 +357,8 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
     // Group by source_file to avoid duplicate entries from same file
     if (type === 'all') {
       // Count distinct files using Drizzle
-      const countResult = db.select({ total: sql<number>`count(distinct ${oracleDocuments.sourceFile})` })
+      const countResult = db
+        .select({ total: sql<number>`count(distinct ${oracleDocuments.sourceFile})` })
         .from(oracleDocuments)
         .get();
       const total = countResult?.total || 0;
@@ -359,13 +379,14 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
         source_file: row.source_file,
         concepts: row.concepts ? JSON.parse(row.concepts) : [],
         project: row.project,
-        indexed_at: row.indexed_at
+        indexed_at: row.indexed_at,
       }));
 
       return { results, total, offset, limit };
     } else {
       // Count distinct files for type using Drizzle
-      const countResult = db.select({ total: sql<number>`count(distinct ${oracleDocuments.sourceFile})` })
+      const countResult = db
+        .select({ total: sql<number>`count(distinct ${oracleDocuments.sourceFile})` })
         .from(oracleDocuments)
         .where(eq(oracleDocuments.type, type))
         .get();
@@ -388,7 +409,7 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
         source_file: row.source_file,
         concepts: JSON.parse(row.concepts || '[]'),
         project: row.project,
-        indexed_at: row.indexed_at
+        indexed_at: row.indexed_at,
       }));
 
       return { results, total, offset, limit };
@@ -398,9 +419,7 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
   // Original behavior without grouping
   if (type === 'all') {
     // Count using Drizzle
-    const countResult = db.select({ total: sql<number>`count(*)` })
-      .from(oracleDocuments)
-      .get();
+    const countResult = db.select({ total: sql<number>`count(*)` }).from(oracleDocuments).get();
     const total = countResult?.total || 0;
 
     // Need raw SQL for FTS JOIN
@@ -418,13 +437,14 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
       source_file: row.source_file,
       concepts: row.concepts ? JSON.parse(row.concepts) : [],
       project: row.project,
-      indexed_at: row.indexed_at
+      indexed_at: row.indexed_at,
     }));
 
     return { results, total, offset, limit };
   } else {
     // Count using Drizzle
-    const countResult = db.select({ total: sql<number>`count(*)` })
+    const countResult = db
+      .select({ total: sql<number>`count(*)` })
       .from(oracleDocuments)
       .where(eq(oracleDocuments.type, type))
       .get();
@@ -446,7 +466,7 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
       source_file: row.source_file,
       concepts: JSON.parse(row.concepts || '[]'),
       project: row.project,
-      indexed_at: row.indexed_at
+      indexed_at: row.indexed_at,
     }));
 
     return { results, total, offset, limit };
@@ -458,22 +478,22 @@ export function handleList(type: string = 'all', limit: number = 10, offset: num
  */
 export function handleStats(dbPath: string) {
   // Total documents using Drizzle
-  const totalDocsResult = db.select({ count: sql<number>`count(*)` })
-    .from(oracleDocuments)
-    .get();
+  const totalDocsResult = db.select({ count: sql<number>`count(*)` }).from(oracleDocuments).get();
   const totalDocs = totalDocsResult?.count || 0;
 
   // Count by type using Drizzle
-  const byTypeResults = db.select({
-    type: oracleDocuments.type,
-    count: sql<number>`count(*)`
-  })
+  const byTypeResults = db
+    .select({
+      type: oracleDocuments.type,
+      count: sql<number>`count(*)`,
+    })
     .from(oracleDocuments)
     .groupBy(oracleDocuments.type)
     .all();
 
   // Get last indexed timestamp using Drizzle
-  const lastIndexedResult = db.select({ lastIndexed: sql<number | null>`max(${oracleDocuments.indexedAt})` })
+  const lastIndexedResult = db
+    .select({ lastIndexed: sql<number | null>`max(${oracleDocuments.indexedAt})` })
     .from(oracleDocuments)
     .get();
 
@@ -487,14 +507,20 @@ export function handleStats(dbPath: string) {
     : null;
 
   // Get indexing status using Drizzle
-  let idxStatus = { is_indexing: false, progress_current: 0, progress_total: 0, completed_at: null as number | null };
+  let idxStatus = {
+    is_indexing: false,
+    progress_current: 0,
+    progress_total: 0,
+    completed_at: null as number | null,
+  };
   try {
-    const status = db.select({
-      isIndexing: indexingStatus.isIndexing,
-      progressCurrent: indexingStatus.progressCurrent,
-      progressTotal: indexingStatus.progressTotal,
-      completedAt: indexingStatus.completedAt
-    })
+    const status = db
+      .select({
+        isIndexing: indexingStatus.isIndexing,
+        progressCurrent: indexingStatus.progressCurrent,
+        progressTotal: indexingStatus.progressTotal,
+        completedAt: indexingStatus.completedAt,
+      })
       .from(indexingStatus)
       .where(eq(indexingStatus.id, 1))
       .get();
@@ -504,7 +530,7 @@ export function handleStats(dbPath: string) {
         is_indexing: status.isIndexing === 1,
         progress_current: status.progressCurrent || 0,
         progress_total: status.progressTotal || 0,
-        completed_at: status.completedAt
+        completed_at: status.completedAt,
       };
     }
   } catch (e) {
@@ -512,10 +538,11 @@ export function handleStats(dbPath: string) {
   }
 
   // Unique files by type (deduped by source_file)
-  const uniqueByType = db.select({
-    type: oracleDocuments.type,
-    count: sql<number>`count(DISTINCT ${oracleDocuments.sourceFile})`
-  })
+  const uniqueByType = db
+    .select({
+      type: oracleDocuments.type,
+      count: sql<number>`count(DISTINCT ${oracleDocuments.sourceFile})`,
+    })
     .from(oracleDocuments)
     .groupBy(oracleDocuments.type)
     .all();
@@ -528,15 +555,18 @@ export function handleStats(dbPath: string) {
     index_age_hours: indexAgeHours ? Math.round(indexAgeHours * 10) / 10 : null,
     is_stale: indexAgeHours ? indexAgeHours > 24 : true,
     is_indexing: idxStatus.is_indexing,
-    indexing_progress: idxStatus.is_indexing ? {
-      current: idxStatus.progress_current,
-      total: idxStatus.progress_total,
-      percent: idxStatus.progress_total > 0
-        ? Math.round((idxStatus.progress_current / idxStatus.progress_total) * 100)
-        : 0
-    } : null,
+    indexing_progress: idxStatus.is_indexing
+      ? {
+          current: idxStatus.progress_current,
+          total: idxStatus.progress_total,
+          percent:
+            idxStatus.progress_total > 0
+              ? Math.round((idxStatus.progress_current / idxStatus.progress_total) * 100)
+              : 0,
+        }
+      : null,
     indexing_completed_at: idxStatus.completed_at,
-    database: dbPath
+    database: dbPath,
   };
 }
 
@@ -553,25 +583,28 @@ export function handleGraph(limitPerType = 310) {
     type: oracleDocuments.type,
     sourceFile: oracleDocuments.sourceFile,
     concepts: oracleDocuments.concepts,
-    project: oracleDocuments.project
+    project: oracleDocuments.project,
   };
 
   // Get random sample from each type
-  const principles = db.select(selectFields)
+  const principles = db
+    .select(selectFields)
     .from(oracleDocuments)
     .where(eq(oracleDocuments.type, 'principle'))
     .orderBy(sql`RANDOM()`)
     .limit(perType)
     .all();
 
-  const learnings = db.select(selectFields)
+  const learnings = db
+    .select(selectFields)
     .from(oracleDocuments)
     .where(eq(oracleDocuments.type, 'learning'))
     .orderBy(sql`RANDOM()`)
     .limit(perType)
     .all();
 
-  const retros = db.select(selectFields)
+  const retros = db
+    .select(selectFields)
     .from(oracleDocuments)
     .where(eq(oracleDocuments.type, 'retro'))
     .orderBy(sql`RANDOM()`)
@@ -581,12 +614,12 @@ export function handleGraph(limitPerType = 310) {
   const docs = [...principles, ...learnings, ...retros];
 
   // Build nodes
-  const nodes = docs.map(doc => ({
+  const nodes = docs.map((doc) => ({
     id: doc.id,
     type: doc.type,
     source_file: doc.sourceFile,
     project: doc.project,
-    concepts: JSON.parse(doc.concepts || '[]')
+    concepts: JSON.parse(doc.concepts || '[]'),
   }));
 
   // Build links based on shared concepts (require 2+ shared for stronger connections)
@@ -594,7 +627,7 @@ export function handleGraph(limitPerType = 310) {
   const MAX_LINKS = 5000;
 
   // Pre-compute concept sets
-  const conceptSets = nodes.map(n => new Set(n.concepts));
+  const conceptSets = nodes.map((n) => new Set(n.concepts));
 
   for (let i = 0; i < nodes.length && links.length < MAX_LINKS; i++) {
     for (let j = i + 1; j < nodes.length && links.length < MAX_LINKS; j++) {
@@ -604,7 +637,7 @@ export function handleGraph(limitPerType = 310) {
         links.push({
           source: nodes[i].id,
           target: nodes[j].id,
-          weight: sharedCount
+          weight: sharedCount,
         });
       }
     }
@@ -619,7 +652,7 @@ export function handleGraph(limitPerType = 310) {
 export async function handleSimilar(
   docId: string,
   limit: number = 5,
-  model?: string
+  model?: string,
 ): Promise<{ results: SearchResult[]; docId: string }> {
   try {
     const client = await getVectorStore(model && EMBEDDING_MODELS[model] ? model : undefined);
@@ -630,18 +663,19 @@ export async function handleSimilar(
     }
 
     // Enrich with SQLite data (concepts, project)
-    const rows = db.select({
-      id: oracleDocuments.id,
-      type: oracleDocuments.type,
-      sourceFile: oracleDocuments.sourceFile,
-      concepts: oracleDocuments.concepts,
-      project: oracleDocuments.project
-    })
+    const rows = db
+      .select({
+        id: oracleDocuments.id,
+        type: oracleDocuments.type,
+        sourceFile: oracleDocuments.sourceFile,
+        concepts: oracleDocuments.concepts,
+        project: oracleDocuments.project,
+      })
       .from(oracleDocuments)
       .where(inArray(oracleDocuments.id, chromaResults.ids))
       .all();
 
-    const docMap = new Map(rows.map(r => [r.id, r]));
+    const docMap = new Map(rows.map((r) => [r.id, r]));
 
     const results: SearchResult[] = chromaResults.ids.map((id: string, i: number) => {
       const distance = chromaResults.distances?.[i] || 1;
@@ -656,7 +690,7 @@ export async function handleSimilar(
         concepts: doc?.concepts ? JSON.parse(doc.concepts) : [],
         project: doc?.project,
         source: 'vector' as const,
-        score: similarity
+        score: similarity,
       };
     });
 
@@ -703,20 +737,21 @@ export async function handleMap(): Promise<{
   total: number;
 }> {
   // Return cached result if fresh
-  if (mapCache && (Date.now() - mapCache.timestamp) < MAP_CACHE_TTL) {
+  if (mapCache && Date.now() - mapCache.timestamp < MAP_CACHE_TTL) {
     return mapCache.data;
   }
 
   try {
     // Get all docs from SQLite (no ChromaDB dependency)
-    const allDocs = db.select({
-      id: oracleDocuments.id,
-      type: oracleDocuments.type,
-      sourceFile: oracleDocuments.sourceFile,
-      concepts: oracleDocuments.concepts,
-      project: oracleDocuments.project,
-      createdAt: oracleDocuments.createdAt
-    })
+    const allDocs = db
+      .select({
+        id: oracleDocuments.id,
+        type: oracleDocuments.type,
+        sourceFile: oracleDocuments.sourceFile,
+        concepts: oracleDocuments.concepts,
+        project: oracleDocuments.project,
+        createdAt: oracleDocuments.createdAt,
+      })
       .from(oracleDocuments)
       .all();
 
@@ -725,15 +760,18 @@ export async function handleMap(): Promise<{
     }
 
     // Deduplicate by source_file — merge concepts and collect chunk IDs
-    const fileMap = new Map<string, {
-      id: string;
-      type: string;
-      sourceFile: string;
-      allConcepts: string[];
-      chunkIds: string[];
-      project: string | null;
-      createdAt: number | null;
-    }>();
+    const fileMap = new Map<
+      string,
+      {
+        id: string;
+        type: string;
+        sourceFile: string;
+        allConcepts: string[];
+        chunkIds: string[];
+        project: string | null;
+        createdAt: number | null;
+      }
+    >();
     for (const doc of allDocs) {
       const key = doc.sourceFile;
       const existing = fileMap.get(key);
@@ -746,7 +784,7 @@ export async function handleMap(): Promise<{
           allConcepts: concepts,
           chunkIds: [doc.id],
           project: doc.project || null,
-          createdAt: doc.createdAt
+          createdAt: doc.createdAt,
         });
       } else {
         existing.chunkIds.push(doc.id);
@@ -803,7 +841,7 @@ export async function handleMap(): Promise<{
         project: doc.project,
         x,
         y,
-        created_at: doc.createdAt ? new Date(doc.createdAt).toISOString() : null
+        created_at: doc.createdAt ? new Date(doc.createdAt).toISOString() : null,
       };
     });
 
@@ -826,7 +864,6 @@ function simpleHash(str: string): number {
   }
   return ((hash >>> 0) % 10000) / 10000;
 }
-
 
 // ============================================================================
 // 3D Knowledge Map — Real PCA from LanceDB embeddings
@@ -869,7 +906,7 @@ export async function handleMap3d(model?: string): Promise<{
 }> {
   const modelKey = model || 'bge-m3';
   const cached = map3dCaches.get(modelKey);
-  if (cached && (Date.now() - cached.timestamp) < MAP3D_CACHE_TTL) {
+  if (cached && Date.now() - cached.timestamp < MAP3D_CACHE_TTL) {
     return cached.data;
   }
 
@@ -890,7 +927,16 @@ export async function handleMap3d(model?: string): Promise<{
     console.timeEnd('[Map3D] Load embeddings');
 
     if (embeddings.length === 0) {
-      return { documents: [], total: 0, pca_info: { variance_explained: [], n_vectors: 0, n_dimensions: 0, computed_at: new Date().toISOString() } };
+      return {
+        documents: [],
+        total: 0,
+        pca_info: {
+          variance_explained: [],
+          n_vectors: 0,
+          n_dimensions: 0,
+          computed_at: new Date().toISOString(),
+        },
+      };
     }
 
     const n = embeddings.length;
@@ -899,26 +945,30 @@ export async function handleMap3d(model?: string): Promise<{
 
     // Step 2: Build metadata lookup from SQLite
     console.time('[Map3D] Metadata lookup');
-    const docLookup = new Map<string, {
-      type: string;
-      sourceFile: string;
-      concepts: string[];
-      project: string | null;
-      createdAt: number | null;
-    }>();
+    const docLookup = new Map<
+      string,
+      {
+        type: string;
+        sourceFile: string;
+        concepts: string[];
+        project: string | null;
+        createdAt: number | null;
+      }
+    >();
 
     // Batch query SQLite for all doc IDs
     const batchSize = 500;
     for (let i = 0; i < ids.length; i += batchSize) {
       const batch = ids.slice(i, i + batchSize);
-      const rows = db.select({
-        id: oracleDocuments.id,
-        type: oracleDocuments.type,
-        sourceFile: oracleDocuments.sourceFile,
-        concepts: oracleDocuments.concepts,
-        project: oracleDocuments.project,
-        createdAt: oracleDocuments.createdAt,
-      })
+      const rows = db
+        .select({
+          id: oracleDocuments.id,
+          type: oracleDocuments.type,
+          sourceFile: oracleDocuments.sourceFile,
+          concepts: oracleDocuments.concepts,
+          project: oracleDocuments.project,
+          createdAt: oracleDocuments.createdAt,
+        })
         .from(oracleDocuments)
         .where(inArray(oracleDocuments.id, batch))
         .all();
@@ -937,15 +987,18 @@ export async function handleMap3d(model?: string): Promise<{
 
     // Step 3: Deduplicate by source_file (average embeddings for multi-chunk files)
     console.time('[Map3D] Dedup by file');
-    const fileGroups = new Map<string, {
-      ids: string[];
-      vectors: number[][];
-      type: string;
-      sourceFile: string;
-      concepts: string[];
-      project: string | null;
-      createdAt: number | null;
-    }>();
+    const fileGroups = new Map<
+      string,
+      {
+        ids: string[];
+        vectors: number[][];
+        type: string;
+        sourceFile: string;
+        concepts: string[];
+        project: string | null;
+        createdAt: number | null;
+      }
+    >();
 
     for (let i = 0; i < n; i++) {
       const id = ids[i];
@@ -978,7 +1031,7 @@ export async function handleMap3d(model?: string): Promise<{
 
     // Average the vectors for each file
     const files = Array.from(fileGroups.values());
-    const avgVectors: number[][] = files.map(f => {
+    const avgVectors: number[][] = files.map((f) => {
       if (f.vectors.length === 1) return f.vectors[0];
       const avg = new Array(d).fill(0);
       for (const v of f.vectors) {
@@ -1005,7 +1058,7 @@ export async function handleMap3d(model?: string): Promise<{
     for (let j = 0; j < d; j++) mean[j] /= nFiles;
 
     // 4b. Center the data (in-place for memory efficiency)
-    const centered = avgVectors.map(v => {
+    const centered = avgVectors.map((v) => {
       const c = new Float64Array(d);
       for (let j = 0; j < d; j++) c[j] = v[j] - mean[j];
       return c;
@@ -1093,10 +1146,12 @@ export async function handleMap3d(model?: string): Promise<{
 
     // Compute variance explained
     const totalVariance = eigenvalues.reduce((a, b) => a + b, 0);
-    const varianceExplained = eigenvalues.map(e => +(e / (totalVariance || 1)).toFixed(4));
+    const varianceExplained = eigenvalues.map((e) => +(e / (totalVariance || 1)).toFixed(4));
 
     console.timeEnd('[Map3D] PCA');
-    console.error(`[Map3D] Variance explained: ${varianceExplained.map(v => (v * 100).toFixed(1) + '%').join(', ')}`);
+    console.error(
+      `[Map3D] Variance explained: ${varianceExplained.map((v) => (v * 100).toFixed(1) + '%').join(', ')}`,
+    );
 
     // Step 5: Project all vectors onto 3 PCs
     console.time('[Map3D] Project');
@@ -1104,7 +1159,9 @@ export async function handleMap3d(model?: string): Promise<{
 
     for (let i = 0; i < nFiles; i++) {
       const v = centered[i];
-      let x = 0, y = 0, z = 0;
+      let x = 0,
+        y = 0,
+        z = 0;
       for (let j = 0; j < d; j++) {
         x += v[j] * components[0][j];
         y += v[j] * components[1][j];
@@ -1114,13 +1171,19 @@ export async function handleMap3d(model?: string): Promise<{
     }
 
     // Normalize to [-1, 1] range for the frontend
-    let minX = Infinity, maxX = -Infinity;
-    let minY = Infinity, maxY = -Infinity;
-    let minZ = Infinity, maxZ = -Infinity;
+    let minX = Infinity,
+      maxX = -Infinity;
+    let minY = Infinity,
+      maxY = -Infinity;
+    let minZ = Infinity,
+      maxZ = -Infinity;
     for (const p of projected) {
-      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-      if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+      if (p.z < minZ) minZ = p.z;
+      if (p.z > maxZ) maxZ = p.z;
     }
     const rangeX = maxX - minX || 1;
     const rangeY = maxY - minY || 1;
@@ -1182,11 +1245,23 @@ export async function handleMap3d(model?: string): Promise<{
  */
 export async function handleVectorStats(): Promise<{
   vector: { enabled: boolean; count: number; collection: string };
-  vectors?: Array<{ key: string; model: string; collection: string; count: number; enabled: boolean }>;
+  vectors?: Array<{
+    key: string;
+    model: string;
+    collection: string;
+    count: number;
+    enabled: boolean;
+  }>;
 }> {
   const timeout = parseInt(process.env.ORACLE_CHROMA_TIMEOUT || '5000', 10);
   const models = getEmbeddingModels();
-  const engines: Array<{ key: string; model: string; collection: string; count: number; enabled: boolean }> = [];
+  const engines: Array<{
+    key: string;
+    model: string;
+    collection: string;
+    count: number;
+    enabled: boolean;
+  }> = [];
 
   // Query all registered engines in parallel
   await Promise.all(
@@ -1196,23 +1271,35 @@ export async function handleVectorStats(): Promise<{
         const stats = await Promise.race([
           store.getStats(),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('timeout')), timeout)
+            setTimeout(() => reject(new Error('timeout')), timeout),
           ),
         ]);
-        engines.push({ key, model: preset.model, collection: preset.collection, count: stats.count, enabled: true });
+        engines.push({
+          key,
+          model: preset.model,
+          collection: preset.collection,
+          count: stats.count,
+          enabled: true,
+        });
       } catch {
-        engines.push({ key, model: preset.model, collection: preset.collection, count: 0, enabled: false });
+        engines.push({
+          key,
+          model: preset.model,
+          collection: preset.collection,
+          count: 0,
+          enabled: false,
+        });
       }
-    })
+    }),
   );
 
   // Primary = bge-m3 (backward compat)
-  const primary = engines.find(e => e.key === 'bge-m3') || engines[0];
+  const primary = engines.find((e) => e.key === 'bge-m3') || engines[0];
   return {
     vector: {
       enabled: primary?.enabled ?? false,
       count: primary?.count ?? 0,
-      collection: primary?.collection ?? 'oracle_knowledge_bge_m3'
+      collection: primary?.collection ?? 'oracle_knowledge_bge_m3',
     },
     vectors: engines,
   };
@@ -1230,7 +1317,7 @@ export function handleLearn(
   concepts?: string[],
   origin?: string,
   project?: string,
-  cwd?: string
+  cwd?: string,
 ) {
   // Auto-detect project from cwd if not explicitly specified
   const resolvedProject = (project ?? detectProject(cwd))?.toLowerCase() ?? null;
@@ -1274,7 +1361,7 @@ export function handleLearn(
     '',
     '---',
     '*Added via Oracle Learn*',
-    ''
+    '',
   ].join('\n');
 
   // Write file
@@ -1286,28 +1373,28 @@ export function handleLearn(
   const conceptsList = coerceConcepts(concepts);
 
   // Insert into database with provenance using Drizzle
-  db.insert(oracleDocuments).values({
-    id,
-    type: 'learning',
-    sourceFile: `ψ/memory/learnings/${filename}`,
-    concepts: JSON.stringify(conceptsList),
-    createdAt: now.getTime(),
-    updatedAt: now.getTime(),
-    indexedAt: now.getTime(),
-    origin: origin || null,          // origin: null = universal/mother
-    project: resolvedProject || null, // project: null = universal (auto-detected from cwd)
-    createdBy: 'oracle_learn'
-  }).run();
+  db.insert(oracleDocuments)
+    .values({
+      id,
+      type: 'learning',
+      sourceFile: `ψ/memory/learnings/${filename}`,
+      concepts: JSON.stringify(conceptsList),
+      createdAt: now.getTime(),
+      updatedAt: now.getTime(),
+      indexedAt: now.getTime(),
+      origin: origin || null, // origin: null = universal/mother
+      project: resolvedProject || null, // project: null = universal (auto-detected from cwd)
+      createdBy: 'oracle_learn',
+    })
+    .run();
 
   // Insert into FTS (must use raw SQL - Drizzle doesn't support virtual tables)
-  sqlite.prepare(`
+  sqlite
+    .prepare(`
     INSERT INTO oracle_fts (id, content, concepts)
     VALUES (?, ?, ?)
-  `).run(
-    id,
-    content,
-    conceptsList.join(' ')
-  );
+  `)
+    .run(id, content, conceptsList.join(' '));
 
   // Log the learning
   logLearning(id, pattern, source || 'Oracle Learn', conceptsList);
@@ -1315,6 +1402,6 @@ export function handleLearn(
   return {
     success: true,
     file: `ψ/memory/learnings/${filename}`,
-    id
+    id,
   };
 }

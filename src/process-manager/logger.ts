@@ -40,7 +40,7 @@ export const logger: Logger = {
   },
   success(category, message, data) {
     console.log(`[OK] [${category}] ${message}${formatData(data)}`);
-  }
+  },
 };
 
 // Allow users to replace the logger

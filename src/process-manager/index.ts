@@ -27,7 +27,7 @@ export {
   createSignalHandler,
   registerSignalHandlers,
   type PidInfo,
-  type SpawnDaemonOptions
+  type SpawnDaemonOptions,
 } from './ProcessManager.ts';
 
 // Health Monitoring
@@ -38,7 +38,7 @@ export {
   httpShutdown,
   getWorkerStatus,
   getWorkerVersion,
-  type HealthCheckOptions
+  type HealthCheckOptions,
 } from './HealthMonitor.ts';
 
 // Graceful Shutdown
@@ -47,5 +47,5 @@ export {
   createShutdownHandler,
   type GracefulShutdownConfig,
   type ShutdownableService,
-  type CloseableResource
+  type CloseableResource,
 } from './GracefulShutdown.ts';

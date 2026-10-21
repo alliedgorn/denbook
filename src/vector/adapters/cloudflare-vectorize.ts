@@ -11,7 +11,12 @@
  * Model: @cf/baai/bge-m3 (multilingual, 1024 dimensions)
  */
 
-import type { VectorStoreAdapter, VectorDocument, VectorQueryResult, EmbeddingProvider } from '../types.ts';
+import type {
+  VectorStoreAdapter,
+  VectorDocument,
+  VectorQueryResult,
+  EmbeddingProvider,
+} from '../types.ts';
 
 const CF_MODEL = '@cf/baai/bge-m3';
 const CF_DIMENSIONS = 1024;
@@ -34,7 +39,9 @@ export class CloudflareAIEmbeddings implements EmbeddingProvider {
     this.model = config.model || process.env.ORACLE_EMBEDDING_MODEL || CF_MODEL;
 
     if (!this.accountId || !this.apiToken) {
-      throw new Error('CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN required for Cloudflare AI embeddings');
+      throw new Error(
+        'CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN required for Cloudflare AI embeddings',
+      );
     }
   }
 
@@ -47,18 +54,18 @@ export class CloudflareAIEmbeddings implements EmbeddingProvider {
     for (let i = 0; i < texts.length; i += BATCH_SIZE) {
       const batch = texts.slice(i, i + BATCH_SIZE);
       // Truncate each text to ~3000 chars (safe for Thai)
-      const truncated = batch.map(t => t.length > 3000 ? t.slice(0, 3000) : t);
+      const truncated = batch.map((t) => (t.length > 3000 ? t.slice(0, 3000) : t));
 
       const response = await fetch(
         `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/ai/run/${this.model}`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${this.apiToken}`,
+            Authorization: `Bearer ${this.apiToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ text: truncated }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -66,7 +73,7 @@ export class CloudflareAIEmbeddings implements EmbeddingProvider {
         throw new Error(`Cloudflare AI error: ${error}`);
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         result: { shape: number[]; data: number[][] };
         success: boolean;
       };
@@ -98,7 +105,7 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
   constructor(
     indexName: string,
     embedder: EmbeddingProvider,
-    config: { accountId?: string; apiToken?: string } = {}
+    config: { accountId?: string; apiToken?: string } = {},
   ) {
     this.indexName = indexName;
     this.embedder = embedder;
@@ -116,7 +123,7 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
     const response = await fetch(url, {
       method,
       headers: {
-        'Authorization': `Bearer ${this.apiToken}`,
+        Authorization: `Bearer ${this.apiToken}`,
         'Content-Type': 'application/json',
       },
       ...(body && { body: JSON.stringify(body) }),
@@ -136,7 +143,9 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
       await this.cfApi('');
       console.log(`[CF Vectorize] Connected to index '${this.indexName}'`);
     } catch (e) {
-      throw new Error(`Failed to connect to Vectorize index '${this.indexName}': ${e instanceof Error ? e.message : String(e)}`);
+      throw new Error(
+        `Failed to connect to Vectorize index '${this.indexName}': ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
@@ -156,7 +165,7 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
       const response = await fetch(createUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiToken}`,
+          Authorization: `Bearer ${this.apiToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -173,7 +182,9 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
         throw new Error(`Failed to create Vectorize index: ${error}`);
       }
 
-      console.log(`[CF Vectorize] Created index '${this.indexName}' (${this.embedder.dimensions} dims)`);
+      console.log(
+        `[CF Vectorize] Created index '${this.indexName}' (${this.embedder.dimensions} dims)`,
+      );
     }
   }
 
@@ -182,18 +193,21 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
       const url = `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/vectorize/v2/indexes/${this.indexName}`;
       await fetch(url, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${this.apiToken}` },
+        headers: { Authorization: `Bearer ${this.apiToken}` },
       });
       console.log(`[CF Vectorize] Deleted index '${this.indexName}'`);
     } catch (e) {
-      console.warn('[CF Vectorize] deleteCollection failed:', e instanceof Error ? e.message : String(e));
+      console.warn(
+        '[CF Vectorize] deleteCollection failed:',
+        e instanceof Error ? e.message : String(e),
+      );
     }
   }
 
   async addDocuments(docs: VectorDocument[]): Promise<void> {
     if (docs.length === 0) return;
 
-    const texts = docs.map(d => d.document);
+    const texts = docs.map((d) => d.document);
     const embeddings = await this.embedder.embed(texts);
 
     // Vectorize upsert in batches (max 1000 per call)
@@ -207,13 +221,13 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
       }));
 
       // Vectorize uses NDJSON for vector upsert
-      const ndjson = vectors.map(v => JSON.stringify(v)).join('\n');
+      const ndjson = vectors.map((v) => JSON.stringify(v)).join('\n');
       const url = `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/vectorize/v2/indexes/${this.indexName}/upsert`;
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiToken}`,
+          Authorization: `Bearer ${this.apiToken}`,
           'Content-Type': 'application/x-ndjson',
         },
         body: ndjson,
@@ -228,7 +242,11 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
     console.log(`[CF Vectorize] Added ${docs.length} documents`);
   }
 
-  async query(text: string, limit: number = 10, where?: Record<string, any>): Promise<VectorQueryResult> {
+  async query(
+    text: string,
+    limit: number = 10,
+    where?: Record<string, any>,
+  ): Promise<VectorQueryResult> {
     const [queryEmbedding] = await this.embedder.embed([text]);
 
     const body: any = {
@@ -240,9 +258,7 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
 
     if (where) {
       // Vectorize filter format: { field: { $eq: value } }
-      body.filter = Object.fromEntries(
-        Object.entries(where).map(([k, v]) => [k, { $eq: v }])
-      );
+      body.filter = Object.fromEntries(Object.entries(where).map(([k, v]) => [k, { $eq: v }]));
     }
 
     const data = await this.cfApi('/query', 'POST', body);
@@ -265,7 +281,7 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
     const getResponse = await fetch(getUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.apiToken}`,
+        Authorization: `Bearer ${this.apiToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ ids: [id] }),
@@ -275,7 +291,7 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
       throw new Error(`Failed to get vector: ${await getResponse.text()}`);
     }
 
-    const getData = await getResponse.json() as any;
+    const getData = (await getResponse.json()) as any;
     const vectors = getData.result || [];
     if (vectors.length === 0 || !vectors[0].values) {
       throw new Error(`No embedding found for document: ${id}`);
@@ -290,9 +306,7 @@ export class CloudflareVectorizeAdapter implements VectorStoreAdapter {
     };
 
     const data = await this.cfApi('/query', 'POST', body);
-    const matches = (data.result?.matches || [])
-      .filter((m: any) => m.id !== id)
-      .slice(0, nResults);
+    const matches = (data.result?.matches || []).filter((m: any) => m.id !== id).slice(0, nResults);
 
     return {
       ids: matches.map((m: any) => m.id),

@@ -36,7 +36,11 @@ export class ChromaMcpAdapter implements VectorStoreAdapter {
     await this.client.addDocuments(docs);
   }
 
-  async query(text: string, limit?: number, where?: Record<string, any>): Promise<VectorQueryResult> {
+  async query(
+    text: string,
+    limit?: number,
+    where?: Record<string, any>,
+  ): Promise<VectorQueryResult> {
     return await this.client.query(text, limit, where);
   }
 
@@ -52,7 +56,9 @@ export class ChromaMcpAdapter implements VectorStoreAdapter {
     return await this.client.getCollectionInfo();
   }
 
-  async getAllEmbeddings(limit?: number): Promise<{ ids: string[]; embeddings: number[][]; metadatas: any[] }> {
+  async getAllEmbeddings(
+    limit?: number,
+  ): Promise<{ ids: string[]; embeddings: number[][]; metadatas: any[] }> {
     return await this.client.getAllEmbeddings(limit);
   }
 }

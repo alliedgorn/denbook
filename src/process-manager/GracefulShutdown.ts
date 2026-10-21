@@ -16,7 +16,7 @@ import {
   getChildProcesses,
   forceKillProcess,
   waitForProcessesExit,
-  removePidFile
+  removePidFile,
 } from './ProcessManager.ts';
 
 export interface ShutdownableService {
@@ -57,17 +57,17 @@ async function closeHttpServer(server: http.Server): Promise<void> {
 
   // Give Windows time to close connections before closing server
   if (process.platform === 'win32') {
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
   }
 
   // Close the server
   await new Promise<void>((resolve, reject) => {
-    server.close(err => err ? reject(err) : resolve());
+    server.close((err) => (err ? reject(err) : resolve()));
   });
 
   // Extra delay on Windows to ensure port is fully released
   if (process.platform === 'win32') {
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
     logger.info('SYSTEM', 'Waited for Windows port cleanup');
   }
 }
@@ -87,7 +87,7 @@ export async function performGracefulShutdown(config: GracefulShutdownConfig): P
     cleanup,
     removePid = true,
     killChildren = true,
-    childExitTimeout = 5000
+    childExitTimeout = 5000,
   } = config;
 
   logger.info('SYSTEM', 'Shutdown initiated');

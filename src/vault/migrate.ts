@@ -48,11 +48,7 @@ function walkFiles(
 }
 
 // Categories that get project-nested
-const PROJECT_CATEGORIES = [
-  'ψ/memory/learnings/',
-  'ψ/memory/retrospectives/',
-  'ψ/inbox/handoff/',
-];
+const PROJECT_CATEGORIES = ['ψ/memory/learnings/', 'ψ/memory/retrospectives/', 'ψ/inbox/handoff/'];
 
 function isProjectCategory(relativePath: string): boolean {
   return PROJECT_CATEGORIES.some((cat) => relativePath.startsWith(cat));
@@ -137,7 +133,9 @@ function migrate(opts: { dryRun: boolean; symlink?: boolean }): MigrateResult {
         result.skipped.push(`${repoPath} (already symlinked)`);
         continue;
       }
-    } catch { /* doesn't exist, continue */ }
+    } catch {
+      /* doesn't exist, continue */
+    }
 
     const repoRealPath = fs.realpathSync(repoPath);
     if (repoRealPath === vaultRealPath) {

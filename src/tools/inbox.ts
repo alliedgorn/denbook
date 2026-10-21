@@ -10,40 +10,51 @@ import type { ToolContext, ToolResponse, OracleInboxInput } from './types.ts';
 
 export const inboxToolDef = {
   name: 'oracle_inbox',
-  description: 'List and preview pending handoff files from the Oracle inbox. Returns files sorted newest-first with previews.',
+  description:
+    'List and preview pending handoff files from the Oracle inbox. Returns files sorted newest-first with previews.',
   inputSchema: {
     type: 'object',
     properties: {
       limit: {
         type: 'number',
         description: 'Maximum files to return (default: 10)',
-        default: 10
+        default: 10,
       },
       offset: {
         type: 'number',
         description: 'Number of files to skip (for pagination)',
-        default: 0
+        default: 0,
       },
       type: {
         type: 'string',
         enum: ['handoff', 'all'],
         description: 'Filter by inbox type (default: all)',
-        default: 'all'
-      }
-    }
-  }
+        default: 'all',
+      },
+    },
+  },
 };
 
-export async function handleInbox(ctx: ToolContext, input: OracleInboxInput): Promise<ToolResponse> {
+export async function handleInbox(
+  ctx: ToolContext,
+  input: OracleInboxInput,
+): Promise<ToolResponse> {
   const { limit = 10, offset = 0, type = 'all' } = input;
   const inboxDir = path.join(ctx.repoRoot, 'ψ/inbox');
-  const results: Array<{ filename: string; path: string; created: string; preview: string; type: string }> = [];
+  const results: Array<{
+    filename: string;
+    path: string;
+    created: string;
+    preview: string;
+    type: string;
+  }> = [];
 
   if (type === 'all' || type === 'handoff') {
     const handoffDir = path.join(inboxDir, 'handoff');
     if (fs.existsSync(handoffDir)) {
-      const files = fs.readdirSync(handoffDir)
-        .filter(f => f.endsWith('.md'))
+      const files = fs
+        .readdirSync(handoffDir)
+        .filter((f) => f.endsWith('.md'))
         .sort()
         .reverse();
 
@@ -72,9 +83,11 @@ export async function handleInbox(ctx: ToolContext, input: OracleInboxInput): Pr
   console.error(`[MCP:INBOX] ${total} files, returning ${paginated.length} (offset=${offset})`);
 
   return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({ files: paginated, total, limit, offset }, null, 2)
-    }]
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify({ files: paginated, total, limit, offset }, null, 2),
+      },
+    ],
   };
 }

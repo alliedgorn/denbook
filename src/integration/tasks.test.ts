@@ -4,12 +4,12 @@
  *
  * Author: Pip (QA/Chaos Testing)
  */
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 
-const BASE_URL = "http://localhost:47778";
-const TEST_BEAST = "pip";
-const OTHER_BEAST = "bertus";
-const TEST_PREFIX = "test_task_";
+const BASE_URL = 'http://localhost:47778';
+const TEST_BEAST = 'pip';
+const OTHER_BEAST = 'bertus';
+const TEST_PREFIX = 'test_task_';
 
 const createdTaskIds: number[] = [];
 
@@ -25,15 +25,15 @@ async function isServerRunning(): Promise<boolean> {
 async function createTask(overrides: Record<string, unknown> = {}) {
   const body = {
     title: `${TEST_PREFIX}${Date.now()}`,
-    description: "Test task created by Pip",
-    priority: "medium",
+    description: 'Test task created by Pip',
+    priority: 'medium',
     assigned_to: TEST_BEAST,
     created_by: TEST_BEAST,
     ...overrides,
   };
   const res = await fetch(`${BASE_URL}/api/tasks`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (res.ok) {
@@ -46,16 +46,16 @@ async function createTask(overrides: Record<string, unknown> = {}) {
 
 async function deleteTask(id: number) {
   return fetch(`${BASE_URL}/api/tasks/${id}`, {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ beast: TEST_BEAST }),
   });
 }
 
-describe("Tasks & Board API Integration", () => {
+describe('Tasks & Board API Integration', () => {
   beforeAll(async () => {
     if (!(await isServerRunning())) {
-      throw new Error("Server not running on port 47778");
+      throw new Error('Server not running on port 47778');
     }
   });
 
@@ -69,15 +69,15 @@ describe("Tasks & Board API Integration", () => {
   // =====================
   // CRUD
   // =====================
-  describe("Task CRUD", () => {
-    test("POST /api/tasks creates a task", async () => {
+  describe('Task CRUD', () => {
+    test('POST /api/tasks creates a task', async () => {
       const { res, data } = await createTask();
       expect(res.ok).toBe(true);
       expect(data.id).toBeTruthy();
       expect(data.title).toContain(TEST_PREFIX);
     });
 
-    test("GET /api/tasks lists tasks", async () => {
+    test('GET /api/tasks lists tasks', async () => {
       const res = await fetch(`${BASE_URL}/api/tasks`);
       expect(res.ok).toBe(true);
       const data = await res.json();
@@ -85,7 +85,7 @@ describe("Tasks & Board API Integration", () => {
       expect(data.total).toBeGreaterThan(0);
     });
 
-    test("GET /api/tasks/:id returns a single task", async () => {
+    test('GET /api/tasks/:id returns a single task', async () => {
       const { data: created } = await createTask();
       const res = await fetch(`${BASE_URL}/api/tasks/${created.id}`);
       expect(res.ok).toBe(true);
@@ -94,13 +94,13 @@ describe("Tasks & Board API Integration", () => {
       expect(data.title).toBe(created.title);
     });
 
-    test("PATCH /api/tasks/:id updates a task", async () => {
+    test('PATCH /api/tasks/:id updates a task', async () => {
       const { data: created } = await createTask();
       const res = await fetch(`${BASE_URL}/api/tasks/${created.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          status: "in_progress",
+          status: 'in_progress',
           beast: TEST_BEAST,
         }),
       });
@@ -109,7 +109,7 @@ describe("Tasks & Board API Integration", () => {
       expect(data.status || data.task?.status).toBeTruthy();
     });
 
-    test("DELETE /api/tasks/:id deletes a task", async () => {
+    test('DELETE /api/tasks/:id deletes a task', async () => {
       const { data: created } = await createTask();
       const id = created.id;
       // Remove from cleanup list since we're deleting it here
@@ -117,14 +117,14 @@ describe("Tasks & Board API Integration", () => {
       if (idx > -1) createdTaskIds.splice(idx, 1);
 
       const res = await fetch(`${BASE_URL}/api/tasks/${id}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beast: TEST_BEAST }),
       });
       expect(res.ok).toBe(true);
     });
 
-    test("GET /api/tasks/:id returns 404 for nonexistent task", async () => {
+    test('GET /api/tasks/:id returns 404 for nonexistent task', async () => {
       const res = await fetch(`${BASE_URL}/api/tasks/999999`);
       expect(res.status).toBe(404);
     });
@@ -133,19 +133,19 @@ describe("Tasks & Board API Integration", () => {
   // =====================
   // Filtering
   // =====================
-  describe("Filtering & Queries", () => {
-    test("GET /api/tasks?status=done filters by status", async () => {
+  describe('Filtering & Queries', () => {
+    test('GET /api/tasks?status=done filters by status', async () => {
       const res = await fetch(`${BASE_URL}/api/tasks?status=done`);
       expect(res.ok).toBe(true);
       const data = await res.json();
       expect(data.tasks).toBeInstanceOf(Array);
       // All returned tasks should have status=done
       for (const task of data.tasks) {
-        expect(task.status).toBe("done");
+        expect(task.status).toBe('done');
       }
     });
 
-    test("GET /api/tasks?assignee=pip filters by assignee", async () => {
+    test('GET /api/tasks?assignee=pip filters by assignee', async () => {
       await createTask({ assigned_to: TEST_BEAST });
       const res = await fetch(`${BASE_URL}/api/tasks?assignee=${TEST_BEAST}`);
       expect(res.ok).toBe(true);
@@ -153,7 +153,7 @@ describe("Tasks & Board API Integration", () => {
       expect(data.tasks).toBeInstanceOf(Array);
     });
 
-    test("GET /api/tasks?priority=high filters by priority", async () => {
+    test('GET /api/tasks?priority=high filters by priority', async () => {
       const res = await fetch(`${BASE_URL}/api/tasks?priority=high`);
       expect(res.ok).toBe(true);
       const data = await res.json();
@@ -164,12 +164,12 @@ describe("Tasks & Board API Integration", () => {
   // =====================
   // Comments
   // =====================
-  describe("Task Comments", () => {
-    test("POST /api/tasks/:id/comments adds a comment", async () => {
+  describe('Task Comments', () => {
+    test('POST /api/tasks/:id/comments adds a comment', async () => {
       const { data: task } = await createTask();
       const res = await fetch(`${BASE_URL}/api/tasks/${task.id}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           author: TEST_BEAST,
           content: `${TEST_PREFIX}comment ${Date.now()}`,
@@ -178,12 +178,12 @@ describe("Tasks & Board API Integration", () => {
       expect(res.ok).toBe(true);
     });
 
-    test("GET /api/tasks/:id/comments lists comments", async () => {
+    test('GET /api/tasks/:id/comments lists comments', async () => {
       const { data: task } = await createTask();
       // Add a comment first
       await fetch(`${BASE_URL}/api/tasks/${task.id}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           author: TEST_BEAST,
           content: `${TEST_PREFIX}read_test ${Date.now()}`,
@@ -199,16 +199,16 @@ describe("Tasks & Board API Integration", () => {
   // =====================
   // Bulk Operations
   // =====================
-  describe("Bulk Operations", () => {
-    test("POST /api/tasks/bulk-status updates multiple tasks", async () => {
+  describe('Bulk Operations', () => {
+    test('POST /api/tasks/bulk-status updates multiple tasks', async () => {
       const { data: t1 } = await createTask();
       const { data: t2 } = await createTask();
       const res = await fetch(`${BASE_URL}/api/tasks/bulk-status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           task_ids: [t1.id, t2.id],
-          status: "in_progress",
+          status: 'in_progress',
           beast: TEST_BEAST,
         }),
       });
@@ -219,8 +219,8 @@ describe("Tasks & Board API Integration", () => {
   // =====================
   // Board
   // =====================
-  describe("Board", () => {
-    test("GET /api/board returns board state", async () => {
+  describe('Board', () => {
+    test('GET /api/board returns board state', async () => {
       const res = await fetch(`${BASE_URL}/api/board`);
       expect(res.ok).toBe(true);
       const data = await res.json();
@@ -232,23 +232,23 @@ describe("Tasks & Board API Integration", () => {
   // =====================
   // Validation
   // =====================
-  describe("Validation", () => {
-    test("POST /api/tasks without title fails", async () => {
+  describe('Validation', () => {
+    test('POST /api/tasks without title fails', async () => {
       const res = await fetch(`${BASE_URL}/api/tasks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          description: "no title",
+          description: 'no title',
           created_by: TEST_BEAST,
         }),
       });
       expect(res.ok).toBe(false);
     });
 
-    test("POST /api/tasks without created_by fails", async () => {
+    test('POST /api/tasks without created_by fails', async () => {
       const res = await fetch(`${BASE_URL}/api/tasks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: `${TEST_PREFIX}no_creator`,
         }),
@@ -256,13 +256,13 @@ describe("Tasks & Board API Integration", () => {
       expect(res.ok).toBe(false);
     });
 
-    test("PATCH /api/tasks/:id with invalid status fails gracefully", async () => {
+    test('PATCH /api/tasks/:id with invalid status fails gracefully', async () => {
       const { data: task } = await createTask();
       const res = await fetch(`${BASE_URL}/api/tasks/${task.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          status: "nonexistent_status_xyz",
+          status: 'nonexistent_status_xyz',
           beast: TEST_BEAST,
         }),
       });
@@ -273,11 +273,11 @@ describe("Tasks & Board API Integration", () => {
   });
 
   // T#759: deleted tasks excluded from list by default
-  describe("Deleted task exclusion (T#759)", () => {
-    test("GET /api/tasks excludes deleted tasks by default", async () => {
+  describe('Deleted task exclusion (T#759)', () => {
+    test('GET /api/tasks excludes deleted tasks by default', async () => {
       const { data: task } = await createTask();
       // Delete it
-      await fetch(`${BASE_URL}/api/tasks/${task.id}`, { method: "DELETE" });
+      await fetch(`${BASE_URL}/api/tasks/${task.id}`, { method: 'DELETE' });
       // List should not include deleted task
       const listRes = await fetch(`${BASE_URL}/api/tasks`);
       const listData = await listRes.json();
@@ -285,19 +285,19 @@ describe("Tasks & Board API Integration", () => {
       expect(found).toBeUndefined();
     });
 
-    test("GET /api/tasks?include_deleted=true returns deleted tasks", async () => {
+    test('GET /api/tasks?include_deleted=true returns deleted tasks', async () => {
       const { data: task } = await createTask();
-      await fetch(`${BASE_URL}/api/tasks/${task.id}`, { method: "DELETE" });
+      await fetch(`${BASE_URL}/api/tasks/${task.id}`, { method: 'DELETE' });
       const listRes = await fetch(`${BASE_URL}/api/tasks?include_deleted=true`);
       const listData = await listRes.json();
       const found = listData.tasks.find((t: any) => t.id === task.id);
       expect(found).toBeTruthy();
-      expect(found.status).toBe("deleted");
+      expect(found.status).toBe('deleted');
     });
 
-    test("GET /api/board excludes deleted tasks", async () => {
+    test('GET /api/board excludes deleted tasks', async () => {
       const { data: task } = await createTask();
-      await fetch(`${BASE_URL}/api/tasks/${task.id}`, { method: "DELETE" });
+      await fetch(`${BASE_URL}/api/tasks/${task.id}`, { method: 'DELETE' });
       const boardRes = await fetch(`${BASE_URL}/api/board`);
       const boardData = await boardRes.json();
       const allTasks = Object.values(boardData.columns || {}).flat() as any[];
@@ -305,10 +305,13 @@ describe("Tasks & Board API Integration", () => {
       expect(found).toBeUndefined();
     });
 
-    test("GET /api/tasks/:id/subtree excludes deleted subtasks", async () => {
+    test('GET /api/tasks/:id/subtree excludes deleted subtasks', async () => {
       const { data: parent } = await createTask({ title: `${TEST_PREFIX}parent_${Date.now()}` });
-      const { data: child } = await createTask({ title: `${TEST_PREFIX}child_${Date.now()}`, parent_task_id: parent.id });
-      await fetch(`${BASE_URL}/api/tasks/${child.id}`, { method: "DELETE" });
+      const { data: child } = await createTask({
+        title: `${TEST_PREFIX}child_${Date.now()}`,
+        parent_task_id: parent.id,
+      });
+      await fetch(`${BASE_URL}/api/tasks/${child.id}`, { method: 'DELETE' });
       const subtreeRes = await fetch(`${BASE_URL}/api/tasks/${parent.id}/subtree`);
       const subtreeData = await subtreeRes.json();
       const found = subtreeData.subtasks.find((t: any) => t.id === child.id);

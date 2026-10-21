@@ -4,11 +4,11 @@
  *
  * Author: Pip (QA/Chaos Testing)
  */
-import { describe, test, expect, beforeAll } from "bun:test";
+import { describe, test, expect, beforeAll } from 'bun:test';
 
-const BASE_URL = "http://localhost:47778";
-const TEST_BEAST = "pip";
-const OTHER_BEAST = "bertus";
+const BASE_URL = 'http://localhost:47778';
+const TEST_BEAST = 'pip';
+const OTHER_BEAST = 'bertus';
 
 async function isServerRunning(): Promise<boolean> {
   try {
@@ -19,18 +19,18 @@ async function isServerRunning(): Promise<boolean> {
   }
 }
 
-describe("Beast Profiles API Integration", () => {
+describe('Beast Profiles API Integration', () => {
   beforeAll(async () => {
     if (!(await isServerRunning())) {
-      throw new Error("Server not running on port 47778");
+      throw new Error('Server not running on port 47778');
     }
   });
 
   // =====================
   // List & Read
   // =====================
-  describe("List & Read", () => {
-    test("GET /api/beasts returns all beasts", async () => {
+  describe('List & Read', () => {
+    test('GET /api/beasts returns all beasts', async () => {
       const res = await fetch(`${BASE_URL}/api/beasts`);
       expect(res.ok).toBe(true);
       const data = await res.json();
@@ -39,7 +39,7 @@ describe("Beast Profiles API Integration", () => {
       expect(beasts.length).toBeGreaterThan(0);
     });
 
-    test("GET /api/beast/:name returns a single profile", async () => {
+    test('GET /api/beast/:name returns a single profile', async () => {
       const res = await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`);
       expect(res.ok).toBe(true);
       const data = await res.json();
@@ -48,7 +48,7 @@ describe("Beast Profiles API Integration", () => {
       expect(data.role).toBeTruthy();
     });
 
-    test("Beast profile has expected fields", async () => {
+    test('Beast profile has expected fields', async () => {
       const res = await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`);
       const data = await res.json();
       expect(data.name).toBeTruthy();
@@ -59,10 +59,8 @@ describe("Beast Profiles API Integration", () => {
       expect(data.createdAt).toBeTruthy();
     });
 
-    test("GET /api/beast/nonexistent returns 404", async () => {
-      const res = await fetch(
-        `${BASE_URL}/api/beast/nonexistent_beast_xyz_999`
-      );
+    test('GET /api/beast/nonexistent returns 404', async () => {
+      const res = await fetch(`${BASE_URL}/api/beast/nonexistent_beast_xyz_999`);
       expect(res.status).toBe(404);
     });
   });
@@ -70,10 +68,10 @@ describe("Beast Profiles API Integration", () => {
   // =====================
   // Update
   // =====================
-  describe("Update Profile", () => {
+  describe('Update Profile', () => {
     let originalBio: string;
 
-    test("PATCH /api/beast/:name updates profile fields", async () => {
+    test('PATCH /api/beast/:name updates profile fields', async () => {
       // Save original
       const origRes = await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`);
       const origData = await origRes.json();
@@ -81,8 +79,8 @@ describe("Beast Profiles API Integration", () => {
 
       const testBio = `test_bio_${Date.now()}`;
       const res = await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bio: testBio }),
       });
       expect(res.ok).toBe(true);
@@ -94,62 +92,59 @@ describe("Beast Profiles API Integration", () => {
 
       // Restore original
       await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bio: originalBio }),
       });
     });
 
-    test("PATCH /api/beast/:name updates interests", async () => {
+    test('PATCH /api/beast/:name updates interests', async () => {
       const origRes = await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`);
       const origData = await origRes.json();
       const originalInterests = origData.interests;
 
       const testInterests = `test_interest_${Date.now()}`;
       const res = await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ interests: testInterests }),
       });
       expect(res.ok).toBe(true);
 
       // Restore
       await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ interests: originalInterests }),
       });
     });
 
-    test("PATCH /api/beast/:name updates themeColor", async () => {
+    test('PATCH /api/beast/:name updates themeColor', async () => {
       const origRes = await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`);
       const origData = await origRes.json();
       const originalColor = origData.themeColor;
 
       const res = await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ themeColor: "#FF0000" }),
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ themeColor: '#FF0000' }),
       });
       expect(res.ok).toBe(true);
 
       // Restore
       await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ themeColor: originalColor }),
       });
     });
 
-    test("PATCH nonexistent beast returns 404", async () => {
-      const res = await fetch(
-        `${BASE_URL}/api/beast/nonexistent_beast_xyz_999`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bio: "test" }),
-        }
-      );
+    test('PATCH nonexistent beast returns 404', async () => {
+      const res = await fetch(`${BASE_URL}/api/beast/nonexistent_beast_xyz_999`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bio: 'test' }),
+      });
       expect(res.status).toBe(404);
     });
   });
@@ -157,18 +152,16 @@ describe("Beast Profiles API Integration", () => {
   // =====================
   // Avatar
   // =====================
-  describe("Avatar", () => {
-    test("GET /api/beast/:name/avatar.svg returns SVG", async () => {
+  describe('Avatar', () => {
+    test('GET /api/beast/:name/avatar.svg returns SVG', async () => {
       const res = await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}/avatar.svg`);
       expect(res.ok).toBe(true);
-      const contentType = res.headers.get("content-type");
-      expect(contentType).toContain("svg");
+      const contentType = res.headers.get('content-type');
+      expect(contentType).toContain('svg');
     });
 
-    test("GET /api/beast/nonexistent/avatar.svg handles missing beast", async () => {
-      const res = await fetch(
-        `${BASE_URL}/api/beast/nonexistent_beast_xyz_999/avatar.svg`
-      );
+    test('GET /api/beast/nonexistent/avatar.svg handles missing beast', async () => {
+      const res = await fetch(`${BASE_URL}/api/beast/nonexistent_beast_xyz_999/avatar.svg`);
       // Should return 404 or a fallback SVG
       expect(res.status).toBeLessThan(500);
     });
@@ -177,8 +170,8 @@ describe("Beast Profiles API Integration", () => {
   // =====================
   // Cross-beast Isolation
   // =====================
-  describe("Cross-beast", () => {
-    test("Different beasts have different profiles", async () => {
+  describe('Cross-beast', () => {
+    test('Different beasts have different profiles', async () => {
       const pipRes = await fetch(`${BASE_URL}/api/beast/${TEST_BEAST}`);
       const bertusRes = await fetch(`${BASE_URL}/api/beast/${OTHER_BEAST}`);
       const pip = await pipRes.json();

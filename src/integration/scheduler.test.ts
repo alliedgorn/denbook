@@ -5,14 +5,14 @@
  * Tests: CRUD, ownership/IDOR, validation, trigger lifecycle, datetime handling
  * Author: Pip (QA/Chaos Testing)
  */
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 
-const BASE_URL = "http://localhost:47778";
-const TEST_BEAST = "pip";
-const OTHER_BEAST = "bertus";
+const BASE_URL = 'http://localhost:47778';
+const TEST_BEAST = 'pip';
+const OTHER_BEAST = 'bertus';
 
 // Test data prefix for isolation
-const TEST_PREFIX = "test_sched_";
+const TEST_PREFIX = 'test_sched_';
 const createdScheduleIds: number[] = [];
 
 async function isServerRunning(): Promise<boolean> {
@@ -28,12 +28,12 @@ async function createSchedule(overrides: Record<string, unknown> = {}) {
   const body = {
     beast: TEST_BEAST,
     task: `${TEST_PREFIX}${Date.now()}`,
-    interval: "1d",
+    interval: '1d',
     ...overrides,
   };
   const res = await fetch(`${BASE_URL}/api/schedules`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (res.ok) {
@@ -46,16 +46,16 @@ async function createSchedule(overrides: Record<string, unknown> = {}) {
 
 async function deleteSchedule(id: number, beast = TEST_BEAST) {
   return fetch(`${BASE_URL}/api/schedules/${id}`, {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ beast }),
   });
 }
 
-describe("Scheduler API Integration", () => {
+describe('Scheduler API Integration', () => {
   beforeAll(async () => {
     if (!(await isServerRunning())) {
-      throw new Error("Server not running on port 47778");
+      throw new Error('Server not running on port 47778');
     }
   });
 
@@ -73,17 +73,17 @@ describe("Scheduler API Integration", () => {
   // =====================
   // Health
   // =====================
-  describe("Health", () => {
-    test("GET /api/scheduler/health returns running status", async () => {
+  describe('Health', () => {
+    test('GET /api/scheduler/health returns running status', async () => {
       const res = await fetch(`${BASE_URL}/api/scheduler/health`);
       expect(res.ok).toBe(true);
       const data = await res.json();
-      expect(data.status).toBe("running");
+      expect(data.status).toBe('running');
       expect(data.interval_seconds).toBe(10);
       expect(data.last_check).toBeTruthy();
     });
 
-    test("health last_check updates within 15 seconds", async () => {
+    test('health last_check updates within 15 seconds', async () => {
       const res1 = await fetch(`${BASE_URL}/api/scheduler/health`);
       const data1 = await res1.json();
       await Bun.sleep(12_000);
@@ -96,15 +96,15 @@ describe("Scheduler API Integration", () => {
   // =====================
   // CRUD — Happy Path
   // =====================
-  describe("CRUD — Happy Path", () => {
-    test("GET /api/schedules returns schedule list", async () => {
+  describe('CRUD — Happy Path', () => {
+    test('GET /api/schedules returns schedule list', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`);
       expect(res.ok).toBe(true);
       const data = await res.json();
       expect(data.schedules).toBeInstanceOf(Array);
     });
 
-    test("GET /api/schedules?beast=X filters by beast", async () => {
+    test('GET /api/schedules?beast=X filters by beast', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules?beast=${TEST_BEAST}`);
       expect(res.ok).toBe(true);
       const data = await res.json();
@@ -113,22 +113,22 @@ describe("Scheduler API Integration", () => {
       }
     });
 
-    test("POST /api/schedules creates a schedule", async () => {
+    test('POST /api/schedules creates a schedule', async () => {
       const { res, data } = await createSchedule({
         task: `${TEST_PREFIX}create_happy`,
-        interval: "1h",
+        interval: '1h',
       });
       expect(res.status).toBe(201);
       expect(data.beast).toBe(TEST_BEAST);
       expect(data.task).toBe(`${TEST_PREFIX}create_happy`);
-      expect(data.interval).toBe("1h");
+      expect(data.interval).toBe('1h');
       expect(data.interval_seconds).toBe(3600);
       expect(data.enabled).toBe(1);
-      expect(data.trigger_status).toBe("pending");
+      expect(data.trigger_status).toBe('pending');
       expect(data.next_due_at).toBeTruthy();
     });
 
-    test("GET /api/schedules/:id returns single schedule", async () => {
+    test('GET /api/schedules/:id returns single schedule', async () => {
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}get_single`,
       });
@@ -139,22 +139,22 @@ describe("Scheduler API Integration", () => {
       expect(data.task).toBe(`${TEST_PREFIX}get_single`);
     });
 
-    test("PATCH /api/schedules/:id updates schedule", async () => {
+    test('PATCH /api/schedules/:id updates schedule', async () => {
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}patch_happy`,
       });
       const res = await fetch(`${BASE_URL}/api/schedules/${created.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beast: TEST_BEAST, interval: "3h" }),
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beast: TEST_BEAST, interval: '3h' }),
       });
       expect(res.ok).toBe(true);
       const data = await res.json();
-      expect(data.interval).toBe("3h");
+      expect(data.interval).toBe('3h');
       expect(data.interval_seconds).toBe(10800);
     });
 
-    test("DELETE /api/schedules/:id removes schedule", async () => {
+    test('DELETE /api/schedules/:id removes schedule', async () => {
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}delete_happy`,
       });
@@ -167,78 +167,75 @@ describe("Scheduler API Integration", () => {
       expect(data.deleted).toBe(true);
     });
 
-    test("POST with schedule_time and timezone", async () => {
+    test('POST with schedule_time and timezone', async () => {
       const { res, data } = await createSchedule({
         task: `${TEST_PREFIX}fixed_time`,
-        interval: "1d",
-        schedule_time: "09:00",
-        timezone: "Asia/Bangkok",
+        interval: '1d',
+        schedule_time: '09:00',
+        timezone: 'Asia/Bangkok',
       });
       expect(res.ok).toBe(true);
-      expect(data.schedule_time).toBe("09:00");
-      expect(data.timezone).toBe("Asia/Bangkok");
+      expect(data.schedule_time).toBe('09:00');
+      expect(data.timezone).toBe('Asia/Bangkok');
       // 09:00 BKK = 02:00 UTC
-      expect(data.next_due_at).toContain("02:00:00");
+      expect(data.next_due_at).toContain('02:00:00');
     });
   });
 
   // =====================
   // Trigger Lifecycle
   // =====================
-  describe("Trigger Lifecycle", () => {
-    test("PATCH /:id/trigger sets status to triggered", async () => {
+  describe('Trigger Lifecycle', () => {
+    test('PATCH /:id/trigger sets status to triggered', async () => {
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}trigger_test`,
       });
-      const res = await fetch(
-        `${BASE_URL}/api/schedules/${created.id}/trigger`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ beast: TEST_BEAST }),
-        }
-      );
+      const res = await fetch(`${BASE_URL}/api/schedules/${created.id}/trigger`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beast: TEST_BEAST }),
+      });
       expect(res.ok).toBe(true);
       const data = await res.json();
-      expect(data.trigger_status).toBe("triggered");
+      expect(data.trigger_status).toBe('triggered');
       expect(data.last_triggered_at).toBeTruthy();
     });
 
-    test("PATCH /:id/run resets status to pending and advances next_due", async () => {
+    test('PATCH /:id/run resets status to pending and advances next_due', async () => {
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}run_test`,
-        interval: "1h",
+        interval: '1h',
       });
       // First trigger it
       await fetch(`${BASE_URL}/api/schedules/${created.id}/trigger`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beast: TEST_BEAST }),
       });
       // Then /run
       const res = await fetch(`${BASE_URL}/api/schedules/${created.id}/run`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beast: TEST_BEAST }),
       });
       expect(res.ok).toBe(true);
       const data = await res.json();
-      expect(data.trigger_status).toBe("pending");
+      expect(data.trigger_status).toBe('pending');
       // next_due_at should have advanced
       const nextDue = new Date(data.next_due_at);
       expect(nextDue.getTime()).toBeGreaterThan(Date.now());
     });
 
-    test("/run advances next_due_at by interval_seconds", async () => {
+    test('/run advances next_due_at by interval_seconds', async () => {
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}run_advance`,
-        interval: "3h",
+        interval: '3h',
       });
       const originalDue = new Date(created.next_due_at).getTime();
 
       const res = await fetch(`${BASE_URL}/api/schedules/${created.id}/run`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beast: TEST_BEAST }),
       });
       const data = await res.json();
@@ -251,18 +248,18 @@ describe("Scheduler API Integration", () => {
   // =====================
   // Ownership / IDOR
   // =====================
-  describe("Ownership / IDOR", () => {
+  describe('Ownership / IDOR', () => {
     let victimScheduleId: number;
 
     beforeAll(async () => {
       // Create a schedule owned by OTHER_BEAST via gorn override or direct
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           beast: OTHER_BEAST,
           task: `${TEST_PREFIX}victim_schedule`,
-          interval: "1d",
+          interval: '1d',
         }),
       });
       if (res.ok) {
@@ -279,60 +276,54 @@ describe("Scheduler API Integration", () => {
       }
     });
 
-    test("PATCH rejects cross-beast modification (403)", async () => {
+    test('PATCH rejects cross-beast modification (403)', async () => {
       if (!victimScheduleId) return;
       const res = await fetch(`${BASE_URL}/api/schedules/${victimScheduleId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beast: TEST_BEAST, task: "hacked" }),
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beast: TEST_BEAST, task: 'hacked' }),
       });
       expect(res.status).toBe(403);
     });
 
-    test("DELETE rejects cross-beast deletion (403)", async () => {
+    test('DELETE rejects cross-beast deletion (403)', async () => {
       if (!victimScheduleId) return;
       const res = await fetch(`${BASE_URL}/api/schedules/${victimScheduleId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beast: TEST_BEAST }),
       });
       expect(res.status).toBe(403);
     });
 
-    test("/trigger rejects cross-beast trigger (403)", async () => {
+    test('/trigger rejects cross-beast trigger (403)', async () => {
       if (!victimScheduleId) return;
-      const res = await fetch(
-        `${BASE_URL}/api/schedules/${victimScheduleId}/trigger`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ beast: TEST_BEAST }),
-        }
-      );
+      const res = await fetch(`${BASE_URL}/api/schedules/${victimScheduleId}/trigger`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beast: TEST_BEAST }),
+      });
       expect(res.status).toBe(403);
     });
 
-    test("/run rejects cross-beast run (403 or 404)", async () => {
+    test('/run rejects cross-beast run (403 or 404)', async () => {
       if (!victimScheduleId) return;
-      const res = await fetch(
-        `${BASE_URL}/api/schedules/${victimScheduleId}/run`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ beast: TEST_BEAST }),
-        }
-      );
+      const res = await fetch(`${BASE_URL}/api/schedules/${victimScheduleId}/run`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beast: TEST_BEAST }),
+      });
       // Should be 403 (forbidden) or 404 (not found for this beast)
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(res.status).toBeLessThan(500);
     });
 
-    test("PATCH with no beast param is rejected (400)", async () => {
+    test('PATCH with no beast param is rejected (400)', async () => {
       if (!victimScheduleId) return;
       const res = await fetch(`${BASE_URL}/api/schedules/${victimScheduleId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: "no-identity" }),
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: 'no-identity' }),
       });
       expect(res.status).toBe(400);
     });
@@ -341,134 +332,134 @@ describe("Scheduler API Integration", () => {
   // =====================
   // Validation
   // =====================
-  describe("Validation", () => {
-    test("rejects missing beast", async () => {
+  describe('Validation', () => {
+    test('rejects missing beast', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: "no-beast", interval: "1h" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: 'no-beast', interval: '1h' }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("rejects missing task", async () => {
+    test('rejects missing task', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beast: TEST_BEAST, interval: "1h" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beast: TEST_BEAST, interval: '1h' }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("rejects empty task name", async () => {
+    test('rejects empty task name', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beast: TEST_BEAST, task: "", interval: "1h" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beast: TEST_BEAST, task: '', interval: '1h' }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("rejects missing interval", async () => {
+    test('rejects missing interval', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beast: TEST_BEAST, task: "no-interval" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beast: TEST_BEAST, task: 'no-interval' }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("rejects invalid interval format", async () => {
+    test('rejects invalid interval format', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           beast: TEST_BEAST,
-          task: "bad-interval",
-          interval: "banana",
+          task: 'bad-interval',
+          interval: 'banana',
         }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("rejects negative interval", async () => {
+    test('rejects negative interval', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           beast: TEST_BEAST,
-          task: "negative",
-          interval: "-1h",
+          task: 'negative',
+          interval: '-1h',
         }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("rejects too-short interval (1s)", async () => {
+    test('rejects too-short interval (1s)', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           beast: TEST_BEAST,
-          task: "too-short",
-          interval: "1s",
+          task: 'too-short',
+          interval: '1s',
         }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("rejects invalid schedule_time (25:99)", async () => {
+    test('rejects invalid schedule_time (25:99)', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           beast: TEST_BEAST,
-          task: "bad-time",
-          interval: "1d",
-          schedule_time: "25:99",
+          task: 'bad-time',
+          interval: '1d',
+          schedule_time: '25:99',
         }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("rejects invalid timezone", async () => {
+    test('rejects invalid timezone', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           beast: TEST_BEAST,
-          task: "bad-tz",
-          interval: "1d",
-          schedule_time: "09:00",
-          timezone: "Mars/Olympus",
+          task: 'bad-tz',
+          interval: '1d',
+          schedule_time: '09:00',
+          timezone: 'Mars/Olympus',
         }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("rejects duplicate task name for same beast", async () => {
+    test('rejects duplicate task name for same beast', async () => {
       const taskName = `${TEST_PREFIX}duplicate_${Date.now()}`;
       await createSchedule({ task: taskName });
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           beast: TEST_BEAST,
           task: taskName,
-          interval: "1h",
+          interval: '1h',
         }),
       });
       expect(res.status).toBe(409);
     });
 
-    test("rejects very long task name", async () => {
+    test('rejects very long task name', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           beast: TEST_BEAST,
-          task: "A".repeat(500),
-          interval: "1h",
+          task: 'A'.repeat(500),
+          interval: '1h',
         }),
       });
       expect(res.status).toBe(400);
@@ -478,41 +469,41 @@ describe("Scheduler API Integration", () => {
   // =====================
   // Security — Injection
   // =====================
-  describe("Security — Injection", () => {
-    test("rejects SQL injection in task name", async () => {
+  describe('Security — Injection', () => {
+    test('rejects SQL injection in task name', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           beast: TEST_BEAST,
           task: "'; DROP TABLE schedules; --",
-          interval: "1h",
+          interval: '1h',
         }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("rejects shell injection in task name", async () => {
+    test('rejects shell injection in task name', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           beast: TEST_BEAST,
-          task: "test; rm -rf /",
-          interval: "1h",
+          task: 'test; rm -rf /',
+          interval: '1h',
         }),
       });
       expect(res.status).toBe(400);
     });
 
-    test("rejects XSS in task name", async () => {
+    test('rejects XSS in task name', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           beast: TEST_BEAST,
-          task: "<script>alert(1)</script>",
-          interval: "1h",
+          task: '<script>alert(1)</script>',
+          interval: '1h',
         }),
       });
       expect(res.status).toBe(400);
@@ -522,58 +513,58 @@ describe("Scheduler API Integration", () => {
   // =====================
   // Edge Cases
   // =====================
-  describe("Edge Cases", () => {
-    test("GET nonexistent schedule returns 404", async () => {
+  describe('Edge Cases', () => {
+    test('GET nonexistent schedule returns 404', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules/99999`);
       expect(res.status).toBe(404);
     });
 
-    test("PATCH nonexistent schedule returns 404", async () => {
+    test('PATCH nonexistent schedule returns 404', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules/99999`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beast: TEST_BEAST, task: "ghost" }),
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beast: TEST_BEAST, task: 'ghost' }),
       });
       expect(res.status).toBe(404);
     });
 
-    test("DELETE nonexistent schedule returns 404", async () => {
+    test('DELETE nonexistent schedule returns 404', async () => {
       const res = await fetch(`${BASE_URL}/api/schedules/99999`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beast: TEST_BEAST }),
       });
       expect(res.status).toBe(404);
     });
 
-    test("PATCH preserves fields not being updated", async () => {
+    test('PATCH preserves fields not being updated', async () => {
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}preserve_fields`,
-        interval: "1d",
-        schedule_time: "09:00",
-        timezone: "Asia/Bangkok",
+        interval: '1d',
+        schedule_time: '09:00',
+        timezone: 'Asia/Bangkok',
       });
       // Update only interval
       const res = await fetch(`${BASE_URL}/api/schedules/${created.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beast: TEST_BEAST, interval: "12h" }),
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beast: TEST_BEAST, interval: '12h' }),
       });
       expect(res.ok).toBe(true);
       const data = await res.json();
-      expect(data.interval).toBe("12h");
-      expect(data.schedule_time).toBe("09:00");
-      expect(data.timezone).toBe("Asia/Bangkok");
+      expect(data.interval).toBe('12h');
+      expect(data.schedule_time).toBe('09:00');
+      expect(data.timezone).toBe('Asia/Bangkok');
     });
 
-    test("enable/disable toggle works", async () => {
+    test('enable/disable toggle works', async () => {
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}toggle_enable`,
       });
       // Disable
       const res1 = await fetch(`${BASE_URL}/api/schedules/${created.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beast: TEST_BEAST, enabled: false }),
       });
       const data1 = await res1.json();
@@ -581,8 +572,8 @@ describe("Scheduler API Integration", () => {
 
       // Re-enable
       const res2 = await fetch(`${BASE_URL}/api/schedules/${created.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beast: TEST_BEAST, enabled: true }),
       });
       const data2 = await res2.json();
@@ -593,44 +584,44 @@ describe("Scheduler API Integration", () => {
   // =====================
   // Re-trigger — regression guard for a78e350
   // =====================
-  describe("Re-trigger — stale triggered schedules", () => {
-    test("triggered schedule appears in /due after being stuck (daemon query coverage)", async () => {
+  describe('Re-trigger — stale triggered schedules', () => {
+    test('triggered schedule appears in /due after being stuck (daemon query coverage)', async () => {
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}retrigger_test`,
-        interval: "10m",
+        interval: '10m',
       });
       // Manually trigger it
       await fetch(`${BASE_URL}/api/schedules/${created.id}/trigger`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beast: TEST_BEAST }),
       });
       // Verify it's in triggered state
       const check = await fetch(`${BASE_URL}/api/schedules/${created.id}`);
       const checkData = await check.json();
-      expect(checkData.trigger_status).toBe("triggered");
+      expect(checkData.trigger_status).toBe('triggered');
     });
 
-    test("/run after trigger resets to pending with advanced next_due", async () => {
+    test('/run after trigger resets to pending with advanced next_due', async () => {
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}retrigger_run`,
-        interval: "10m",
+        interval: '10m',
       });
       // Trigger
       await fetch(`${BASE_URL}/api/schedules/${created.id}/trigger`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beast: TEST_BEAST }),
       });
       // Run
       const res = await fetch(`${BASE_URL}/api/schedules/${created.id}/run`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ beast: TEST_BEAST }),
       });
       expect(res.ok).toBe(true);
       const data = await res.json();
-      expect(data.trigger_status).toBe("pending");
+      expect(data.trigger_status).toBe('pending');
       expect(new Date(data.next_due_at).getTime()).toBeGreaterThan(Date.now());
     });
   });
@@ -638,8 +629,8 @@ describe("Scheduler API Integration", () => {
   // =====================
   // DateTime Format (regression guard for Task #58)
   // =====================
-  describe("DateTime Format — Task #58 regression guard", () => {
-    test("next_due_at is valid ISO 8601", async () => {
+  describe('DateTime Format — Task #58 regression guard', () => {
+    test('next_due_at is valid ISO 8601', async () => {
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}datetime_check`,
       });
@@ -648,12 +639,12 @@ describe("Scheduler API Integration", () => {
       expect(parsed.getTime()).not.toBeNaN();
     });
 
-    test("schedule_time 09:00 BKK correctly computes next_due_at", async () => {
+    test('schedule_time 09:00 BKK correctly computes next_due_at', async () => {
       const { data } = await createSchedule({
         task: `${TEST_PREFIX}bkk_time_check`,
-        interval: "1d",
-        schedule_time: "09:00",
-        timezone: "Asia/Bangkok",
+        interval: '1d',
+        schedule_time: '09:00',
+        timezone: 'Asia/Bangkok',
       });
       const nextDue = new Date(data.next_due_at);
       // 09:00 BKK = 02:00 UTC
@@ -661,39 +652,35 @@ describe("Scheduler API Integration", () => {
       expect(nextDue.getUTCMinutes()).toBe(0);
     });
 
-    test("daemon trigger query finds overdue schedules (format compatibility)", async () => {
+    test('daemon trigger query finds overdue schedules (format compatibility)', async () => {
       // Create a schedule, manually set it to overdue via /trigger + /run pattern
       const { data: created } = await createSchedule({
         task: `${TEST_PREFIX}daemon_query_test`,
-        interval: "10m", // shortest allowed
+        interval: '10m', // shortest allowed
       });
       expect(created).toBeTruthy();
       // Verify it appears in the schedules list with correct status
-      const res = await fetch(
-        `${BASE_URL}/api/schedules?beast=${TEST_BEAST}`
-      );
+      const res = await fetch(`${BASE_URL}/api/schedules?beast=${TEST_BEAST}`);
       const list = await res.json();
-      const found = list.schedules.find(
-        (s: Record<string, unknown>) => s.id === created!.id
-      );
+      const found = list.schedules.find((s: Record<string, unknown>) => s.id === created!.id);
       expect(found).toBeTruthy();
-      expect(found.trigger_status).toBe("pending");
+      expect(found.trigger_status).toBe('pending');
     });
   });
 
   // =====================
   // T#706: Weekday-anchored recurring (days_of_week)
   // =====================
-  describe("Weekday-anchored recurring (days_of_week)", () => {
-    test("POST accepts valid days_of_week with interval=7d + schedule_time", async () => {
+  describe('Weekday-anchored recurring (days_of_week)', () => {
+    test('POST accepts valid days_of_week with interval=7d + schedule_time', async () => {
       const { res, data } = await createSchedule({
-        interval: "7d",
-        schedule_time: "09:00",
+        interval: '7d',
+        schedule_time: '09:00',
         days_of_week: [1, 4],
       });
       expect(res.ok).toBe(true);
       expect(data).toBeTruthy();
-      expect(data.days_of_week).toBe("[1,4]");
+      expect(data.days_of_week).toBe('[1,4]');
       // next_due_at should be a future ISO string falling on Mon or Thu
       const nextDue = new Date(data.next_due_at);
       const utc7 = new Date(nextDue.getTime() + 7 * 60 * 60 * 1000);
@@ -703,30 +690,30 @@ describe("Scheduler API Integration", () => {
       expect(utc7.getUTCMinutes()).toBe(0);
     });
 
-    test("POST rejects days_of_week without interval=7d", async () => {
+    test('POST rejects days_of_week without interval=7d', async () => {
       const { res, data } = await createSchedule({
-        interval: "1d",
-        schedule_time: "09:00",
+        interval: '1d',
+        schedule_time: '09:00',
         days_of_week: [1, 4],
       });
       expect(res.status).toBe(400);
       expect(data).toBeNull();
     });
 
-    test("POST rejects days_of_week without schedule_time", async () => {
+    test('POST rejects days_of_week without schedule_time', async () => {
       const { res, data } = await createSchedule({
-        interval: "7d",
+        interval: '7d',
         days_of_week: [1, 4],
       });
       expect(res.status).toBe(400);
       expect(data).toBeNull();
     });
 
-    test("POST rejects days_of_week with one-off (once=true)", async () => {
+    test('POST rejects days_of_week with one-off (once=true)', async () => {
       const future = new Date(Date.now() + 86400000).toISOString();
       const { res, data } = await createSchedule({
-        interval: "7d",
-        schedule_time: "09:00",
+        interval: '7d',
+        schedule_time: '09:00',
         once: true,
         run_at: future,
         days_of_week: [1, 4],
@@ -735,22 +722,22 @@ describe("Scheduler API Integration", () => {
       expect(data).toBeNull();
     });
 
-    test("POST rejects empty days_of_week", async () => {
+    test('POST rejects empty days_of_week', async () => {
       const { res, data } = await createSchedule({
-        interval: "7d",
-        schedule_time: "09:00",
+        interval: '7d',
+        schedule_time: '09:00',
         days_of_week: [],
       });
       expect(res.status).toBe(400);
       expect(data).toBeNull();
     });
 
-    test("POST rejects days_of_week with invalid weekday ints", async () => {
-      const cases: unknown[][] = [[0, 1], [1, 8], [1.5], ["mon"], [1, 1, 1, 1, 1, 1, 1, 1]];
+    test('POST rejects days_of_week with invalid weekday ints', async () => {
+      const cases: unknown[][] = [[0, 1], [1, 8], [1.5], ['mon'], [1, 1, 1, 1, 1, 1, 1, 1]];
       for (const dow of cases) {
         const { res, data } = await createSchedule({
-          interval: "7d",
-          schedule_time: "09:00",
+          interval: '7d',
+          schedule_time: '09:00',
           days_of_week: dow,
           task: `${TEST_PREFIX}invalid_${Math.random()}`,
         });
@@ -759,35 +746,35 @@ describe("Scheduler API Integration", () => {
       }
     });
 
-    test("POST accepts all-seven days_of_week (degenerate weekly)", async () => {
+    test('POST accepts all-seven days_of_week (degenerate weekly)', async () => {
       const { res, data } = await createSchedule({
-        interval: "7d",
-        schedule_time: "09:00",
+        interval: '7d',
+        schedule_time: '09:00',
         days_of_week: [1, 2, 3, 4, 5, 6, 7],
       });
       expect(res.ok).toBe(true);
-      expect(data.days_of_week).toBe("[1,2,3,4,5,6,7]");
+      expect(data.days_of_week).toBe('[1,2,3,4,5,6,7]');
     });
 
-    test("POST deduplicates and sorts days_of_week", async () => {
+    test('POST deduplicates and sorts days_of_week', async () => {
       const { res, data } = await createSchedule({
-        interval: "7d",
-        schedule_time: "09:00",
+        interval: '7d',
+        schedule_time: '09:00',
         days_of_week: [4, 1, 4],
       });
       expect(res.ok).toBe(true);
-      expect(data.days_of_week).toBe("[1,4]");
+      expect(data.days_of_week).toBe('[1,4]');
     });
 
-    test("PATCH /run advances to next qualifying weekday strictly future", async () => {
+    test('PATCH /run advances to next qualifying weekday strictly future', async () => {
       const { res, data: created } = await createSchedule({
-        interval: "7d",
-        schedule_time: "09:00",
+        interval: '7d',
+        schedule_time: '09:00',
         days_of_week: [1, 4],
       });
       expect(res.ok).toBe(true);
       const runRes = await fetch(`${BASE_URL}/api/schedules/${created.id}/run?as=${TEST_BEAST}`, {
-        method: "PATCH",
+        method: 'PATCH',
       });
       expect(runRes.ok).toBe(true);
       const updated = await runRes.json();
@@ -798,45 +785,45 @@ describe("Scheduler API Integration", () => {
       expect(nextDue.getTime()).toBeGreaterThan(Date.now());
     });
 
-    test("PATCH days_of_week recomputes next_due_at and rejects invalid", async () => {
+    test('PATCH days_of_week recomputes next_due_at and rejects invalid', async () => {
       const { res, data: created } = await createSchedule({
-        interval: "7d",
-        schedule_time: "09:00",
+        interval: '7d',
+        schedule_time: '09:00',
         days_of_week: [1, 4],
       });
       expect(res.ok).toBe(true);
       // Update to Tue+Fri
       const upd = await fetch(`${BASE_URL}/api/schedules/${created.id}?as=${TEST_BEAST}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ as: TEST_BEAST, days_of_week: [2, 5] }),
       });
       expect(upd.ok).toBe(true);
       const updated = await upd.json();
-      expect(updated.days_of_week).toBe("[2,5]");
+      expect(updated.days_of_week).toBe('[2,5]');
       const nextDue = new Date(updated.next_due_at);
       const utc7 = new Date(nextDue.getTime() + 7 * 60 * 60 * 1000);
       const isoWeekday = utc7.getUTCDay() === 0 ? 7 : utc7.getUTCDay();
       expect([2, 5]).toContain(isoWeekday);
       // Invalid update rejected
       const bad = await fetch(`${BASE_URL}/api/schedules/${created.id}?as=${TEST_BEAST}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ as: TEST_BEAST, days_of_week: [0] }),
       });
       expect(bad.status).toBe(400);
     });
 
-    test("PATCH days_of_week=null clears the field", async () => {
+    test('PATCH days_of_week=null clears the field', async () => {
       const { res, data: created } = await createSchedule({
-        interval: "7d",
-        schedule_time: "09:00",
+        interval: '7d',
+        schedule_time: '09:00',
         days_of_week: [1, 4],
       });
       expect(res.ok).toBe(true);
       const upd = await fetch(`${BASE_URL}/api/schedules/${created.id}?as=${TEST_BEAST}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ as: TEST_BEAST, days_of_week: null }),
       });
       expect(upd.ok).toBe(true);
@@ -844,9 +831,9 @@ describe("Scheduler API Integration", () => {
       expect(updated.days_of_week).toBeNull();
     });
 
-    test("Backwards-compat: existing schedules without days_of_week unaffected", async () => {
+    test('Backwards-compat: existing schedules without days_of_week unaffected', async () => {
       const { res, data } = await createSchedule({
-        interval: "1d",
+        interval: '1d',
       });
       expect(res.ok).toBe(true);
       expect(data.days_of_week).toBeNull();

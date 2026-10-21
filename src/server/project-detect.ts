@@ -53,4 +53,3 @@ export function detectProject(cwd?: string): string | null {
     return null;
   }
 }
-
