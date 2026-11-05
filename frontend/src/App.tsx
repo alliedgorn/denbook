@@ -28,6 +28,7 @@ import { RemoteControl } from './pages/RemoteControl';
 import { RemotePanel } from './components/RemotePanel';
 import { GuestDmPanel } from './components/GuestDmPanel';
 import { Prowl } from './pages/Prowl';
+import { Study } from './pages/Study';
 import { Risk } from './pages/Risk';
 import { Rules } from './pages/Rules';
 import { Forge } from './pages/Forge';
@@ -126,6 +127,8 @@ function AppContent() {
         <Route path="/playbook" element={<RequireAuth><Playbook /></RequireAuth>} />
         <Route path="/queue" element={<RequireAuth><GornQueue /></RequireAuth>} />
         <Route path="/prowl" element={<RequireAuth><Prowl /></RequireAuth>} />
+        <Route path="/study" element={<RequireAuth><Study /></RequireAuth>} />
+        <Route path="/study/:track" element={<RequireAuth><Study /></RequireAuth>} />
         <Route path="/risk" element={<RequireAuth><Risk /></RequireAuth>} />
         <Route path="/rules" element={<RequireAuth><Rules /></RequireAuth>} />
         <Route path="/forge" element={<RequireAuth><Forge /></RequireAuth>} />
