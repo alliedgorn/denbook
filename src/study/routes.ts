@@ -35,6 +35,9 @@ export function registerStudyRoutes(app: OpenAPIHono, sqlite: Database, helpers:
   const { hasSessionAuth } = helpers;
 
   function ownerOf(c: Context): string | null {
+    // Both checks are load-bearing. role 'owner' is also the middleware's default
+    // for no-cookie local-bypass requests, so the signed-cookie check is what
+    // keeps the on-box path out. Never reduce this to the role check alone.
     if (!hasSessionAuth(c)) return null;
     if ((c.get as any)('role') !== 'owner') return null;
     return 'gorn';
