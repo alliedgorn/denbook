@@ -1,8 +1,9 @@
 # Dependencies
 node_modules/
 
-# Build output (root-level TypeScript compilation only, not frontend/dist)
+# Build output. frontend/dist is built on deploy (scripts/deploy.sh), never committed.
 /dist/
+frontend/dist/
 
 # Database files
 *.db
