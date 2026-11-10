@@ -249,9 +249,9 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
   );
 }
 
-type PartProps = { m: StudyModule; state: AiProgress; touch: (fn: (s: AiProgress) => void) => void };
+export type PartProps = { m: StudyModule; state: AiProgress; touch: (fn: (s: AiProgress) => void) => void };
 
-function Learn({ m, state, touch }: PartProps) {
+export function Learn({ m, state, touch }: PartProps) {
   return (
     <div className={styles.cards}>
       {m.concepts.map((c, i) => {
@@ -276,7 +276,7 @@ function Learn({ m, state, touch }: PartProps) {
   );
 }
 
-function Quiz({ m, state, touch }: PartProps) {
+export function Quiz({ m, state, touch }: PartProps) {
   const ans = state.quiz[m.id] || {};
   const answered = Object.keys(ans).length;
   const correct = m.quiz.filter((q, i) => ans[i] === q.a).length;
@@ -323,7 +323,7 @@ function Quiz({ m, state, touch }: PartProps) {
   );
 }
 
-function Drills({ m, state, touch, open, setOpen }: PartProps & { open: Record<string, boolean>; setOpen: (k: string, v: boolean) => void }) {
+export function Drills({ m, state, touch, open, setOpen }: PartProps & { open: Record<string, boolean>; setOpen: (k: string, v: boolean) => void }) {
   return (
     <>
       {m.drills.map((d, i) => {
