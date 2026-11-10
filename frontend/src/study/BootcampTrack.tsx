@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { BOOT_MODULES, BOOT_PLANNED } from './bootModules';
+import { AskKaro } from './AskKaro';
 import { RichText } from './RichText';
 import { useStudyProgress } from './useStudyProgress';
 import { Drills, Learn, Plates, Quiz, SyncBadge } from './AiTrack';
@@ -99,6 +100,7 @@ export function BootcampTrack() {
           )}
         </main>
       </div>
+      <AskKaro context={mod ? `Bootcamp › ${mod.name} › ${TAB_NAME[tab]}` : 'Bootcamp › Plan'} />
     </div>
   );
 }
