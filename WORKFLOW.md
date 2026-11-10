@@ -212,7 +212,7 @@ If any commit in the payload lacks its gate-clear, ABORT the deploy. Either:
 bash scripts/deploy.sh
 ```
 
-The script handles the full sequence: pull → detect dependency changes → detect frontend changes and rebuild if needed → stop server → start fresh → smoke check. **Always use this script instead of manual steps** — it auto-detects frontend changes via `git diff` and only rebuilds when `frontend/src/` files changed in the deploy payload.
+The script handles the full sequence: pull → detect dependency changes → detect frontend changes and rebuild if needed → stop any unsupervised listener on :47778 → `systemctl --user restart den-book` → smoke check (health 200 **and** listener inside `den-book.service`). The server always runs under the systemd unit, which provides `Restart=on-failure` and the journal. Never start it with `nohup`. **Always use this script instead of manual steps** — it auto-detects frontend changes via `git diff` and only rebuilds when `frontend/src/` files changed in the deploy payload.
 
 **Why automated**: manual deploy skipped the frontend rebuild twice (PR #45 backlog-column-vanish 2026-04-29, PR #59 subtask-UI-invisible 2026-05-01). Same failure class twice = automated. The script eliminates the silent-drop surface.
 
