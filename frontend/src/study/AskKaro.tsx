@@ -5,10 +5,12 @@ import styles from '../pages/Study.module.css';
 // Sending is a normal owner DM (POST /api/dm, sender derived server-side from the
 // owner session); each message is prefixed with where Gorn is in the course so
 // Karo has context. Everything renders as React text — no HTML path.
+// DM GETs are audited, so polling is deliberately slow (Bertus, T#968): the
+// panel refetches right after a send instead of polling fast.
 
 const PEER = 'karo';
-const OPEN_POLL_MS = 4000;
-const CLOSED_POLL_MS = 30000;
+const OPEN_POLL_MS = 10000;
+const CLOSED_POLL_MS = 120000;
 const SEEN_KEY = 'study-ask-karo-seen';
 const CTX_RE = /^\[Study: ([^\]\n]{1,200})\]\n?/;
 
