@@ -93,26 +93,22 @@ describe("HTTP API Integration", () => {
   // ===================
   // Search
   // ===================
+  // Search needs an owner session or a local Beast request (T#605), and this
+  // suite runs with neither, so it asserts the gate instead of results.
   describe("Search", () => {
-    test("GET /api/search with query returns results", async () => {
+    test("GET /api/search with query requires auth", async () => {
       const res = await fetch(`${BASE_URL}/api/search?q=oracle`);
-      expect(res.ok).toBe(true);
-      const data = await res.json();
-      expect(Array.isArray(data.results)).toBe(true);
+      expect(res.status).toBe(401);
     }, 30_000);
 
-    test("GET /api/search with type filter", async () => {
+    test("GET /api/search with type filter requires auth", async () => {
       const res = await fetch(`${BASE_URL}/api/search?q=test&type=learning`);
-      expect(res.ok).toBe(true);
-      const data = await res.json();
-      expect(Array.isArray(data.results)).toBe(true);
+      expect(res.status).toBe(401);
     }, 30_000);
 
-    test("GET /api/search with limit and offset", async () => {
+    test("GET /api/search with limit and offset requires auth", async () => {
       const res = await fetch(`${BASE_URL}/api/search?q=test&limit=5&offset=0`);
-      expect(res.ok).toBe(true);
-      const data = await res.json();
-      expect(data.results.length).toBeLessThanOrEqual(5);
+      expect(res.status).toBe(401);
     }, 30_000);
 
     test("GET /api/search handles empty query", async () => {
