@@ -4,6 +4,7 @@ node_modules/
 # Build output. frontend/dist is built on deploy (scripts/deploy.sh), never committed.
 /dist/
 frontend/dist/
+frontend/dist.*/
 
 # Database files
 *.db

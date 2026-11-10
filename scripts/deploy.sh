@@ -20,11 +20,26 @@ cd "$DENBOOK_DIR"
 
 echo "=== Den Book Deploy ==="
 
+# frontend/dist is served straight off disk by the running server (server.ts FRONTEND_DIST).
+# It is not tracked in git; dist.prev is the last good build, dist.next a build in progress.
+DIST=frontend/dist
+
 # 1. Pull merged commits
 echo "[1/6] Pulling main..."
 BEFORE=$(git rev-parse HEAD)
+# Snapshot the live build first: a pull that removes tracked dist files (the switch-over
+# from committed dist) would leave the UI with nothing to serve until step 3.
+if [ -f "$DIST/index.html" ]; then
+  rm -rf "$DIST.prev"
+  cp -a "$DIST" "$DIST.prev"
+fi
 git pull origin main
 AFTER=$(git rev-parse HEAD)
+
+if [ ! -f "$DIST/index.html" ] && [ -f "$DIST.prev/index.html" ]; then
+  echo "Restoring $DIST from $DIST.prev until the rebuild..."
+  cp -a "$DIST.prev/." "$DIST/"
+fi
 
 if [ "$BEFORE" = "$AFTER" ]; then
   echo "No new commits. Nothing to deploy."
@@ -35,7 +50,7 @@ echo "Deploy payload: $BEFORE..$AFTER"
 git log --oneline "$BEFORE..$AFTER"
 
 # 2. Check for dependency changes
-if git diff --name-only "$BEFORE" "$AFTER" | grep -q 'package.json\|bun.lock'; then
+if [ -n "$(git diff --name-only "$BEFORE" "$AFTER" -- '*package.json' '*bun.lock')" ]; then
   echo "[2/6] Dependencies changed — running bun install..."
   bun install
 else
@@ -46,10 +61,16 @@ fi
 # frontend/dist is not tracked in git, so the deploy is the only thing that builds it.
 # Pathspec, not `| grep -q`: under pipefail an early grep exit SIGPIPEs git diff (141)
 # and the test reads false on a large diff.
-if [ -n "$(git diff --name-only "$BEFORE" "$AFTER" -- frontend/)" ] || [ ! -f frontend/dist/index.html ]; then
+# Build into dist.next and swap, so a failed build never touches the served dist
+# (set -e stops here with the old dist intact). mv -T: replace, never nest into dist.prev.
+if [ -n "$(git diff --name-only "$BEFORE" "$AFTER" -- frontend/)" ] || [ ! -f "$DIST/index.html" ]; then
   echo "[3/6] Frontend changed or not built — rebuilding..."
-  cd frontend && npm run build && cd ..
-  echo "Frontend rebuilt."
+  (cd frontend && npm run build -- --outDir dist.next --emptyOutDir)
+  [ -f "$DIST.next/index.html" ] || { echo "Build produced no index.html; keeping current dist." >&2; exit 1; }
+  rm -rf "$DIST.prev"
+  if [ -d "$DIST" ]; then mv -T "$DIST" "$DIST.prev"; fi
+  mv -T "$DIST.next" "$DIST"
+  echo "Frontend rebuilt (previous build kept at $DIST.prev)."
 else
   echo "[3/6] No frontend changes — skipping build."
 fi
