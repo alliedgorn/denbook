@@ -98,6 +98,7 @@ import { registerQueueRoutes } from './queue/routes.ts';
 import { registerSupersedeRoutes } from './supersede/routes.ts';
 import { registerAuditRoutes } from './audit/routes.ts';
 import { registerTeamsRoutes } from './teams/routes.ts';
+import { registerStudyRoutes, ensureStudyTables } from './study/routes.ts';
 import { registerFilesRoutes } from './files/routes.ts';
 import { registerInboxRoutes } from './inbox/routes.ts';
 import { registerKnowledgeRoutes, HELP_ENDPOINTS } from './knowledge/routes.ts';
@@ -1350,6 +1351,12 @@ registerAuditRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, requireBeas
 
 // Teams routes extracted to src/teams/routes.ts (T#803 P3-H)
 registerTeamsRoutes(app, sqlite, { hasSessionAuth });
+
+// ============================================================================
+// Study area — owner-only learning tracks + progress (T#963)
+// ============================================================================
+try { ensureStudyTables(sqlite); } catch { /* exists */ }
+registerStudyRoutes(app, sqlite, { hasSessionAuth });
 
 
 // Scheduler routes + helpers + auto-trigger daemon — extracted to src/scheduler/routes.ts (T#772)

@@ -26,6 +26,7 @@ const topNavItems = [
   { path: '/specs', label: 'Specs' },
   { path: '/prowl', label: 'Prowl' },
   { path: '/forge', label: 'Forge' },
+  { path: '/study', label: 'Study' },
 ];
 
 // Guest top nav — flat, no dropdown
