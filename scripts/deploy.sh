@@ -44,7 +44,9 @@ fi
 
 # 3. Rebuild the frontend if anything under frontend/ changed, or if there is no build.
 # frontend/dist is not tracked in git, so the deploy is the only thing that builds it.
-if git diff --name-only "$BEFORE" "$AFTER" | grep -q '^frontend/' || [ ! -f frontend/dist/index.html ]; then
+# Pathspec, not `| grep -q`: under pipefail an early grep exit SIGPIPEs git diff (141)
+# and the test reads false on a large diff.
+if [ -n "$(git diff --name-only "$BEFORE" "$AFTER" -- frontend/)" ] || [ ! -f frontend/dist/index.html ]; then
   echo "[3/6] Frontend changed or not built — rebuilding..."
   cd frontend && npm run build && cd ..
   echo "Frontend rebuilt."
