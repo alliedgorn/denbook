@@ -28,6 +28,7 @@ export function RichText({ blocks }: { blocks: Block[] }) {
             </ul>
           );
         }
+        if ('code' in blk) return <pre key={i} className={styles.code}><code>{blk.code}</code></pre>;
         return <div key={i} className={styles.tip}><Inlines parts={blk.tip} /></div>;
       })}
     </>

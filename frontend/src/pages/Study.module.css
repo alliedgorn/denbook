@@ -193,3 +193,15 @@ td .linkBtn { margin-left: 0; }
   .next { grid-template-columns: minmax(0, 1fr); }
   .card, .q, .d { padding: 14px; }
 }
+
+/* Bootcamp (T#967) */
+.code { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin: 0 0 8px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.5; white-space: pre; }
+.code code { font-family: inherit; }
+.planned { cursor: default; opacity: .55; }
+.planned:hover { background: none; }
+.sectionH { font-size: 17px; margin: var(--space-lg) 0 10px !important; }
+.logStrip { display: flex; flex-wrap: wrap; gap: 4px; margin: 12px 0 6px; }
+.logDay { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; font-size: 12px; font-variant-numeric: tabular-nums; border: 1px solid var(--border); color: var(--text-secondary); }
+.logDay[data-v="ran"] { background: var(--st-good-soft); border-color: var(--success); color: var(--success); font-weight: 600; }
+.logDay[data-v="logged"] { background: var(--st-warn-soft); border-color: var(--st-warn); color: var(--st-warn); }
+.logDay[data-v="off"] { opacity: .45; }
