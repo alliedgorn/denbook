@@ -85,10 +85,9 @@ export function AskKaro({ context }: { context: string }) {
   }, [open, lastKaro, seen, msgs.length]);
 
   const toggleBig = () => {
-    setBig(b => {
-      try { localStorage.setItem(BIG_KEY, b ? '0' : '1'); } catch { /* size just resets */ }
-      return !b;
-    });
+    const next = !big;
+    setBig(next);
+    try { localStorage.setItem(BIG_KEY, next ? '1' : '0'); } catch { /* size just resets */ }
   };
 
   const send = async () => {
