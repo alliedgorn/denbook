@@ -12,6 +12,7 @@ const PEER = 'karo';
 const OPEN_POLL_MS = 10000;
 const CLOSED_POLL_MS = 120000;
 const SEEN_KEY = 'study-ask-karo-seen';
+const BIG_KEY = 'study-ask-karo-big';
 const CTX_RE = /^\[Study: ([^\]\n]{1,200})\]\n?/;
 
 interface Msg {
@@ -28,6 +29,16 @@ function writeSeen(id: number) {
   try { localStorage.setItem(SEEN_KEY, String(id)); } catch { /* private mode: badge just resets */ }
 }
 
+function readBig(): boolean {
+  try { return localStorage.getItem(BIG_KEY) === '1'; } catch { return false; }
+}
+
+// **bold** spans only, rendered as React elements; everything else stays plain text.
+function Bolded({ text }: { text: string }) {
+  const parts = text.split(/\*\*([^*\n]{1,200})\*\*/g);
+  return <>{parts.map((x, i) => (i % 2 ? <b key={i}>{x}</b> : <span key={i}>{x}</span>))}</>;
+}
+
 function time(iso: string) {
   const d = new Date(iso);
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -39,6 +50,7 @@ export function AskKaro({ context }: { context: string }) {
   const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'error' | 'load-error'>('idle');
   const [seen, setSeen] = useState(readSeen);
+  const [big, setBig] = useState(readBig);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
@@ -72,6 +84,13 @@ export function AskKaro({ context }: { context: string }) {
     fetch(`/api/dm/gorn/${PEER}/read`, { method: 'PATCH' }).catch(() => { /* badge only */ });
   }, [open, lastKaro, seen, msgs.length]);
 
+  const toggleBig = () => {
+    setBig(b => {
+      try { localStorage.setItem(BIG_KEY, b ? '0' : '1'); } catch { /* size just resets */ }
+      return !b;
+    });
+  };
+
   const send = async () => {
     const body = text.trim();
     if (!body || state === 'sending') return;
@@ -99,10 +118,13 @@ export function AskKaro({ context }: { context: string }) {
         </button>
       )}
       {open && (
-        <aside className={styles.askPanel} aria-label="Ask Karo">
+        <aside className={big ? `${styles.askPanel} ${styles.askBig}` : styles.askPanel} aria-label="Ask Karo">
           <div className={styles.askHead}>
             <b>Ask Karo</b>
-            <button className={styles.linkBtn} onClick={() => setOpen(false)}>Close</button>
+            <span className={styles.row}>
+              <button className={styles.linkBtn} onClick={toggleBig}>{big ? 'Shrink' : 'Expand'}</button>
+              <button className={styles.linkBtn} onClick={() => setOpen(false)}>Close</button>
+            </span>
           </div>
           <div className={styles.askList}>
             {state === 'load-error' && <p className={styles.muted}>Couldn't load messages. Retrying…</p>}
@@ -116,7 +138,7 @@ export function AskKaro({ context }: { context: string }) {
               return (
                 <div key={m.id} className={mine ? `${styles.askMsg} ${styles.askMine}` : styles.askMsg}>
                   {ctx && <span className={styles.askCtx}>{ctx[1]}</span>}
-                  <div className={styles.askText}>{bodyText}</div>
+                  <div className={styles.askText}><Bolded text={bodyText} /></div>
                   <span className={styles.askTime}>{mine ? 'You' : 'Karo'} · {time(m.created_at)}</span>
                 </div>
               );
