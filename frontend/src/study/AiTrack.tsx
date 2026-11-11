@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AI_MODULES } from './aiModules';
+import { AskKaro } from './AskKaro';
 import { RichText } from './RichText';
 import { useStudyProgress, type SyncState } from './useStudyProgress';
 import type { StudyModule } from './types';
@@ -143,6 +144,7 @@ export function AiTrack() {
           )}
         </main>
       </div>
+      <AskKaro context={mod ? `Interview block › ${mod.name} › ${tab === 'learn' ? 'Learn' : tab === 'quiz' ? 'Quiz' : 'Drill'}` : 'Interview block › Overview'} />
     </div>
   );
 }
