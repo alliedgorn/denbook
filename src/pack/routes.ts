@@ -12,6 +12,9 @@ import { packListRoute, packSpinnerVerbsRoute } from '../server/openapi.ts';
 // Pack routes — Phase 2.5 of Library #102 (T#783)
 // ============================================================================
 
+// Norm #65 — 'nap' is reserved in the schema but nothing reads it yet.
+const REST_STATUSES = ['active', 'rest'];
+
 interface PackHelpers {
   hasSessionAuth: (c: Context) => boolean;
   requireBeastIdentity: (c: Context) => string | null;
@@ -341,11 +344,25 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       if (body.avatarUrl !== undefined) updates.avatarUrl = body.avatarUrl;
       if (body.birthdate !== undefined) updates.birthdate = body.birthdate;
       if (body.sex !== undefined) updates.sex = body.sex;
+      // The /rest skill pauses the scheduler with {"rest_status":"rest"} (Norm #65).
+      // This field was never in the list above, so the call returned 200 and set
+      // nothing, and beats kept firing at resting seats. Same owner-or-Gorn gate.
+      if (body.rest_status !== undefined) {
+        if (!REST_STATUSES.includes(body.rest_status)) {
+          return c.json({ error: `rest_status must be one of: ${REST_STATUSES.join(', ')}` }, 400);
+        }
+        updates.restStatus = body.rest_status;
+      }
 
       db.update(beastProfiles)
         .set(updates)
         .where(eq(beastProfiles.name, name.toLowerCase()))
         .run();
+
+      if (updates.restStatus !== undefined) {
+        console.log(`[Rest] ${name.toLowerCase()}: rest_status → ${updates.restStatus} (by ${caller})`);
+        wsBroadcast('beast_state_change', { beast: name.toLowerCase(), rest_status: updates.restStatus });
+      }
 
       const updated = getBeastProfile(name);
       return c.json(updated);
