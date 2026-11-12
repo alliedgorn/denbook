@@ -26,6 +26,11 @@ const DRAIN_INTERVAL = 1000; // Check queues every 1s
 const DRAIN_SPACING = 1000; // 1s between sends to same Beast (was 3s — Tier 1 of notification queue smoothness fix, 2026-04-08)
 const DRAIN_DIR = '/tmp/den-notify';
 const drainLastSent: Map<string, number> = new Map(); // beast → last send timestamp
+// T#973 (Bertus review note): a refusal is otherwise silent. If Claude Code ever
+// changes its argv0, every seat fails closed at once and queues just grow, so
+// say so in the log, at most once per Beast per REFUSE_WARN_INTERVAL.
+const REFUSE_WARN_INTERVAL = 5 * 60 * 1000;
+const drainLastRefuseWarn: Map<string, number> = new Map();
 
 /**
  * Spec #54 v2 §1 — Per-Beast drain coexistence check.
@@ -112,6 +117,10 @@ function runDrainCycle() {
         // session whose claude has exited and left a bash prompt: re-append
         // to the tail of the queue so it retries next cycle, never typed.
         const outcome = deliverToPane(sessionName, message);
+        if (outcome === 'not-claude' && Date.now() - (drainLastRefuseWarn.get(beast) || 0) >= REFUSE_WARN_INTERVAL) {
+          console.warn(`[Notify] REFUSED: ${sessionName} pane is not running claude, holding ${beast} queue (T#973)`);
+          drainLastRefuseWarn.set(beast, Date.now());
+        }
         if (outcome !== 'sent') {
           try {
             Bun.spawnSync(['bash', '-c',
