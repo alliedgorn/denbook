@@ -90,7 +90,7 @@ export const BOOT_MODULES: BootModule[] = [
           ] },
           { code: 'import ollama\n\nresp = ollama.chat(\n    model="qwen3.5:9b",\n    messages=[\n        {"role": "system", "content": "Answer in one sentence."},\n        {"role": "user", "content": "Explain RAG."},\n    ],\n    options={"temperature": 0.2},\n)\nprint(resp["message"]["content"])\nprint("in:", resp["prompt_eval_count"], "out:", resp["eval_count"], "stop:", resp["done_reason"])' },
           { tip: [{ b: 'Try it. ' }, 'Run ollama show qwen3.5:9b --template to see the real chat template your model uses. Then run the code above with options={"num_predict": 5} and watch the stop reason turn into "length". If a reply is slow, the model is "thinking" first. Ask me how to switch that off.'] },
-          { p: [{ b: 'Check yourself. ' }, '(1) If the system prompt is just text in the same stream, why does it work at all? (2) Why might you see a stop reason of "length" on a short question? (3) Anthropic, OpenAI and Ollama each have different libraries. What stays exactly the same across all three?'] },
+          { p: [{ b: 'Check yourself. ' }, '(1) If the system prompt is just text in the same stream, why does it work at all? (2) Why might you see a stop reason of "length" on a short question? (3) Anthropic, OpenAI and Ollama each have their own Python library. If you moved your code from one to another, what would you send in and get back that stays the same, and what only gets renamed?'] },
         ],
         say: 'Under every framework it is the same call: role-tagged messages, flattened by a chat template into one token stream, in; text plus a stop reason and token usage out. The system prompt is strong guidance, not a security boundary.',
       },
