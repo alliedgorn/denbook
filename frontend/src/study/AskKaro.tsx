@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import styles from '../pages/Study.module.css';
 
 // "Ask Karo" (T#968) — a study-side view of the existing gorn ↔ karo DM thread.
 // Sending is a normal owner DM (POST /api/dm, sender derived server-side from the
 // owner session); each message is prefixed with where Gorn is in the course so
-// Karo has context. Everything renders as React text — no HTML path.
+// Karo has context. Messages render as markdown through react-markdown, the same
+// as the DMs page: no rehype-raw, so raw HTML in a message stays text, and
+// react-markdown's default urlTransform drops javascript: and other unsafe URLs.
 // DM GETs are audited, so polling is deliberately slow (Bertus, T#968): the
 // panel refetches right after a send instead of polling fast.
 
@@ -20,6 +24,33 @@ interface Msg {
   message: string;
   created_at: string;
 }
+
+// Chat-style line breaks: a single newline starts a new line, like in the DMs.
+// Markdown would join those lines, so turn them into hard breaks, but leave
+// fenced code blocks alone.
+function chatBreaks(text: string): string {
+  return text
+    .split(/(```[\s\S]*?```)/g)
+    .map((part, i) => (i % 2 ? part : part.replace(/([^\n])\n(?!\n)/g, '$1  \n')))
+    .join('');
+}
+
+// Same-origin by resolved origin, not by a leading "/": "//host" and "/\host"
+// also start with a slash and leave the site (Bertus, PR 140 review).
+function isSameOrigin(href: string): boolean {
+  try { return new URL(href, window.location.origin).origin === window.location.origin; } catch { return false; }
+}
+
+const MD_COMPONENTS = {
+  a({ href, children }: { href?: string; children?: React.ReactNode }) {
+    return href && isSameOrigin(href)
+      ? <a href={href}>{children}</a>
+      : <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+  },
+  img({ src, alt }: { src?: string; alt?: string }) {
+    return <img src={src} alt={alt || ''} loading="lazy" />;
+  },
+};
 
 function readSeen(): number {
   try { return Number(localStorage.getItem(SEEN_KEY)) || 0; } catch { return 0; }
@@ -116,7 +147,9 @@ export function AskKaro({ context }: { context: string }) {
               return (
                 <div key={m.id} className={mine ? `${styles.askMsg} ${styles.askMine}` : styles.askMsg}>
                   {ctx && <span className={styles.askCtx}>{ctx[1]}</span>}
-                  <div className={styles.askText}>{bodyText}</div>
+                  <div className={styles.askText}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{chatBreaks(bodyText)}</ReactMarkdown>
+                  </div>
                   <span className={styles.askTime}>{mine ? 'You' : 'Karo'} · {time(m.created_at)}</span>
                 </div>
               );

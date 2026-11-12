@@ -215,7 +215,17 @@ td .linkBtn { margin-left: 0; }
 .askList { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 .askMsg { align-self: flex-start; max-width: 88%; background: var(--bg-elevated); border-radius: 12px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
 .askMine { align-self: flex-end; background: var(--st-soft); }
-.askText { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.askText { overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; }
+.askText p { margin: 0 0 6px; }
+.askText > :last-child { margin-bottom: 0; }
+.askText ul, .askText ol { margin: 0 0 6px; padding-left: 18px; }
+.askText code { font-family: var(--font-mono); font-size: 12.5px; background: var(--bg-card); padding: 1px 4px; border-radius: 4px; }
+.askText pre { margin: 0 0 6px; padding: 8px 10px; background: var(--bg-card); border-radius: 8px; overflow-x: auto; }
+.askText pre code { padding: 0; background: none; font-size: 12px; }
+.askText img { max-width: 100%; border-radius: 8px; }
+.askText table { border-collapse: collapse; font-size: 12px; margin: 0 0 6px; }
+.askText th, .askText td { border: 1px solid var(--border); padding: 2px 6px; }
+.askText a { color: var(--accent); }
 .askCtx { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
 .askTime { font-size: 11px; color: var(--text-muted); }
 .askCompose { border-top: 1px solid var(--border); padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
