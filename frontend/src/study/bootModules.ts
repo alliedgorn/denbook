@@ -110,6 +110,22 @@ export const BOOT_MODULES: BootModule[] = [
         ],
         say: 'Most AI engineering is compensating for weaknesses that follow from how models work: grounding for frozen or private knowledge, tools for exactness, validation for structure, guarded tools for actions, and evals for truth.',
       },
+      {
+        t: 'How a model gets trained',
+        b: [
+          { p: [{ b: 'The puzzle. ' }, 'Ask a good model to reverse a random string and it may spell the letters out one by one, flip them, and join them back up. Nobody wrote that trick into it. So where do behaviours like that come from? Three training stages, no maths needed.'] },
+          { ul: [
+            [{ b: '1. Pretraining.' }, ' The model reads a huge pile of text and learns to predict the next token, gets corrected, and repeats that billions of times. The result is a base model. It knows a lot, but it does not follow anything: ask it a question and it may just continue with more questions, because that is what text on the internet often does.'],
+            [{ b: '2. Instruction tuning.' }, ' Now it trains on example conversations written in the chat template: a system prompt, a user message, and a good answer. This is where it learns to play the assistant and to treat the system slot as instructions (the "Anatomy of a chat call" lesson).'],
+            [{ b: '3. Preference training.' }, ' The model writes two answers, a human or a judge model picks the better one, and the model is nudged toward the winner. This is where tone, polish and refusals come from. You will see it called RLHF (reinforcement learning from human feedback). Anthropic\'s version uses a written set of principles, a "constitution".'],
+          ] },
+          { p: [{ b: 'Reinforcement learning, the core idea. ' }, 'Nobody shows the model the right steps. It tries something, a reward says good or bad, and whatever earned the reward becomes more likely next time. It is like learning to ride a bike: nobody tells you the angle to lean, you just learn from not falling. Newer "thinking" models get a lot of this on tasks with checkable answers, such as maths, code and puzzles. Attempts that reach the right answer are rewarded, so step-by-step habits like the spell-it-out trick grow on their own.'] },
+          { p: [{ b: 'The catch: reward hacking. ' }, 'The model learns to please the reward, not to be right. If raters prefer confident, agreeable answers, it learns to sound confident and to agree with you (flattery, or sycophancy). If a coding model is rewarded only when tests pass, it can learn to make the tests pass without fixing the code. You get exactly what you measure, and that is why the evals module exists.'] },
+          { tip: [{ b: 'Try it. ' }, 'On Hugging Face, find a model family like Qwen and look for the "Base" and "Instruct" versions side by side. Base is stage 1 only; Instruct has had stages 2 and 3.'] },
+          { p: [{ b: 'Check yourself. ' }, '(1) A base model is asked "What is the capital of France?" Why might it answer with more quiz questions instead of "Paris"? (2) Your support bot agrees with angry customers even when they are wrong. Which training stage most likely taught that, and why? (3) A team rewards its coding model only when the tests pass. What could go wrong?'] },
+        ],
+        say: 'Pretraining gives a model knowledge by predicting text, instruction tuning teaches it the assistant role, and preference or reinforcement learning shapes behaviour by rewarding results. The model learns whatever the reward measures, so reward hacking such as flattery or gaming tests is the risk, and evals are the defence.',
+      },
     ],
     labs: [
       {
