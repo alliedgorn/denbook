@@ -6,6 +6,7 @@ import type { Database } from 'bun:sqlite';
 import { SECURITY_RETENTION_DAYS, pruneSecurityEvents } from '../server/security-logger.ts';
 import { pruneBeastTokens } from '../server/beast-tokens.ts';
 import { ORACLE_DATA_DIR } from '../config.ts';
+import { deliverToPane } from '../notify.ts';
 
 const UPLOADS_DIR = path.join(ORACLE_DATA_DIR, 'uploads');
 const ARCHIVE_DIR = path.join(ORACLE_DATA_DIR, 'uploads', 'archive');
@@ -107,10 +108,11 @@ function runDrainCycle() {
         // Resolve tmux session name
         const sessionName = beast.charAt(0).toUpperCase() + beast.slice(1);
 
-        // Check session exists — re-queue if Beast is offline
-        const hasSession = Bun.spawnSync(['tmux', 'has-session', '-t', sessionName]);
-        if (hasSession.exitCode !== 0) {
-          // Beast offline — re-append to tail of queue so it retries next cycle
+        // Deliver only into a pane running claude (T#973). No session, or a
+        // session whose claude has exited and left a bash prompt: re-append
+        // to the tail of the queue so it retries next cycle, never typed.
+        const outcome = deliverToPane(sessionName, message);
+        if (outcome !== 'sent') {
           try {
             Bun.spawnSync(['bash', '-c',
               `umask 0077 && flock "${lockPath}" bash -c "echo '${encoded}' >> '${queuePath}'"`
@@ -119,16 +121,6 @@ function runDrainCycle() {
           drainLastSent.set(beast, Date.now()); // avoid spinning on offline Beasts
           continue;
         }
-
-        // Send to tmux
-        Bun.spawnSync(['tmux', 'send-keys', '-t', sessionName, '-l', message]);
-        // T#714 (follow-up to T#713 scope-miss): sleep 200ms between text-paste
-        // and Enter to break the race with Claude Code's Ink TUI renderer.
-        // Without this delay, Enter could land mid-frame while the input field
-        // was still rendering the paste, and the message would sit stuck in the
-        // input instead of submitting. Same pattern landed in notify-drain.sh:42.
-        Bun.sleepSync(200);
-        Bun.spawnSync(['tmux', 'send-keys', '-t', sessionName, 'Enter']);
 
         drainLastSent.set(beast, Date.now());
       } catch (err) {
