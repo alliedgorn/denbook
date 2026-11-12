@@ -35,7 +35,7 @@ function chatBreaks(text: string): string {
     .join('');
 }
 
-// Same-origin by resolved origin, not by a leading "/": "//host" and "/\\host"
+// Same-origin by resolved origin, not by a leading "/": "//host" and "/\host"
 // also start with a slash and leave the site (Bertus, PR 140 review).
 function isSameOrigin(href: string): boolean {
   try { return new URL(href, window.location.origin).origin === window.location.origin; } catch { return false; }
