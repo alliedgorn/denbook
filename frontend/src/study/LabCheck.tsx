@@ -115,6 +115,7 @@ export function LabCheck({ labKey, context }: { labKey: string; context: string 
         </div>
       )}
       {pending && <p className={styles.muted}>Sent. Karo's check will show here.</p>}
+      <p className={styles.muted}>Don't paste API keys, tokens or passwords. Everything you send here is kept.</p>
       <textarea
         maxLength={8000}
         placeholder="Paste your code, then what it printed when you ran it."
