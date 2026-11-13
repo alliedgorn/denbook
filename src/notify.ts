@@ -67,7 +67,45 @@ function formatUtc7Timestamp(date: Date): string {
  */
 export const DELIVERY_PANE_COMMAND = 'claude';
 
-export type PaneDelivery = 'sent' | 'no-session' | 'not-claude';
+/**
+ * - sent: text typed and Enter pressed.
+ * - no-session / not-claude: refused before any key was sent. The caller re-queues.
+ * - failed: typing the text failed (tmux exited non-zero), so nothing reached the
+ *   input box. Safe to re-queue. (T#973 c3228: this used to be reported as 'sent'.)
+ * - typed-no-enter: the text is in the input box but Enter failed twice. Do NOT
+ *   re-queue, or the next delivery types a second copy behind it.
+ */
+export type PaneDelivery = 'sent' | 'no-session' | 'not-claude' | 'failed' | 'typed-no-enter';
+
+/**
+ * tmux 3.4 rejects `send-keys -l` with "command too long" a little above 16KB
+ * (Leonard, T#973 c3228: 16000 bytes ok, 17000 exit 1). Above this size the text
+ * goes through a paste buffer instead, which has no argv limit.
+ */
+export const SEND_KEYS_MAX_BYTES = 15000;
+
+/**
+ * Put `text` into the session's active pane as literal input, without pressing
+ * Enter. Returns true only if tmux reported success.
+ *
+ * The paste path uses `paste-buffer -r` (keep LF as LF, the same bytes
+ * `send-keys -l` sends) and no `-p`, so the pane receives exactly what the
+ * short path would have typed. `-d` deletes the buffer after pasting.
+ */
+export function typeIntoPane(sessionName: string, text: string): boolean {
+  if (Buffer.byteLength(text, 'utf8') <= SEND_KEYS_MAX_BYTES) {
+    return Bun.spawnSync(['tmux', 'send-keys', '-t', sessionName, '-l', text]).exitCode === 0;
+  }
+  const buffer = `den-notify-${process.pid}-${Date.now()}`;
+  const load = Bun.spawnSync(['tmux', 'load-buffer', '-b', buffer, '-'], { stdin: Buffer.from(text, 'utf8') });
+  if (load.exitCode !== 0) return false;
+  const paste = Bun.spawnSync(['tmux', 'paste-buffer', '-d', '-r', '-b', buffer, '-t', sessionName]);
+  if (paste.exitCode !== 0) {
+    Bun.spawnSync(['tmux', 'delete-buffer', '-b', buffer]);
+    return false;
+  }
+  return true;
+}
 
 /**
  * Type `text` into the Beast's tmux pane and press Enter, but only when that
@@ -88,13 +126,19 @@ export function deliverToPane(sessionName: string, text: string): PaneDelivery {
     return 'not-claude';
   }
 
-  Bun.spawnSync(['tmux', 'send-keys', '-t', sessionName, '-l', text]);
+  if (!typeIntoPane(sessionName, text)) {
+    console.error(`[notify] FAILED: could not type ${Buffer.byteLength(text, 'utf8')} bytes into ${sessionName} (T#973)`);
+    return 'failed';
+  }
   // T#714 (follow-up to T#713 scope-miss): sleep 200ms between text-paste and
   // Enter to break the race with Claude Code's Ink TUI renderer. Without it,
   // Enter can land mid-frame and the message sits stuck in the input box.
   Bun.sleepSync(200);
-  Bun.spawnSync(['tmux', 'send-keys', '-t', sessionName, 'Enter']);
-  return 'sent';
+  if (Bun.spawnSync(['tmux', 'send-keys', '-t', sessionName, 'Enter']).exitCode === 0) return 'sent';
+  Bun.sleepSync(200);
+  if (Bun.spawnSync(['tmux', 'send-keys', '-t', sessionName, 'Enter']).exitCode === 0) return 'sent';
+  console.error(`[notify] Text typed into ${sessionName} but Enter failed twice; not re-queued (T#973)`);
+  return 'typed-no-enter';
 }
 
 /**

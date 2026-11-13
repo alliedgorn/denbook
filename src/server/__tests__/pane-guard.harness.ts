@@ -8,7 +8,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { deliverToPane } from '../../notify.ts';
+import { deliverToPane, typeIntoPane, SEND_KEYS_MAX_BYTES } from '../../notify.ts';
 
 const dir = process.argv[2];
 if (!dir || !process.env.TMUX_TMPDIR || process.env.TMUX) {
@@ -49,7 +49,9 @@ try {
   const got = path.join(dir, 'claude-got.txt');
   const loop = path.join(dir, 'fake-claude-loop.sh');
   const launch = path.join(dir, 'fake-claude-launch.sh');
-  fs.writeFileSync(loop, `#!/bin/bash\nwhile IFS= read -r line; do printf '%s\\n' "$line" >> "${got}"; done\n`, { mode: 0o755 });
+  // stty -icanon: a canonical-mode tty truncates any line past 4095 bytes, and
+  // scenario 6 sends 20KB. Claude Code reads its tty raw, so this matches it.
+  fs.writeFileSync(loop, `#!/bin/bash\nstty -icanon -echo\nwhile IFS= read -r line; do printf '%s\\n' "$line" >> "${got}"; done\n`, { mode: 0o755 });
   fs.writeFileSync(launch, `#!/bin/bash\nexec -a claude /bin/bash "${loop}"\n`, { mode: 0o755 });
   tmux('new-session', '-d', '-s', 'Pgclaude', '-c', dir, `exec ${launch}`);
   for (const s of ['Pgbash', 'Pgcontrol']) {
@@ -85,6 +87,26 @@ try {
 
   // 4. No session at all.
   out.missingOutcome = deliverToPane('Pgnosuchsession', 'hello');
+
+  // 5. Positive control for the length wall (T#973 c3228): raw send-keys -l over
+  // about 16KB fails on this tmux. If it ever stops failing, scenario 6 still
+  // passes but no longer proves the paste path is needed.
+  out.rawOversizeExit = tmux('send-keys', '-t', 'Pgcontrol', '-l', 'y'.repeat(17000)).exitCode;
+
+  // 6. Oversize delivery into claude goes through the paste buffer and arrives whole.
+  const big = 'BIG:' + 'x'.repeat(20000) + ':END';
+  out.bigBytes = big.length;
+  out.bigOutcome = deliverToPane('Pgclaude', big);
+  waitFor(() => fs.existsSync(got) && fs.readFileSync(got, 'utf-8').includes(':END'));
+  const gotLines = fs.existsSync(got) ? fs.readFileSync(got, 'utf-8').split('\n') : [];
+  out.bigArrivedWhole = gotLines.includes(big);
+  out.bigLongestLine = Math.max(0, ...gotLines.map((l) => l.length));
+  out.buffersLeft = tmux('list-buffers', '-F', '#{buffer_name}').stdout.toString().trim();
+
+  // 7. A tmux failure is reported, on both paths, instead of 'sent'.
+  out.typeShortToMissing = typeIntoPane('Pgnosuchsession', 'hi');
+  out.typeBigToMissing = typeIntoPane('Pgnosuchsession', 'z'.repeat(SEND_KEYS_MAX_BYTES + 1));
+  out.buffersLeftAfterFail = tmux('list-buffers', '-F', '#{buffer_name}').stdout.toString().trim();
 } finally {
   // Explicit socket, so teardown can never reach the real tmux server.
   if (fs.existsSync(socket)) Bun.spawnSync(['tmux', '-S', socket, 'kill-server']);

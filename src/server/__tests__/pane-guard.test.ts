@@ -55,4 +55,21 @@ describe('deliverToPane (T#973)', () => {
   test('reports a missing session without sending', () => {
     expect(r.missingOutcome).toBe('no-session');
   });
+
+  test('positive control: raw send-keys -l over ~16KB fails on this tmux (T#973 c3228)', () => {
+    expect(r.rawOversizeExit).not.toBe(0);
+  });
+
+  test('delivers an oversize line whole through the paste buffer, and leaves no buffer behind', () => {
+    expect(r.bigBytes).toBeGreaterThan(16000);
+    expect(r.bigOutcome).toBe('sent');
+    expect(r.bigArrivedWhole).toBe(true);
+    expect(r.buffersLeft).toBe('');
+  });
+
+  test('reports a tmux failure instead of sent, on both the short and the paste path', () => {
+    expect(r.typeShortToMissing).toBe(false);
+    expect(r.typeBigToMissing).toBe(false);
+    expect(r.buffersLeftAfterFail).toBe('');
+  });
 });

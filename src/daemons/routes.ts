@@ -121,7 +121,9 @@ function runDrainCycle() {
           console.warn(`[Notify] REFUSED: ${sessionName} pane is not running claude, holding ${beast} queue (T#973)`);
           drainLastRefuseWarn.set(beast, Date.now());
         }
-        if (outcome !== 'sent') {
+        // 'typed-no-enter' is deliberately NOT re-queued: the text already sits in the
+        // input box, and a retry would type a second copy behind it.
+        if (outcome !== 'sent' && outcome !== 'typed-no-enter') {
           try {
             Bun.spawnSync(['bash', '-c',
               `umask 0077 && flock "${lockPath}" bash -c "echo '${encoded}' >> '${queuePath}'"`
