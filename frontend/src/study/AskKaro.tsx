@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import styles from '../pages/Study.module.css';
+import { LAB_TAG_RE, VERDICT_RE } from './labTags';
+import { MD_COMPONENTS, PEER, REFRESH_EVENT, chatBreaks, publishThread, type Msg } from './studyChat';
 
 // "Ask Karo" (T#968) — a study-side view of the existing gorn ↔ karo DM thread.
 // Sending is a normal owner DM (POST /api/dm, sender derived server-side from the
@@ -12,7 +14,6 @@ import styles from '../pages/Study.module.css';
 // DM GETs are audited, so polling is deliberately slow (Bertus, T#968): the
 // panel refetches right after a send instead of polling fast.
 
-const PEER = 'karo';
 const OPEN_POLL_MS = 10000;
 const CLOSED_POLL_MS = 120000;
 const SEEN_KEY = 'study-ask-karo-seen';
@@ -24,40 +25,6 @@ const CTX_RE = /^\[Study: ([^\]\n]{1,200})\]\n?/;
 const PIN_RE = /^\[Pin\][ \t]*\n?/;
 const PIN_KEY = 'study-ask-karo-pin';
 const NOTE_HIDDEN_KEY = 'study-ask-karo-note-hidden';
-
-interface Msg {
-  id: number;
-  sender: string;
-  message: string;
-  created_at: string;
-}
-
-// Chat-style line breaks: a single newline starts a new line, like in the DMs.
-// Markdown would join those lines, so turn them into hard breaks, but leave
-// fenced code blocks alone.
-function chatBreaks(text: string): string {
-  return text
-    .split(/(```[\s\S]*?```)/g)
-    .map((part, i) => (i % 2 ? part : part.replace(/([^\n])\n(?!\n)/g, '$1  \n')))
-    .join('');
-}
-
-// Same-origin by resolved origin, not by a leading "/": "//host" and "/\host"
-// also start with a slash and leave the site (Bertus, PR 140 review).
-function isSameOrigin(href: string): boolean {
-  try { return new URL(href, window.location.origin).origin === window.location.origin; } catch { return false; }
-}
-
-const MD_COMPONENTS = {
-  a({ href, children }: { href?: string; children?: React.ReactNode }) {
-    return href && isSameOrigin(href)
-      ? <a href={href}>{children}</a>
-      : <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
-  },
-  img({ src, alt }: { src?: string; alt?: string }) {
-    return <img src={src} alt={alt || ''} loading="lazy" />;
-  },
-};
 
 function readSeen(): number {
   try { return Number(localStorage.getItem(SEEN_KEY)) || 0; } catch { return 0; }
@@ -105,6 +72,7 @@ export function AskKaro({ context }: { context: string }) {
       const body = await res.json();
       const list: Msg[] = (body.messages || []).slice().reverse();
       setMsgs(list);
+      publishThread(list);
       setState(s => (s === 'load-error' ? 'idle' : s));
     } catch {
       setState(s => (s === 'sending' ? s : 'load-error'));
@@ -118,6 +86,12 @@ export function AskKaro({ context }: { context: string }) {
     }, open ? OPEN_POLL_MS : CLOSED_POLL_MS);
     return () => clearInterval(id);
   }, [open, load]);
+
+  useEffect(() => {
+    const onRefresh = () => { load(); };
+    window.addEventListener(REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(REFRESH_EVENT, onRefresh);
+  }, [load]);
 
   const lastKaro = msgs.filter(m => m.sender === PEER).reduce((a, m) => Math.max(a, m.id), 0);
 
@@ -203,10 +177,15 @@ export function AskKaro({ context }: { context: string }) {
                 return <span key={m.id} className={styles.askPinLine}>📌 Karo updated the note · {time(m.created_at)}</span>;
               }
               const ctx = mine ? CTX_RE.exec(m.message) : null;
-              const bodyText = ctx ? m.message.slice(ctx[0].length) : m.message;
+              let bodyText = ctx ? m.message.slice(ctx[0].length) : m.message;
+              let label = ctx ? ctx[1] : null;
+              const tag = mine ? LAB_TAG_RE.exec(bodyText) : null;
+              if (tag) { bodyText = bodyText.slice(tag[0].length); label = `${label ?? 'Lab'} · answer`; }
+              const verdict = mine ? null : VERDICT_RE.exec(m.message);
+              if (verdict) { bodyText = m.message.slice(verdict[0].length); label = verdict[2] === 'pass' ? 'Lab check · ✅ pass' : 'Lab check · ❌ fix'; }
               return (
                 <div key={m.id} className={mine ? `${styles.askMsg} ${styles.askMine}` : styles.askMsg}>
-                  {ctx && <span className={styles.askCtx}>{ctx[1]}</span>}
+                  {label && <span className={styles.askCtx}>{label}</span>}
                   <div className={styles.askText}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{chatBreaks(bodyText)}</ReactMarkdown>
                   </div>

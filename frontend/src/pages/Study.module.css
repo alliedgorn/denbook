@@ -242,3 +242,16 @@ td .linkBtn { margin-left: 0; }
 @media (max-width: 600px) {
   .askFab { right: 16px; bottom: 16px; }
 }
+
+/* Lab check (Gorn 11-13): answer box + Karo's verdict on the lab card. */
+.labCheck { display: flex; flex-direction: column; gap: 8px; max-width: 72ch; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.labCheckHead { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); font-weight: 500; }
+.labCheck textarea {
+  width: 100%; min-height: 120px; resize: vertical; border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; font-family: var(--font-mono); font-size: 13px; background: var(--bg-primary); color: var(--text-primary);
+  box-sizing: border-box;
+}
+.verdict { border-radius: 8px; padding: 10px 14px; font-size: 14px; border: 1px solid var(--border); }
+.verdict > b { display: block; margin-bottom: 2px; }
+.verdictOk { border-color: var(--success); background: var(--st-good-soft); }
+.verdictFix { border-color: var(--st-bad); background: var(--st-bad-soft); }
