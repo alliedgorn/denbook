@@ -269,9 +269,9 @@ export const BOOT_MODULES: BootModule[] = [
       },
       {
         q: 'Why do LLMs sometimes state wrong facts very confidently?',
-        o: ['They are trained to lie', 'They predict plausible next tokens, not verified facts', 'The context window is too large', 'Streaming corrupts the answer'],
+        o: ['They decide to deceive the user', 'They predict plausible next tokens, not verified facts', 'The context window is too large', 'Streaming corrupts the answer'],
         a: 1,
-        w: 'Fluency and truth are different things. The model produces what is likely given its training, which is why we ground answers in real sources and evaluate them.',
+        w: 'Fluency and truth are different things. The model produces what is likely given its training, which is why we ground answers in real sources and evaluate them. Two things feed it: false claims in the training text get repeated as smoothly as true ones (to the model, a common myth is just likely text), and post-training rewards a confident answer over "I don\'t know", so guessing pays. Neither is deciding to deceive: there is no step where the model checks the truth and hides it.',
       },
       {
         q: 'A Thai message and an English message have the same number of characters. Which usually uses more tokens?',
