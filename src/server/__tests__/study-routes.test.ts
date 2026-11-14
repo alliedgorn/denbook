@@ -187,6 +187,13 @@ describe('study content', () => {
     fsMod.unlinkSync(outside);
   });
 
+  test('a FIFO is refused without blocking the server', async () => {
+    const { spawnSync } = require('child_process') as typeof import('child_process');
+    expect(spawnSync('mkfifo', [pathMod.join(dir, 'pipe.json')]).status).toBe(0);
+    const r = await req('owner', 'GET', '/api/study/content/pipe');
+    expect(r.status).toBe(404);
+  });
+
   test('broken JSON and non-object JSON are errors, not crashes', async () => {
     fsMod.writeFileSync(pathMod.join(dir, 'bad.json'), '{not json');
     expect((await req('owner', 'GET', '/api/study/content/bad')).status).toBe(500);

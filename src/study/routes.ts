@@ -115,8 +115,10 @@ export function registerStudyRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const file = path.join(contentDir, `${name}.json`);
     // Open with O_NOFOLLOW and check the open handle, so the file checked is the file
     // read: no stat-then-read gap for a swap to a symlink (Bertus, PR 148 review).
+    // O_NONBLOCK too: a blocking open on a FIFO waits for a writer and freezes the whole
+    // server (Bertus measured it). Non-blocking, the open returns and fstat rejects it.
     let fd: number;
-    try { fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW); } catch { return c.json({ error: 'no content' }, 404); }
+    try { fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK); } catch { return c.json({ error: 'no content' }, 404); }
     let st: fs.Stats;
     let raw: string;
     try {
