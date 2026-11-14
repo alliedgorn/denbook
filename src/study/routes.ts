@@ -102,7 +102,7 @@ export function registerStudyRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // GET /api/study/content/:name — runtime content file <contentDir>/<name>.json
   // Read-only, owner-gated like progress. The name is a strict slug, so it can never
-  // leave contentDir. Symlinks are refused. The page validates the shape again and
+  // leave contentDir. Symlinks are refused (O_NOFOLLOW on open). The page validates the shape again and
   // falls back to its bundled copy on anything wrong, and every string is rendered as
   // text by RichText, so a bad file can break the page's content but never inject HTML.
   app.get('/api/study/content/:name', (c) => {
@@ -113,13 +113,23 @@ export function registerStudyRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     if (!contentDir) return c.json({ error: 'no content' }, 404);
 
     const file = path.join(contentDir, `${name}.json`);
+    // Open with O_NOFOLLOW and check the open handle, so the file checked is the file
+    // read: no stat-then-read gap for a swap to a symlink (Bertus, PR 148 review).
+    let fd: number;
+    try { fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW); } catch { return c.json({ error: 'no content' }, 404); }
     let st: fs.Stats;
-    try { st = fs.lstatSync(file); } catch { return c.json({ error: 'no content' }, 404); }
-    if (!st.isFile()) return c.json({ error: 'no content' }, 404);
-    if (st.size > STUDY_CONTENT_MAX_BYTES) return c.json({ error: 'content file too large' }, 500);
+    let raw: string;
+    try {
+      st = fs.fstatSync(fd);
+      if (!st.isFile()) return c.json({ error: 'no content' }, 404);
+      if (st.size > STUDY_CONTENT_MAX_BYTES) return c.json({ error: 'content file too large' }, 500);
+      raw = fs.readFileSync(fd, 'utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
 
     let content: unknown;
-    try { content = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return c.json({ error: 'content file is not valid JSON' }, 500); }
+    try { content = JSON.parse(raw); } catch { return c.json({ error: 'content file is not valid JSON' }, 500); }
     if (!content || typeof content !== 'object' || Array.isArray(content)) {
       return c.json({ error: 'content must be a JSON object' }, 500);
     }
