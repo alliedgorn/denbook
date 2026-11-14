@@ -1,6 +1,8 @@
 import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { Database } from 'bun:sqlite';
+import fs from 'fs';
+import path from 'path';
 
 // Study area — owner-only learning tracks + per-user progress (T#963)
 //
@@ -14,7 +16,13 @@ import type { Database } from 'bun:sqlite';
 
 interface StudyHelpers {
   hasSessionAuth: (c: Context) => boolean;
+  // Where runtime study content lives (Gorn 11-14: change content without a PR,
+  // a rebuild or a restart). Karo edits these files on the box; there is no write
+  // route. Unset = the content route answers 404 and the page uses bundled content.
+  contentDir?: string;
 }
+
+export const STUDY_CONTENT_MAX_BYTES = 2 * 1024 * 1024;
 
 export const STUDY_MAX_BYTES = 256 * 1024;
 const TRACK_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -32,7 +40,7 @@ export function ensureStudyTables(sqlite: Database) {
 }
 
 export function registerStudyRoutes(app: OpenAPIHono, sqlite: Database, helpers: StudyHelpers) {
-  const { hasSessionAuth } = helpers;
+  const { hasSessionAuth, contentDir } = helpers;
 
   function ownerOf(c: Context): string | null {
     // Both checks are load-bearing. role 'owner' is also the middleware's default
@@ -90,5 +98,32 @@ export function registerStudyRoutes(app: OpenAPIHono, sqlite: Database, helpers:
        ON CONFLICT(user, track) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`
     ).run(user, track, JSON.stringify(data), now);
     return c.json({ track, updated_at: now });
+  });
+
+  // GET /api/study/content/:name — runtime content file <contentDir>/<name>.json
+  // Read-only, owner-gated like progress. The name is a strict slug, so it can never
+  // leave contentDir. Symlinks are refused. The page validates the shape again and
+  // falls back to its bundled copy on anything wrong, and every string is rendered as
+  // text by RichText, so a bad file can break the page's content but never inject HTML.
+  app.get('/api/study/content/:name', (c) => {
+    const user = ownerOf(c);
+    if (!user) return deny(c);
+    const name = c.req.param('name');
+    if (!TRACK_RE.test(name)) return c.json({ error: 'invalid name' }, 400);
+    if (!contentDir) return c.json({ error: 'no content' }, 404);
+
+    const file = path.join(contentDir, `${name}.json`);
+    let st: fs.Stats;
+    try { st = fs.lstatSync(file); } catch { return c.json({ error: 'no content' }, 404); }
+    if (!st.isFile()) return c.json({ error: 'no content' }, 404);
+    if (st.size > STUDY_CONTENT_MAX_BYTES) return c.json({ error: 'content file too large' }, 500);
+
+    let content: unknown;
+    try { content = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return c.json({ error: 'content file is not valid JSON' }, 500); }
+    if (!content || typeof content !== 'object' || Array.isArray(content)) {
+      return c.json({ error: 'content must be a JSON object' }, 500);
+    }
+    c.header('Cache-Control', 'no-store');
+    return c.json({ name, content, updated_at: st.mtime.toISOString() });
   });
 }

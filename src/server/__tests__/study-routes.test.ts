@@ -119,3 +119,78 @@ describe('study input handling', () => {
     expect((await g.json()).data).toEqual(payload);
   });
 });
+
+// Runtime content (Gorn 11-14): read-only file route, same owner gate as progress.
+describe('study content', () => {
+  const fsMod = require('fs') as typeof import('fs');
+  const pathMod = require('path') as typeof import('path');
+  const osMod = require('os') as typeof import('os');
+  let dir: string;
+
+  function buildWith(contentDir?: string) {
+    sqlite = new Database(':memory:');
+    ensureStudyTables(sqlite);
+    app = new OpenAPIHono();
+    app.use('*', async (c, next) => {
+      const who = (c.req.header('x-test-caller') || 'none') as Caller;
+      if (who === 'owner' || who === 'local') c.set('role' as any, 'owner');
+      if (who === 'guest') c.set('role' as any, 'guest');
+      if (who === 'beast') c.set('role' as any, 'beast');
+      c.set('hasCookie' as any, who === 'owner' || who === 'guest');
+      return next();
+    });
+    registerStudyRoutes(app, sqlite, { hasSessionAuth: (c) => !!(c.get as any)('hasCookie'), contentDir });
+  }
+
+  beforeEach(() => {
+    dir = fsMod.mkdtempSync(pathMod.join(osMod.tmpdir(), 'study-content-'));
+    fsMod.writeFileSync(pathMod.join(dir, 'bootcamp.json'), JSON.stringify({ modules: [{ id: 'x' }], secret: 'lab answers' }));
+    buildWith(dir);
+  });
+
+  test('owner: reads the file (positive control)', async () => {
+    const r = await req('owner', 'GET', '/api/study/content/bootcamp');
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.content.modules[0].id).toBe('x');
+    expect(typeof j.updated_at).toBe('string');
+    expect(r.headers.get('cache-control')).toBe('no-store');
+  });
+
+  for (const who of ['guest', 'beast', 'local', 'none'] as Caller[]) {
+    test(`${who}: 403 and no content leaks`, async () => {
+      const r = await req(who, 'GET', '/api/study/content/bootcamp');
+      expect(r.status).toBe(403);
+      expect(JSON.stringify(await r.json())).not.toContain('lab answers');
+    });
+  }
+
+  test('names that could escape the dir are rejected', async () => {
+    for (const bad of ['..%2Fsecret', '.hidden', 'UPPER', 'a.b', '%2Fetc%2Fpasswd']) {
+      const r = await req('owner', 'GET', `/api/study/content/${bad}`);
+      expect([400, 404]).toContain(r.status);
+    }
+  });
+
+  test('missing file is 404, and no contentDir is 404', async () => {
+    expect((await req('owner', 'GET', '/api/study/content/nope')).status).toBe(404);
+    buildWith(undefined);
+    expect((await req('owner', 'GET', '/api/study/content/bootcamp')).status).toBe(404);
+  });
+
+  test('a symlink is refused even if it points somewhere readable', async () => {
+    const outside = pathMod.join(osMod.tmpdir(), `outside-${Date.now()}.json`);
+    fsMod.writeFileSync(outside, JSON.stringify({ leaked: true }));
+    fsMod.symlinkSync(outside, pathMod.join(dir, 'linked.json'));
+    const r = await req('owner', 'GET', '/api/study/content/linked');
+    expect(r.status).toBe(404);
+    fsMod.unlinkSync(outside);
+  });
+
+  test('broken JSON and non-object JSON are errors, not crashes', async () => {
+    fsMod.writeFileSync(pathMod.join(dir, 'bad.json'), '{not json');
+    expect((await req('owner', 'GET', '/api/study/content/bad')).status).toBe(500);
+    fsMod.writeFileSync(pathMod.join(dir, 'arr.json'), '[1,2]');
+    expect((await req('owner', 'GET', '/api/study/content/arr')).status).toBe(500);
+  });
+});

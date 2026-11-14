@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { BOOT_MODULES, BOOT_PLANNED } from './bootModules';
+import { useBootContent } from './bootContent';
 import { AskKaro } from './AskKaro';
 import { LabCheck } from './LabCheck';
 import { LabToolbox } from './LabToolbox';
@@ -28,6 +28,7 @@ function dayKey(d: Date) {
 }
 
 export function BootcampTrack() {
+  const { modules: BOOT_MODULES, planned: BOOT_PLANNED, note } = useBootContent();
   const { state, update, sync, reload } = useStudyProgress<BootProgress>('bootcamp', BOOT_EMPTY);
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -58,6 +59,7 @@ export function BootcampTrack() {
         <div>
           <h1>AI engineer bootcamp</h1>
           <SyncBadge sync={sync} onRetry={reload} />
+          {note && <p className={styles.muted} role="status">{note}</p>}
         </div>
         <div className={styles.total}><Plates pct={total} /><b>{total}%</b></div>
       </div>
@@ -110,6 +112,7 @@ export function BootcampTrack() {
 type Touch = (fn: (s: BootProgress) => void) => void;
 
 function Plan({ state, touch, go }: { state: BootProgress; touch: Touch; go: (id: string | null, t?: Tab) => void }) {
+  const { modules: BOOT_MODULES, planned: BOOT_PLANNED } = useBootContent();
   const today = dayKey(new Date());
   const entry = state.log[today];
   const next = BOOT_MODULES.map(m => ({ m, s: modStats(m, state) })).find(x => x.s.labs < x.m.labs.length);
@@ -239,6 +242,7 @@ interface ModuleViewProps {
 }
 
 function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps) {
+  const { modules: BOOT_MODULES } = useBootContent();
   const idx = BOOT_MODULES.indexOf(m);
   const s = modStats(m, state);
   const counts: Record<Tab, string> = {

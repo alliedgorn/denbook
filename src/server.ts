@@ -1365,7 +1365,7 @@ registerTeamsRoutes(app, sqlite, { hasSessionAuth });
 // Study area — owner-only learning tracks + progress (T#963)
 // ============================================================================
 try { ensureStudyTables(sqlite); } catch { /* exists */ }
-registerStudyRoutes(app, sqlite, { hasSessionAuth });
+registerStudyRoutes(app, sqlite, { hasSessionAuth, contentDir: path.join(ORACLE_DATA_DIR, 'study') });
 
 
 // Scheduler routes + helpers + auto-trigger daemon — extracted to src/scheduler/routes.ts (T#772)
