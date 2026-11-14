@@ -255,3 +255,13 @@ td .linkBtn { margin-left: 0; }
 .verdict > b { display: block; margin-bottom: 2px; }
 .verdictOk { border-color: var(--success); background: var(--st-good-soft); }
 .verdictFix { border-color: var(--st-bad); background: var(--st-bad-soft); }
+
+/* Lab toolbox (Gorn 11-14): what you'll need, closed by default */
+.toolbox { margin: 12px 0; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; max-width: 68ch; }
+.toolbox summary { cursor: pointer; font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.toolbox[open] summary { margin-bottom: 8px; }
+.tool { margin: 0 0 10px; font-size: 14px; }
+.tool .code { margin-top: 4px; }
+.docs b { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); font-weight: 500; }
+.docs ul { margin: 4px 0 0; padding-left: 18px; font-size: 14px; }
+.docs a { color: var(--accent); overflow-wrap: anywhere; }

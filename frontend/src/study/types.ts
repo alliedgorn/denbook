@@ -32,6 +32,21 @@ export interface StudyModule {
   drills: Drill[];
 }
 
+// Lab toolbox (Gorn 11-14: "lab tells me to do things I don't know, and doesn't say where
+// to look"). What you'll need for a lab: each tool is a name, one line on what it is for,
+// and an optional tiny example that shows the tool, not the answer. Docs are fixed
+// https links written here in the source, never user input.
+export interface LabTool {
+  name: string;
+  use: string;
+  code?: string;
+}
+
+export interface DocLink {
+  label: string;
+  url: string;
+}
+
 // Bootcamp (T#967): a hands-on lab is a goal, steps, and a "done when" check.
 export interface Lab {
   t: string;
@@ -39,6 +54,8 @@ export interface Lab {
   goal: string;
   steps: Block[];
   done: string;
+  tools?: LabTool[];
+  docs?: DocLink[];
 }
 
 export interface BootModule extends StudyModule {

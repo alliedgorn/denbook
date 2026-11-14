@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { BOOT_MODULES, BOOT_PLANNED } from './bootModules';
 import { AskKaro } from './AskKaro';
 import { LabCheck } from './LabCheck';
+import { LabToolbox } from './LabToolbox';
 import { RichText } from './RichText';
 import { useStudyProgress } from './useStudyProgress';
 import { Drills, Learn, Plates, Quiz, SyncBadge } from './AiTrack';
@@ -285,6 +286,7 @@ function Labs({ m, state, touch }: { m: BootModule; state: BootProgress; touch: 
             <h3>{lab.t}</h3>
             <p className={styles.muted}>{lab.goal}</p>
             <div className={styles.body}><RichText blocks={lab.steps} /></div>
+            <LabToolbox tools={lab.tools} docs={lab.docs} />
             <div className={styles.say}><b>Done when</b>{lab.done}</div>
             <LabCheck labKey={key} context={`Bootcamp › ${m.name} › Lab › ${lab.t}`} />
             <div className={styles.row}>

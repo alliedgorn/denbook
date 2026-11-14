@@ -143,6 +143,17 @@ export const BOOT_MODULES: BootModule[] = [
           { tip: ['Type it, don\'t paste it. Today the point is your hands on the keyboard.'] },
         ],
         done: 'python hello.py "what is a token?" prints an answer and three numbers, and it is committed to git.',
+        tools: [
+          { name: 'ollama.chat()', use: 'sends messages to the model and waits for the whole reply.', code: 'import ollama\n\nresp = ollama.chat(\n    model="qwen3.5:9b",\n    messages=[{"role": "user", "content": "hi"}],\n)\nprint(resp["message"]["content"])' },
+          { name: 'the numbers on the reply', use: 'the response carries counts and why it stopped.', code: 'resp["prompt_eval_count"]   # tokens in\nresp["eval_count"]          # tokens out\nresp["done_reason"]         # "stop", "length", ...' },
+          { name: 'sys.argv', use: 'the words typed after the script name, as a list of strings.', code: 'import sys\nprint(sys.argv)      # python hello.py "hi there" -> [\'hello.py\', \'hi there\']' },
+          { name: 'help()', use: 'prints any function\'s parameters without leaving Python.', code: 'help(ollama.chat)' },
+        ],
+        docs: [
+          { label: 'ollama-python README: every function with an example', url: 'https://github.com/ollama/ollama-python' },
+          { label: 'Ollama chat API: every field in the request and the response', url: 'https://docs.ollama.com/api/chat' },
+          { label: 'Python sys.argv', url: 'https://docs.python.org/3/library/sys.html' },
+        ],
       },
       {
         t: 'A chat that remembers (because you make it)',
@@ -158,6 +169,15 @@ export const BOOT_MODULES: BootModule[] = [
           ] },
         ],
         done: 'The second version remembers your name, the first does not, and you can explain why in one sentence.',
+        tools: [
+          { name: 'input() and a loop', use: 'read a line from the keyboard, forever, until the user quits.', code: 'while True:\n    text = input("you: ")\n    if text == "quit":\n        break' },
+          { name: 'the messages list', use: 'a list of dicts, oldest first. Each turn is one user dict plus one assistant dict.', code: 'messages = [{"role": "system", "content": "You are terse."}]\nmessages.append({"role": "user", "content": text})' },
+          { name: 'list tools', use: 'for the limit: how long it is, and removing by position.', code: 'len(messages)       # how many items\nmessages.pop(1)     # remove the item at index 1 (index 0 is the first)\nmessages[-4:]       # the last 4 items, as a new list' },
+        ],
+        docs: [
+          { label: 'Python tutorial: lists and their methods', url: 'https://docs.python.org/3/tutorial/datastructures.html' },
+          { label: 'Ollama chat API: every field in the request and the response', url: 'https://docs.ollama.com/api/chat' },
+        ],
       },
       {
         t: 'Temperature experiment',
@@ -172,6 +192,16 @@ export const BOOT_MODULES: BootModule[] = [
           ] },
         ],
         done: 'README.md has your results table and your own conclusion, in your own words.',
+        tools: [
+          { name: 'options={"temperature": ...}', use: 'sampling settings go in options, not as their own argument.', code: 'ollama.chat(model=..., messages=..., options={"temperature": 0})' },
+          { name: 'range() and nested loops', use: 'run the same thing N times, for each setting.', code: 'for temp in [0, 1.2]:\n    for i in range(5):     # i = 0..4\n        ...' },
+          { name: 'writing to a file', use: '"w" starts fresh, "a" adds to the end. with closes the file for you.', code: 'with open("output.txt", "a") as f:\n    print(f"--- temp {temp} run {i} ---", file=f)\n    print(answer, file=f)' },
+          { name: 'set()', use: 'drops duplicates, so len(set(...)) is the number of distinct answers. Exact match only.', code: 'len(set(["a", "b", "a"]))    # 2' },
+        ],
+        docs: [
+          { label: 'Ollama model options (temperature, top_p, num_ctx...)', url: 'https://docs.ollama.com/modelfile' },
+          { label: 'Python tutorial: reading and writing files', url: 'https://docs.python.org/3/tutorial/inputoutput.html' },
+        ],
       },
       {
         t: 'Streaming and failure handling',
@@ -186,6 +216,17 @@ export const BOOT_MODULES: BootModule[] = [
           { tip: ['Production AI code is mostly this part. Interviewers love it when you mention it unprompted.'] },
         ],
         done: 'Killing Ollama mid-answer gives a clean message instead of a crash, and the chat recovers when it comes back.',
+        tools: [
+          { name: 'stream=True', use: 'chat() returns chunks as they are made instead of one reply. The last chunk has done=True and the token counts.', code: 'for chunk in ollama.chat(model=..., messages=..., stream=True):\n    print(chunk["message"]["content"], end="", flush=True)' },
+          { name: 'ollama.Client(timeout=...)', use: 'the timeout goes on the client, not on chat(). Default is no timeout at all.', code: 'client = ollama.Client(host="http://localhost:11434", timeout=10)\nclient.chat(...)' },
+          { name: 'try / except', use: 'catch the errors you expect, by name. Can\'t connect: ConnectionError. Timeouts and dropped streams: httpx.TransportError.', code: 'import httpx\n\ntry:\n    ...\nexcept (ConnectionError, httpx.TransportError) as e:\n    print(type(e).__name__)' },
+          { name: 'time.sleep() and for ... else', use: 'wait between retries. The else runs only if the loop never hit break.', code: 'import time\n\nfor attempt in range(3):\n    ...          # break when it works\n    time.sleep(2 ** attempt)\nelse:\n    print("gave up")' },
+        ],
+        docs: [
+          { label: 'Ollama: streaming', url: 'https://docs.ollama.com/capabilities/streaming' },
+          { label: 'httpx exceptions: which error means what', url: 'https://www.python-httpx.org/exceptions/' },
+          { label: 'Python tutorial: errors and exceptions', url: 'https://docs.python.org/3/tutorial/errors.html' },
+        ],
       },
       {
         t: 'Structured output + your first portfolio push',
@@ -200,6 +241,17 @@ export const BOOT_MODULES: BootModule[] = [
           ] },
         ],
         done: 'A public repo with 4 working scripts and a README. Send me the link and I will review it like a hiring manager.',
+        tools: [
+          { name: 'format=', use: '"json" asks for any JSON. A JSON schema asks for exactly your fields.', code: 'schema = {\n    "type": "object",\n    "properties": {"company": {"type": "string"}, "salary": {"type": "number"}},\n    "required": ["company", "salary"],\n}\nresp = ollama.chat(model=..., messages=..., format=schema)' },
+          { name: 'json.loads()', use: 'turns the reply text into a dict. Throws json.JSONDecodeError if it is not valid JSON.', code: 'import json\n\ndata = json.loads(resp["message"]["content"])' },
+          { name: 'checking types', use: 'the model can still give you the wrong type. Check before you trust it.', code: 'isinstance(data.get("salary"), (int, float))   # True or False' },
+          { name: 'pushing to GitHub', use: 'make an empty repo on github.com first, then:', code: 'git remote add origin https://github.com/<you>/<repo>.git\ngit push -u origin main' },
+        ],
+        docs: [
+          { label: 'Ollama: structured outputs', url: 'https://docs.ollama.com/capabilities/structured-outputs' },
+          { label: 'Python json module', url: 'https://docs.python.org/3/library/json.html' },
+          { label: 'GitHub: your first repository', url: 'https://docs.github.com/en/get-started/start-your-journey/hello-world' },
+        ],
       },
     ],
     quiz: [
