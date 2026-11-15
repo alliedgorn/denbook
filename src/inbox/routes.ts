@@ -7,15 +7,30 @@ import { handleLearn } from '../server/handlers.ts';
 
 interface InboxHelpers {
   isTrustedRequest: (c: Context) => boolean;
+  requireBeastIdentity: (c: Context) => string | null;
   wsBroadcast: (event: string, data: any) => void;
   repoRoot: string;
 }
 
 export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers: InboxHelpers) {
-  const { isTrustedRequest, wsBroadcast, repoRoot: REPO_ROOT } = helpers;
+  const { isTrustedRequest, requireBeastIdentity, wsBroadcast, repoRoot: REPO_ROOT } = helpers;
 
   app.post('/api/handoff', async (c) => {
     try {
+      // T#883 — the rested Beast comes from the AUTHENTICATED caller, never from ?as=.
+      // ?as= stays only as an opt-in that must equal the caller; a mismatch is
+      // refused before anything is written. (Was: any trusted caller could rest any
+      // Beast by name, which silently paused all of that seat's beats.)
+      const asParam = c.req.query('as')?.toLowerCase();
+      const caller = requireBeastIdentity(c);
+      if (asParam && asParam !== caller) {
+        return c.json({
+          error: caller
+            ? 'Cross-Beast rest blocked: ?as= must match the authenticated caller'
+            : 'Beast identity required to rest — bearer-token or owner session'
+        }, 403);
+      }
+
       const data = await c.req.json();
       if (!data.content) {
         return c.json({ error: 'Missing required field: content' }, 400);
@@ -41,19 +56,17 @@ export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       fs.mkdirSync(dirPath, { recursive: true });
       fs.writeFileSync(filePath, data.content, 'utf-8');
 
-      // T#658 — Norm #65 — auto-set requesting Beast to rest_status='rest'
-      // Identity comes from ?as= param. Cross-Beast rest writes are rejected:
-      // we only ever update the verified requester's rest_status, never another Beast.
+      // T#658 — Norm #65 — opt-in: ?as=<self> also sets the caller's rest_status='rest'.
+      // Identity is the caller checked above (asParam === caller), so a seat can only rest itself.
       let restedBeast: string | null = null;
-      const asParam = c.req.query('as')?.toLowerCase();
-      if (asParam && isTrustedRequest(c)) {
-        const beastRow = sqlite.prepare('SELECT name FROM beast_profiles WHERE name = ?').get(asParam) as any;
+      if (asParam && caller && isTrustedRequest(c)) {
+        const beastRow = sqlite.prepare('SELECT name FROM beast_profiles WHERE name = ?').get(caller) as any;
         if (beastRow) {
           sqlite.prepare("UPDATE beast_profiles SET rest_status = 'rest', updated_at = ? WHERE name = ?")
-            .run(Date.now(), asParam);
-          restedBeast = asParam;
-          console.log(`[Handoff] ${asParam} → rest_status=rest`);
-          wsBroadcast('beast_state_change', { beast: asParam, rest_status: 'rest' });
+            .run(Date.now(), caller);
+          restedBeast = caller;
+          console.log(`[Handoff] ${caller} → rest_status=rest`);
+          wsBroadcast('beast_state_change', { beast: caller, rest_status: 'rest' });
         }
       }
 

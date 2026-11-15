@@ -1404,7 +1404,7 @@ registerSupersedeRoutes(app);
 // ============================================================================
 
 // Inbox routes (handoff + inbox + learn) extracted to src/inbox/routes.ts (T#805 P3-J)
-registerInboxRoutes(app, sqlite, { isTrustedRequest, wsBroadcast, repoRoot: REPO_ROOT });
+registerInboxRoutes(app, sqlite, { isTrustedRequest, requireBeastIdentity, wsBroadcast, repoRoot: REPO_ROOT });
 
 
 // Specs routes (Spec Review SDD workflow) — extracted to src/specs/routes.ts (T#776)
