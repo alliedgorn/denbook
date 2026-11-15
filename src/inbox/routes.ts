@@ -13,7 +13,7 @@ interface InboxHelpers {
 }
 
 export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers: InboxHelpers) {
-  const { isTrustedRequest, requireBeastIdentity, wsBroadcast, repoRoot: REPO_ROOT } = helpers;
+  const { requireBeastIdentity, wsBroadcast, repoRoot: REPO_ROOT } = helpers;
 
   app.post('/api/handoff', async (c) => {
     try {
@@ -40,8 +40,11 @@ export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       const dateStr = now.toISOString().split('T')[0];
       const timeStr = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
 
-      // Generate slug
-      const slug = data.slug || data.content
+      // Generate slug. The SAME sanitizer covers a client-supplied slug: it used to be
+      // taken raw, so slug "../../../../<beast>/CLAUDE" wrote any *.md the server uid
+      // can reach (Gnarl, PR #149 review). Allowed: [a-z0-9-] only.
+      const slugSource = typeof data.slug === 'string' && data.slug ? data.slug : String(data.content);
+      const slug = slugSource
         .substring(0, 50)
         .toLowerCase()
         .replace(/[^a-z0-9\s-]/g, '')
@@ -52,6 +55,10 @@ export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       const filename = `${dateStr}_${timeStr}_${slug}.md`;
       const dirPath = path.join(REPO_ROOT, 'ψ/inbox/handoff');
       const filePath = path.join(dirPath, filename);
+      // Belt and braces: the resolved file must sit directly inside the handoff dir.
+      if (path.dirname(path.resolve(filePath)) !== path.resolve(dirPath)) {
+        return c.json({ error: 'Invalid slug' }, 400);
+      }
 
       fs.mkdirSync(dirPath, { recursive: true });
       fs.writeFileSync(filePath, data.content, 'utf-8');
@@ -59,7 +66,7 @@ export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       // T#658 — Norm #65 — opt-in: ?as=<self> also sets the caller's rest_status='rest'.
       // Identity is the caller checked above (asParam === caller), so a seat can only rest itself.
       let restedBeast: string | null = null;
-      if (asParam && caller && isTrustedRequest(c)) {
+      if (asParam && caller) {
         const beastRow = sqlite.prepare('SELECT name FROM beast_profiles WHERE name = ?').get(caller) as any;
         if (beastRow) {
           sqlite.prepare("UPDATE beast_profiles SET rest_status = 'rest', updated_at = ? WHERE name = ?")

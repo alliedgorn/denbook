@@ -25,10 +25,12 @@ function build(actor: string | null) {
     repoRoot: root,
   });
 }
-const post = (q: string) => app.request(`/api/handoff${q}`, {
+const post = (q: string, slug: string = 't883') => app.request(`/api/handoff${q}`, {
   method: 'POST', headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ content: 'x', slug: 't883' }),
+  body: JSON.stringify({ content: 'x', slug }),
 });
+const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true })
+  .flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]);
 const status = (b: string) => (db.query('SELECT rest_status s FROM beast_profiles WHERE name=?').get(b) as any).s;
 const files = () => fs.existsSync(path.join(root, 'ψ/inbox/handoff')) ? fs.readdirSync(path.join(root, 'ψ/inbox/handoff')).length : 0;
 
@@ -67,5 +69,22 @@ describe('T#883 handoff rest identity', () => {
     expect((await r.json()).rested_beast).toBe(null);
     expect(status('karo')).toBe('active');
     expect(files()).toBe(1);
+  });
+
+  it('a traversal slug cannot write outside the handoff dir', async () => {
+    build('karo');
+    const r = await post('', '../../../../escaped/CLAUDE');
+    expect([201, 400]).toContain(r.status);
+    const outside = walk(root).filter(f => !f.startsWith(path.join(root, 'ψ/inbox/handoff') + path.sep));
+    expect(outside).toEqual([]);
+    expect(fs.existsSync(path.join(root, '..', 'escaped'))).toBe(false);
+  });
+
+  it('a traversal slug is flattened to a safe name in the handoff dir', async () => {
+    build('karo');
+    const r = await post('', '../../x');
+    expect(r.status).toBe(201);
+    const body = await r.json();
+    expect(body.file).toMatch(/^ψ\/inbox\/handoff\/[0-9-]+_[0-9-]+_[a-z0-9-]+\.md$/);
   });
 });
