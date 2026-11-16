@@ -242,7 +242,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       {error && (
         <div className={styles.error}>
           {error}
-          <button className={styles.errorDismiss} onClick={() => setError(null)}>{'\u2715'}</button>
+          <button type="button" className={styles.errorDismiss} onClick={() => setError(null)}>{'\u2715'}</button>
         </div>
       )}
 
@@ -261,7 +261,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
               <span className={styles.progressText}>{progress}%</span>
             </div>
           ) : (
-            <button className={styles.removeBtn} onClick={clearStaged} title="Remove">{'\u2715'}</button>
+            <button type="button" className={styles.removeBtn} onClick={clearStaged} title="Remove">{'\u2715'}</button>
           )}
         </div>
       )}
