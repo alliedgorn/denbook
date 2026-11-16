@@ -1,11 +1,18 @@
 // T#859 / T#857 / T#846: one trusted answer to "who is calling".
 //
-// Topology this relies on (verified live 2026-11-16, #20 31902):
+// Topology this relies on (verified live 2026-11-16, #20 31902; corrected in
+// review by Gnarl and Rax, PR 161):
 // - The server binds loopback only, so the socket peer is always loopback.
-// - Caddy is the only remote path. Its denbook.online block sets
-//   X-Forwarded-For to {remote_host}, one value, overwriting anything the
-//   client sent. Caddy does NOT set X-Real-IP, so on the edge path X-Real-IP is
-//   pure client input.
+// - Remote traffic is Cloudflare -> Caddy -> app. Caddy is the only hop INTO
+//   the app, and its denbook.online block sets X-Forwarded-For to
+//   {remote_host}, one value, overwriting anything the client sent. Caddy does
+//   NOT set X-Real-IP, so on the edge path X-Real-IP is pure client input.
+// - So on the edge path clientIp is a CLOUDFLARE EDGE address, not the end
+//   client. Do not read it as a person: many clients share it, which makes
+//   the login limiter per Cloudflare edge, not per client. Getting the real
+//   client needs Caddy trusted_proxies for the Cloudflare ranges (infra, Rax).
+//   Until then, never trust CF-Connecting-IP here either: nothing stops a
+//   caller that reaches Caddy directly from setting it.
 //
 // Rules:
 // - clientIp: the socket peer, unless the peer is loopback and X-Forwarded-For
