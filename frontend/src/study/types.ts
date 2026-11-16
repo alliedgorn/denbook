@@ -3,7 +3,9 @@
 // No HTML strings and no dangerouslySetInnerHTML anywhere in the study area.
 
 export type Inline = string | { b: string } | { term: string };
-export type Block = { p: Inline[] } | { ul: Inline[][] } | { tip: Inline[] } | { code: string };
+// img: a same-origin uploaded file only (/api/f/<id>.<ext>), checked by contentGuard.
+export type Block = { p: Inline[] } | { ul: Inline[][] } | { tip: Inline[] } | { code: string }
+  | { img: string; alt: string; caption?: string };
 
 export interface Concept {
   t: string;

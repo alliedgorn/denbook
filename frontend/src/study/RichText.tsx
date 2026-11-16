@@ -1,5 +1,6 @@
 import type { Block, Inline } from './types';
 import styles from '../pages/Study.module.css';
+import { ChatImage } from './ChatImage';
 
 // Renders typed content blocks as React elements. Every string goes through
 // React's text escaping — there is deliberately no HTML path here.
@@ -29,6 +30,15 @@ export function RichText({ blocks }: { blocks: Block[] }) {
           );
         }
         if ('code' in blk) return <pre key={i} className={styles.code}><code>{blk.code}</code></pre>;
+        if ('img' in blk) {
+          // src was checked by contentGuard (same-origin /api/f/ only). Tap to open full size.
+          return (
+            <figure key={i} className={styles.figure}>
+              <ChatImage src={blk.img} alt={blk.alt} />
+              {blk.caption && <figcaption>{blk.caption}</figcaption>}
+            </figure>
+          );
+        }
         return <div key={i} className={styles.tip}><Inlines parts={blk.tip} /></div>;
       })}
     </>
