@@ -18,6 +18,7 @@ import { PEER, type Msg } from './studyPeer';
 const OPEN_POLL_MS = 10000;
 const CLOSED_POLL_MS = 120000;
 const SEEN_KEY = 'study-ask-karo-seen';
+const BIG_KEY = 'study-ask-karo-big'; // T#972, Gorn 11-11: the panel is too small for long replies
 const CTX_RE = /^\[Study: ([^\]\n]{1,200})\]\n?/;
 // A Karo message starting with [Pin] replaces the pinned note beside the chat
 // (Gorn 11-13: "so I don't need to scroll back for the next challenge"). An empty
@@ -32,6 +33,9 @@ function readSeen(): number {
 }
 function writeSeen(id: number) {
   try { localStorage.setItem(SEEN_KEY, String(id)); } catch { /* private mode: badge just resets */ }
+}
+function readBig(): boolean {
+  try { return localStorage.getItem(BIG_KEY) === '1'; } catch { return false; }
 }
 
 interface Pin { id: number; text: string }
@@ -62,6 +66,12 @@ export function AskKaro({ context }: { context: string }) {
   const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'error' | 'load-error'>('idle');
   const [seen, setSeen] = useState(readSeen);
+  const [big, setBig] = useState(readBig);
+  const toggleBig = () => {
+    const next = !big;
+    setBig(next);
+    try { localStorage.setItem(BIG_KEY, next ? '1' : '0'); } catch { /* size just resets */ }
+  };
   const [cachedPin, setCachedPin] = useState<Pin | null>(readPin);
   const [noteHidden, setNoteHidden] = useState(() => readFlag(NOTE_HIDDEN_KEY));
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -145,7 +155,7 @@ export function AskKaro({ context }: { context: string }) {
         </button>
       )}
       {open && (
-        <div className={styles.askDock}>
+        <div className={big ? `${styles.askDock} ${styles.askDockBig}` : styles.askDock}>
         {hasNote && !noteHidden && (
           <aside className={styles.askNote} aria-label="Pinned note from Karo">
             <div className={styles.askHead}>
@@ -164,6 +174,7 @@ export function AskKaro({ context }: { context: string }) {
               {hasNote && noteHidden && (
                 <button className={styles.linkBtn} onClick={() => toggleNote(false)}>📌 Show note</button>
               )}
+              <button className={styles.linkBtn} aria-pressed={big} onClick={toggleBig}>{big ? 'Shrink' : 'Expand'}</button>
               <button className={styles.linkBtn} onClick={() => setOpen(false)}>Close</button>
             </span>
           </div>

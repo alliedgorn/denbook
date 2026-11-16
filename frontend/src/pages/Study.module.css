@@ -216,7 +216,7 @@ td .linkBtn { margin-left: 0; }
 .askList { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 .askMsg { align-self: flex-start; max-width: 88%; background: var(--bg-elevated); border-radius: 12px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
 .askMine { align-self: flex-end; background: var(--st-soft); }
-.askText { overflow-wrap: anywhere; font-size: 14px; line-height: 1.45; }
+.askText { overflow-wrap: anywhere; font-size: 15px; line-height: 1.55; }
 .askText p { margin: 0 0 6px; }
 .askText > :last-child { margin-bottom: 0; }
 .askText ul, .askText ol { margin: 0 0 6px; padding-left: 18px; }
@@ -234,10 +234,18 @@ td .linkBtn { margin-left: 0; }
 .askNote { width: 280px; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--accent); border-radius: var(--radius-lg); box-shadow: 0 10px 32px rgba(0,0,0,.45); overflow: hidden; }
 .askNoteBody { flex: 1; overflow-y: auto; padding: 10px 14px; }
 .askPinLine { align-self: center; font-size: 12px; color: var(--text-muted); }
+/* Expand (T#972, Gorn 11-11): near-fullscreen on desktop, fullscreen on phone. */
+.askDockBig { top: 20px; left: 20px; height: auto; justify-content: flex-end; }
+.askDockBig .askPanel { width: min(820px, 100%); }
+.askDockBig .askMsg { max-width: 80%; }
+.askDockBig .askText { font-size: 16px; }
 @media (max-width: 860px) {
   .askDock { flex-direction: column; left: 16px; right: 16px; bottom: 16px; height: min(78vh, calc(100vh - 80px)); gap: 8px; }
   .askNote { width: auto; flex: 0 0 auto; max-height: 30%; }
   .askPanel { width: auto; flex: 1 1 auto; min-height: 0; height: auto; }
+  .askDockBig { top: 0; left: 0; right: 0; bottom: 0; height: auto; gap: 0; }
+  .askDockBig .askPanel, .askDockBig .askNote { border-radius: 0; }
+  .askDockBig .askMsg { max-width: 92%; }
 }
 @media (max-width: 600px) {
   .askFab { right: 16px; bottom: 16px; }
