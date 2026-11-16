@@ -73,9 +73,12 @@ export async function processImageForStorage(input: Buffer, opts: ProcessOptions
     if (toJpeg) chain = chain.jpeg({ quality: 95 });
     const buffer: Buffer = await chain.toBuffer();
 
+    // GPS and device data can live in EXIF, XMP or IPTC. Refuse if any block
+    // survived (Gnarl, PR 163: an XMP-only GPS passes an EXIF-only check).
     const after = await sharp(buffer).metadata();
-    if (after.exif && after.exif.length > 0) {
-      throw new ImageProcessingError('EXIF survived processing; refusing to store', false);
+    const kept = (['exif', 'xmp', 'iptc'] as const).filter(k => after[k] && after[k].length > 0);
+    if (kept.length > 0) {
+      throw new ImageProcessingError(`metadata survived processing (${kept.join(', ')}); refusing to store`, false);
     }
     return {
       buffer,

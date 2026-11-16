@@ -164,7 +164,9 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
           ? `[Telegram from Gorn] ${replyContext}Photo: ${caption}`
           : `[Telegram from Gorn] ${replyContext}Photo received (download failed)`;
       }
-      confirmText = `✓ Notified ${bot.beast}`;
+      // T#937: say so when the photo was dropped (download or strip failed), so
+      // Gorn knows to resend it instead of assuming it arrived.
+      confirmText = photoUrl ? `✓ Notified ${bot.beast}` : `✓ Notified ${bot.beast}, but the photo could not be saved. Please resend it.`;
 
     } else if (msg.text) {
       notifyText = `[Telegram from Gorn] ${replyContext}${msg.text}`;

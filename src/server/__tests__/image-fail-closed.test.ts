@@ -67,7 +67,32 @@ describe('processImageForStorage', () => {
     __setSharpLoaderForTest(() => leaky);
     const err = await processImageForStorage(await exifJpeg(), { ext: '.jpg', mime: 'image/jpeg' }).catch(e => e);
     expect(err).toBeInstanceOf(ImageProcessingError);
-    expect(String(err.message)).toContain('EXIF survived');
+    expect(String(err.message)).toContain('metadata survived processing (exif');
+  });
+
+  it('GPS only in XMP: stripped by the pipeline, and refused if a keepXmp sneaks in', async () => {
+    const xmp = '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+      + '<rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/" exif:GPSLatitude="13,45.0N" exif:GPSLongitude="100,30.0E"/>'
+      + '</rdf:RDF></x:xmpmeta>';
+    const xmpOnly = await sharp({ create: { width: 40, height: 30, channels: 3, background: '#123' } }).jpeg().withXmp(xmp).toBuffer();
+    const src = await sharp(xmpOnly).metadata();
+    expect(src.xmp).toBeTruthy();   // fixture guard
+    expect(src.exif).toBeUndefined();
+    const out = await processImageForStorage(xmpOnly, { ext: '.jpg', mime: 'image/jpeg' });
+    expect((await sharp(out.buffer).metadata()).xmp).toBeUndefined();
+    const keepsXmp: any = (input: Buffer) => {
+      const real = sharp(input);
+      const wrap: any = {
+        metadata: () => real.metadata(),
+        rotate: () => wrap, resize: () => wrap, jpeg: () => wrap,
+        toBuffer: () => sharp(input).keepXmp().toBuffer(),
+      };
+      return wrap;
+    };
+    __setSharpLoaderForTest(() => keepsXmp);
+    const err = await processImageForStorage(xmpOnly, { ext: '.jpg', mime: 'image/jpeg' }).catch(e => e);
+    expect(err).toBeInstanceOf(ImageProcessingError);
+    expect(String(err.message)).toContain('xmp');
   });
 
   it('reads the capture date before the strip', async () => {
