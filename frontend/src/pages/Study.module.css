@@ -235,7 +235,9 @@ td .linkBtn { margin-left: 0; }
 .askNoteBody { flex: 1; overflow-y: auto; padding: 10px 14px; }
 .askPinLine { align-self: center; font-size: 12px; color: var(--text-muted); }
 /* Expand (T#972, Gorn 11-11): near-fullscreen on desktop, fullscreen on phone. */
-.askDockBig { top: 20px; left: 20px; height: auto; justify-content: flex-end; }
+/* z-index 150: above the sticky app header (100) so the panel top and its
+   Shrink button never slide under it; below menus and modals (200+). */
+.askDockBig { top: 20px; left: 20px; height: auto; justify-content: flex-end; z-index: 150; }
 .askDockBig .askPanel { width: min(820px, 100%); }
 .askDockBig .askMsg { max-width: 80%; }
 .askDockBig .askText { font-size: 16px; }
