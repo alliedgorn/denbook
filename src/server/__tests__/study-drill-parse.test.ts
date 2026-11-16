@@ -73,6 +73,10 @@ describe('pruneDeleted (Bertus, PR 150: a deleted DM must leave the card too)', 
     expect(pruneDeleted([e(3), e(7), e(12)], window).map(x => x.id)).toEqual([3, 7, 12]);
   });
 
+  test('entries newer than the window stay: a stale fetch landing late must not drop a just-sent round', () => {
+    expect(pruneDeleted([e(10), e(20), e(21)], window).map(x => x.id)).toEqual([10, 20, 21]);
+  });
+
   test('an empty fetch (load error) prunes nothing', () => {
     expect(pruneDeleted([e(10), e(11)], []).map(x => x.id)).toEqual([10, 11]);
   });

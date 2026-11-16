@@ -44,12 +44,15 @@ export function toRounds(entries: Entry[]): { answer: Entry; grades: Entry[] }[]
 // Bertus, PR 150 review: the cache must not outlive a deletion (#55 removal, T#975).
 // The fetch is a window over the newest messages. A cached entry whose id falls inside
 // that window but is not in it was deleted on the server, so drop it. Entries older than
-// the window are left alone: they are only out of view, not gone.
+// the window are left alone: they are only out of view, not gone. So are entries NEWER than
+// the window (Gnarl): fetches are not ordered, so a stale window can resolve after a newer
+// one, and it must not drop the round Gorn just sent.
 export function pruneDeleted(cached: Entry[], msgs: Msg[]): Entry[] {
   if (!msgs.length) return cached;
   const ids = new Set(msgs.map(m => m.id));
   const lo = Math.min(...ids);
-  return cached.filter(e => e.id < lo || ids.has(e.id));
+  const hi = Math.max(...ids);
+  return cached.filter(e => e.id < lo || e.id > hi || ids.has(e.id));
 }
 
 // Gnarl, PR 150 review: the interview block and the Bootcamp share module ids (rag, agents,
