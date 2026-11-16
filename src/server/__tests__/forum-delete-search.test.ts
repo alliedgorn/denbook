@@ -225,9 +225,9 @@ describe('T#978 thread delete, edits, and thread-delete identity', () => {
     expect(await hits('zebrakeep')).toBe(1);
   });
 
-  it('a guest session cannot delete a thread as Gorn (401), thread untouched', async () => {
+  it('a guest session cannot delete a thread as Gorn (403 since the T#719 shared gate), thread untouched', async () => {
     const r = await forumApp(null, true, 'guest').request('/api/thread/3?as=gorn', { method: 'DELETE' });
-    expect(r.status).toBe(401);
+    expect(r.status).toBe(403);
     expect((db.query('SELECT deleted_at FROM forum_threads WHERE id = 3').get() as any).deleted_at).toBeNull();
   });
 
