@@ -1,7 +1,7 @@
 // Drill rounds parser (frontend/src/study/drillParse.ts, Gorn 11-16). Pure functions, run here
 // because the frontend has no unit runner (its `test` is Playwright).
 import { describe, expect, test } from 'bun:test';
-import { drillEntries, mergeEntries, toRounds } from '../../../frontend/src/study/drillParse';
+import { drillEntries, drillKeyFor, mergeEntries, pruneDeleted, toRounds } from '../../../frontend/src/study/drillParse';
 
 const msg = (id: number, sender: string, message: string) => ({ id, sender, message, created_at: '2026-11-16T04:00:00Z' });
 
@@ -58,5 +58,43 @@ describe('mergeEntries + toRounds', () => {
     const rounds = toRounds([g1, b]);
     expect(rounds.length).toBe(1);
     expect(rounds[0].grades).toEqual([]);
+  });
+});
+
+describe('pruneDeleted (Bertus, PR 150: a deleted DM must leave the card too)', () => {
+  const e = (id: number) => ({ id, kind: 'answer' as const, text: String(id), at: '' });
+  const window = [msg(10, 'gorn', 'x'), msg(12, 'karo', 'y'), msg(13, 'gorn', 'z')];
+
+  test('an entry inside the fetched window but missing from it was deleted, so it goes', () => {
+    expect(pruneDeleted([e(10), e(11), e(12)], window).map(x => x.id)).toEqual([10, 12]);
+  });
+
+  test('entries older than the window are only out of view, so they stay', () => {
+    expect(pruneDeleted([e(3), e(7), e(12)], window).map(x => x.id)).toEqual([3, 7, 12]);
+  });
+
+  test('an empty fetch (load error) prunes nothing', () => {
+    expect(pruneDeleted([e(10), e(11)], []).map(x => x.id)).toEqual([10, 11]);
+  });
+});
+
+describe('drillKeyFor (Gnarl, PR 150: the two tracks share module ids)', () => {
+  test('the same module and drill on two tracks get different keys', () => {
+    expect(drillKeyFor('ai', 'rag', 0)).not.toBe(drillKeyFor('boot', 'rag', 0));
+  });
+
+  test('a cross-track answer and grade never land on the other track card', () => {
+    const msgs = [
+      msg(1, 'gorn', `[Study: Interview block › RAG › Drill 1]\n[Drill ${drillKeyFor('ai', 'rag', 0)}]\ninterview answer`),
+      msg(2, 'karo', `[Drill ${drillKeyFor('ai', 'rag', 0)} pass]\nok`),
+    ];
+    expect(drillEntries(msgs, drillKeyFor('boot', 'rag', 0))).toEqual([]);
+    expect(drillEntries(msgs, drillKeyFor('ai', 'rag', 0)).length).toBe(2);
+  });
+
+  test('every real key fits the tag charset, so the regexes stay tight', () => {
+    for (const k of [drillKeyFor('ai', 'llm-basics', 0), drillKeyFor('boot', 'evals', 12)]) {
+      expect(drillEntries([msg(1, 'gorn', `[Drill ${k}]\nx`)], k).length).toBe(1);
+    }
   });
 });

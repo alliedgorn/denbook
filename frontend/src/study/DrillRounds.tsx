@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import styles from '../pages/Study.module.css';
 import { MD_COMPONENTS, PEER, chatBreaks, latestThread, refreshThread, THREAD_EVENT, type Msg } from './studyChat';
-import { drillEntries, mergeEntries, toRounds, type Entry } from './drillParse';
+import { drillEntries, mergeEntries, pruneDeleted, toRounds, type Entry } from './drillParse';
 
 // Drill rounds (Gorn 11-16). Each drill card keeps every answer Gorn sends and every grade
 // Karo gives, in order, so he can watch an answer get sharper round by round. Same wiring as
@@ -37,10 +37,10 @@ export function DrillRounds({ drillKey, context }: { drillKey: string; context: 
 
   useEffect(() => {
     const apply = (msgs: Msg[]) => {
+      if (!msgs.length) return;
       const found = drillEntries(msgs, drillKey);
-      if (!found.length) return;
       setEntries(cur => {
-        const merged = mergeEntries(cur, found);
+        const merged = mergeEntries(pruneDeleted(cur, msgs), found);
         if (merged.length === cur.length && merged.every((e, i) => e.id === cur[i].id && e.text === cur[i].text)) return cur;
         const all = readMap<Entry[]>(ROUNDS_KEY);
         all[drillKey] = merged;

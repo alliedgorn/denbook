@@ -40,3 +40,22 @@ export function toRounds(entries: Entry[]): { answer: Entry; grades: Entry[] }[]
   return rounds;
 }
 
+
+// Bertus, PR 150 review: the cache must not outlive a deletion (#55 removal, T#975).
+// The fetch is a window over the newest messages. A cached entry whose id falls inside
+// that window but is not in it was deleted on the server, so drop it. Entries older than
+// the window are left alone: they are only out of view, not gone.
+export function pruneDeleted(cached: Entry[], msgs: Msg[]): Entry[] {
+  if (!msgs.length) return cached;
+  const ids = new Set(msgs.map(m => m.id));
+  const lo = Math.min(...ids);
+  return cached.filter(e => e.id < lo || ids.has(e.id));
+}
+
+// Gnarl, PR 150 review: the interview block and the Bootcamp share module ids (rag, agents,
+// evals), so the drill key carries its track. It goes into Gorn's DMs on the first round,
+// so it has to be right before he uses it: renaming later would orphan every round sent.
+export type DrillTrack = 'ai' | 'boot';
+export function drillKeyFor(track: DrillTrack, moduleId: string, i: number): string {
+  return `${track}-${moduleId}:${i}`;
+}
