@@ -146,4 +146,23 @@ describe('T#975 deleted forum posts leave Den search', () => {
     expect(text).not.toContain('zebraold');
     expect(text).not.toContain('zebramention');
   });
+
+  it('/api/forum/activity skips deleted posts (Bertus, PR 152)', async () => {
+    const body = await (await app.request('/api/forum/activity?limit=50')).json() as any;
+    const ids = body.activity.map((m: any) => m.message_id);
+    expect(ids).toContain(1);
+    for (const dead of [2, 3, 4]) expect(ids).not.toContain(dead);
+  });
+
+  it('content read endpoints cap their page size at 200', async () => {
+    for (let i = 100; i < 330; i++) post(i, `bulk${i} @karo`);
+    const activity = await (await app.request('/api/forum/activity?limit=100000')).json() as any;
+    expect(activity.activity.length).toBe(200);
+    const mentions = await (await app.request('/api/forum/mentions/karo?limit=100000')).json() as any;
+    expect(mentions.mentions.length).toBe(200);
+    const search = await (await app.request('/api/forum/search?q=bulk&limit=100000')).json() as any;
+    expect(search.messages.length).toBe(200);
+    const junk = await (await app.request('/api/forum/activity?limit=abc')).json() as any;
+    expect(junk.activity.length).toBe(30);
+  });
 });
