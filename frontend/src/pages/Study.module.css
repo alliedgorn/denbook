@@ -234,6 +234,21 @@ td .linkBtn { margin-left: 0; }
 .chatImgOverlay { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; cursor: zoom-out; }
 .chatImgOverlay img { max-width: 100%; max-height: calc(100vh - 60px); object-fit: contain; border-radius: 8px; background: #fff; }
 .chatImgHint { color: #ddd; font-size: 13px; }
+.chatImgAsk { margin-left: 12px; border: 1px solid var(--accent); background: var(--bg-card); color: var(--text-primary); border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+/* Picture + Ask Karo side by side (Gorn 11-16, laptop). Wide screens only: the
+   open dock moves above the image overlay (10000) and fills the right edge, and
+   the overlay stops short of it so the picture is never covered. On a phone the
+   picture stays full screen and the Ask button is hidden (no room side by side). */
+@media (min-width: 861px) {
+  .askDock.askDockSide { top: 20px; bottom: 20px; right: 20px; left: auto; height: auto; z-index: 10001; flex-direction: column; justify-content: flex-start; }
+  .askDock.askDockSide .askPanel { width: min(440px, 38vw); flex: 1 1 auto; min-height: 0; height: auto; }
+  .askDock.askDockSide .askNote { width: min(440px, 38vw); flex: 0 0 auto; max-height: 30%; }
+  .askDock.askDockSide .askMsg { max-width: 88%; }
+  :global(body):has(.askDockSide) .chatImgOverlay { right: calc(min(440px, 38vw) + 40px); }
+}
+@media (max-width: 860px) {
+  .chatImgAsk { display: none; }
+}
 .askText table { border-collapse: collapse; font-size: 12px; margin: 0 0 6px; }
 .askText th, .askText td { border: 1px solid var(--border); padding: 2px 6px; }
 .askText a { color: var(--accent); }
