@@ -24,10 +24,13 @@ Inventory source: the beat 2199 baseline, 2026-11-16 (`bertus/ψ/memory/oauth-in
 | Withings refresh token | `oauth_tokens` (encrypted) | **No.** | Revoke the app in the Withings account. | Unverified. |
 | Hevy API key | server env `HEVY_API_TOKEN`, boro seat `.env` `HEVY_API_KEY` | **No** (assumed). | Regenerate in Hevy settings. **Verify that the old key is invalidated.** | Unverified. |
 | GitHub PAT (fine-grained) | `gh` auth on the box | **No.** | github.com → Settings → Developer settings → tokens → Revoke. | Yes, its set expiry. |
+| GitHub SSH key | `~/.ssh` on the box (the key `ssh -T git@github.com` authenticates as alliedgorn) | **No.** Deleting or replacing the local key file does nothing at GitHub. | github.com → Settings → SSH and GPG keys → Delete the old key. | **Never.** An archived copy is push access to every repo the account can reach. |
 | Cloudflare API token | bertus seat `.env` | n/a: **already invalid** (verify returns error 1000, 2026-11-16). | Delete the residue from the seat `.env`. | — |
 | `NYX_TOKEN` | server env | **Unknown purpose:** no reference in `src/` (2026-11-16). Retired-seat residue. | Ask Gorn what issued it; revoke there, then remove it. | Unknown. |
 
 **Rule that falls out of the table:** for every row marked **No**, a rotation is not finished until the provider-side step is done. A rotation runbook for those classes must list that step explicitly, after the new value is live and verified, because the order matters (revoke first and the service is down).
+
+Not yet inventoried here (infra lane, Rax): the Caddy env at /etc/caddy and the TLS private key. Both are root-owned edge credentials; add their rows once read.
 
 ## Sweep reports
 
@@ -35,7 +38,7 @@ The hash-exchange sweep (hash your own live credentials, check them against ever
 
 Every sweep report must carry this line, verbatim, next to its result:
 
-> Blind spot (T#917): this sweep checks only credentials the seat holds now. Superseded provider-issued credentials (Telegram, Discord, Google, Withings, Hevy, GitHub) are invisible to it and stay live until revoked at the provider. A clean result says nothing about them.
+> Blind spot (T#917): this sweep checks only credentials the seat holds now. Superseded provider-issued credentials (Telegram, Discord, Google, Withings, Hevy, GitHub tokens and SSH keys) are invisible to it and stay live until revoked at the provider. A clean result says nothing about them.
 
 To actually cover the superseded set, use a shape scan (e.g. the Telegram token regex) across archives and decompressed sessions, and then check each hit's liveness at the provider without using it (BotFather `/mybots`, the provider's token list). Never "test" a found credential by calling the API with it.
 
