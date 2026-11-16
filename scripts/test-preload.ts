@@ -77,6 +77,11 @@ if (armedTg.length > 0) {
 
 // --- Notify sink: on by default, and nothing else is accepted.
 if (!process.env.DEN_NOTIFY_SINK) process.env.DEN_NOTIFY_SINK = 'memory';
+if (process.env.NODE_ENV !== 'test') {
+  // eslint-disable-next-line no-console
+  console.error(`[test-preload] REFUSING to run: NODE_ENV is '${process.env.NODE_ENV}', expected 'test'. The notify sink is gated on it.`);
+  process.exit(1);
+}
 if (process.env.DEN_NOTIFY_SINK !== 'memory') {
   // eslint-disable-next-line no-console
   console.error(`[test-preload] REFUSING to run: DEN_NOTIFY_SINK must be 'memory' under bun test (got '${process.env.DEN_NOTIFY_SINK}').`);
@@ -87,7 +92,11 @@ if (process.env.DEN_NOTIFY_SINK !== 'memory') {
 export type TripHit = { via: string; what: string };
 const tripHits: TripHit[] = [];
 (globalThis as any).__denTripwire = { hits: tripHits };
-const DANGER = /\btmux\b|send-keys|notify\.sh/;
+// den-notify: the server drain (daemons/routes.ts runDrainCycle) pops a line
+// off a REAL /tmp/den-notify queue with sed and then delivers. Under the sink,
+// the delivery "succeeds" into the array and the real seat's line is lost
+// without a trace, so the pop itself must be blocked (Gnarl, PR 156).
+const DANGER = /\btmux\b|send-keys|notify\.sh|den-notify/;
 function trip(via: string, what: string): never {
   tripHits.push({ via, what: what.slice(0, 200) });
   throw new Error(`[test tripwire] ${via} blocked: ${what.slice(0, 120)}`);

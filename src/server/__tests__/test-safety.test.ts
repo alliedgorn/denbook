@@ -6,7 +6,9 @@
 //   - TRIPWIRE (the guard): every bypass is blocked AND recorded, and an
 //     unconsumed hit fails the whole run.
 // Negative controls trip on purpose, assert, then clear the hits so the global
-// afterAll stays green.
+// afterAll stays green. Every control targets a seat that does NOT exist
+// (nosuchseat): if the guard ever regresses, the test fails red and harmless
+// instead of typing into a live pane (Gnarl, PR 156).
 import { describe, it, expect, afterEach } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { OpenAPIHono } from '@hono/zod-openapi';
@@ -29,14 +31,14 @@ describe('T#981 sink (the fix)', () => {
 
   it('enqueueNotification lands in the sink with zero spawns', () => {
     expect(hits().length).toBe(0);
-    expect(enqueueNotification('karo', 'hello from a test')).toBe(true);
-    expect(notifySink).toEqual([{ via: 'enqueue', target: 'karo', text: 'hello from a test' }]);
+    expect(enqueueNotification('nosuchseat', 'hello from a test')).toBe(true);
+    expect(notifySink).toEqual([{ via: 'enqueue', target: 'nosuchseat', text: 'hello from a test' }]);
     expect(hits().length).toBe(0);
   });
 
   it('deliverToPane lands in the sink with zero spawns', () => {
-    expect(deliverToPane('Karo', 'typed text')).toBe('sent');
-    expect(notifySink[0]).toEqual({ via: 'pane', target: 'Karo', text: 'typed text' });
+    expect(deliverToPane('Nosuchseat', 'typed text')).toBe('sent');
+    expect(notifySink[0]).toEqual({ via: 'pane', target: 'Nosuchseat', text: 'typed text' });
     expect(hits().length).toBe(0);
   });
 
@@ -69,25 +71,25 @@ describe('T#981 sink (the fix)', () => {
 
 describe('T#981 tripwire (the guard), negative controls', () => {
   it('Bun.spawnSync naming tmux is blocked and recorded', () => {
-    expect(() => Bun.spawnSync(['tmux', 'list-sessions'])).toThrow(/test tripwire/);
+    expect(() => Bun.spawnSync(['tmux', 'has-session', '-t', 'Nosuchseat'])).toThrow(/test tripwire/);
     expect(hits().map(h => h.via)).toEqual(['Bun.spawnSync']);
     clearHits();
   });
 
   it('Bun.spawn naming notify.sh is blocked and recorded', () => {
-    expect(() => Bun.spawn(['bash', '/home/gorn/workspace/karo/scripts/notify.sh', 'x'])).toThrow(/test tripwire/);
+    expect(() => Bun.spawn(['bash', '/nonexistent/nosuchseat/scripts/notify.sh', 'x'])).toThrow(/test tripwire/);
     expect(hits().length).toBe(1);
     clearHits();
   });
 
   it("child_process via a NAMED import (import { execSync } from 'node:child_process') is blocked", () => {
-    expect(() => namedExecSync('tmux has-session -t Karo')).toThrow(/test tripwire/);
+    expect(() => namedExecSync('tmux has-session -t Nosuchseat')).toThrow(/test tripwire/);
     expect(hits()[0].via).toBe('child_process.execSync');
     clearHits();
   });
 
   it("child_process via a NAMESPACE import of 'child_process' is blocked, argv form too", () => {
-    expect(() => cpNamespace.execFileSync('tmux', ['send-keys', '-t', 'Karo', 'x'])).toThrow(/test tripwire/);
+    expect(() => cpNamespace.execFileSync('tmux', ['send-keys', '-t', 'Nosuchseat', 'x'])).toThrow(/test tripwire/);
     expect(hits()[0].via).toBe('child_process.execFileSync');
     clearHits();
   });
@@ -96,6 +98,25 @@ describe('T#981 tripwire (the guard), negative controls', () => {
     expect(Bun.spawnSync(['true']).exitCode).toBe(0);
     expect(namedExecSync('echo ok', { encoding: 'utf-8' }).trim()).toBe('ok');
     expect(hits().length).toBe(0);
+  });
+
+  it('the server drain popping a real /tmp/den-notify queue is blocked (would be silent loss under the sink)', () => {
+    expect(() => Bun.spawnSync(['bash', '-c', "head -1 '/tmp/den-notify/nosuchseat.queue'"])).toThrow(/test tripwire/);
+    expect(hits()[0].what).toContain('den-notify');
+    clearHits();
+  });
+
+  it('the sink is ignored without NODE_ENV=test (no prod kill switch)', () => {
+    const saved = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      expect(enqueueNotification('nosuchseat', 'sink must not swallow this')).toBe(false);
+    } finally {
+      process.env.NODE_ENV = saved;
+    }
+    expect(notifySink.length).toBe(0);
+    expect(hits().some(h => h.what.includes('notify.sh'))).toBe(true);   // it went for real delivery, and the tripwire stopped it
+    clearHits();
   });
 
   it('fetch to a non-loopback host (Telegram) is blocked and recorded', async () => {
@@ -116,7 +137,7 @@ describe('T#981 tripwire (the guard), negative controls', () => {
       webPresence: new Map(),
       WEB_PRESENCE_TIMEOUT_MS: 0,
     } as any);
-    const r = await app.request('/api/beast/karo/terminal/input', {
+    const r = await app.request('/api/beast/nosuchseat/terminal/input', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keys: 'typed by a test' }),
     });
@@ -132,7 +153,7 @@ describe('T#981 tripwire (the guard), negative controls', () => {
     const saved = process.env.DEN_NOTIFY_SINK;
     delete process.env.DEN_NOTIFY_SINK;
     try {
-      expect(enqueueNotification('karo', 'would page a real seat')).toBe(false);
+      expect(enqueueNotification('nosuchseat', 'would page a seat if the guard broke')).toBe(false);
     } finally {
       process.env.DEN_NOTIFY_SINK = saved;
     }

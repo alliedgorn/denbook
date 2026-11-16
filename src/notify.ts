@@ -76,7 +76,10 @@ export const DELIVERY_PANE_COMMAND = 'claude';
  * notifications; the preload tripwire catches anything that bypasses it.
  */
 export const notifySink: Array<{ via: 'enqueue' | 'pane'; target: string; text: string }> = [];
-const sinkOn = (): boolean => process.env.DEN_NOTIFY_SINK === 'memory';
+// Both are required: `bun test` sets NODE_ENV=test, and a plain server run does
+// not. So a stray DEN_NOTIFY_SINK line in a prod .env cannot silently swallow
+// every notification (Gnarl, PR 156).
+const sinkOn = (): boolean => process.env.DEN_NOTIFY_SINK === 'memory' && process.env.NODE_ENV === 'test';
 
 export type PaneDelivery = 'sent' | 'no-session' | 'not-claude';
 
