@@ -10,7 +10,8 @@
  */
 import { describe, test, expect, beforeAll } from "bun:test";
 
-const BASE_URL = "http://localhost:47778";
+// T#981: never the prod port. The preload sets DEN_TEST_BASE_URL (ORACLE_PORT 47779).
+const BASE_URL = process.env.DEN_TEST_BASE_URL || "http://localhost:47779";
 const TEST_BEAST = "pip";
 
 async function isServerRunning(): Promise<boolean> {
@@ -25,7 +26,7 @@ async function isServerRunning(): Promise<boolean> {
 describe("Audit Logging API Integration", () => {
   beforeAll(async () => {
     if (!(await isServerRunning())) {
-      throw new Error("Server not running on port 47778");
+      throw new Error(`Server not running at ${BASE_URL}`);
     }
   });
 

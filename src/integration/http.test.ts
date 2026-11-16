@@ -5,7 +5,8 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import type { Subprocess } from "bun";
 
-const BASE_URL = "http://localhost:47778";
+// T#981: never the prod port. The preload sets DEN_TEST_BASE_URL (ORACLE_PORT 47779).
+const BASE_URL = process.env.DEN_TEST_BASE_URL || "http://localhost:47779";
 let serverProcess: Subprocess | null = null;
 
 async function waitForServer(maxAttempts = 30): Promise<boolean> {

@@ -88,6 +88,31 @@ if (process.env.DEN_NOTIFY_SINK !== 'memory') {
   process.exit(1);
 }
 
+// --- Drain dir: the server drain (daemons/routes.ts) reads DEN_NOTIFY_DIR, so
+// in-process code AND any child server inherit a private, empty queue dir
+// instead of the real /tmp/den-notify (Gnarl's (b), PR 156).
+import { mkdtempSync, rmSync } from 'node:fs';
+if (!process.env.DEN_NOTIFY_DIR) process.env.DEN_NOTIFY_DIR = mkdtempSync('/tmp/den-notify-test-');
+if (!process.env.DEN_NOTIFY_DIR.startsWith('/tmp/den-notify-test-')) {
+  // eslint-disable-next-line no-console
+  console.error(`[test-preload] REFUSING to run: DEN_NOTIFY_DIR must be a /tmp/den-notify-test-* dir under bun test.`);
+  process.exit(1);
+}
+
+// --- Port: tests never talk to the prod server (Bertus, PR 156). On
+// 2026-11-16 14:39-14:41, four full-suite review runs sent 1001 unauthenticated
+// writes to the live server on 47778 through the local bypass (schedules,
+// teams, thread PATCHes). Tests and any child server get a test port instead,
+// and the fetch tripwire below refuses 47778 outright.
+const PROD_PORT = '47778';
+if (!process.env.ORACLE_PORT) process.env.ORACLE_PORT = '47779';
+if (process.env.ORACLE_PORT === PROD_PORT) {
+  // eslint-disable-next-line no-console
+  console.error(`[test-preload] REFUSING to run: ORACLE_PORT is the prod port ${PROD_PORT}.`);
+  process.exit(1);
+}
+process.env.DEN_TEST_BASE_URL = `http://localhost:${process.env.ORACLE_PORT}`;
+
 // --- Tripwire.
 export type TripHit = { via: string; what: string };
 const tripHits: TripHit[] = [];
@@ -140,11 +165,18 @@ mock.module('child_process', () => cpWrapped);
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 const realFetch = globalThis.fetch;
 const guardedFetch = ((input: any, init?: any) => {
-  let host = '';
-  try { host = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url).hostname; } catch { /* relative: loopback */ }
+  let host = '', port = '';
+  try {
+    const u = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    host = u.hostname; port = u.port || (u.protocol === 'https:' ? '443' : '80');
+  } catch { /* relative: loopback */ }
   if (host && !LOOPBACK.has(host)) {
     tripHits.push({ via: 'fetch', what: host });
     return Promise.reject(new Error(`[test tripwire] fetch blocked: non-loopback host ${host}`));
+  }
+  if (host && port === PROD_PORT) {
+    tripHits.push({ via: 'fetch', what: `${host}:${port}` });
+    return Promise.reject(new Error(`[test tripwire] fetch blocked: the prod server port ${PROD_PORT}`));
   }
   return realFetch(input, init);
 }) as typeof fetch;
@@ -154,6 +186,8 @@ globalThis.fetch = guardedFetch;
 // Fail the run if anything tripped and nobody consumed it. Tests that trip on
 // purpose (the negative controls) assert on the hits and then clear them.
 afterAll(() => {
+  const dir = process.env.DEN_NOTIFY_DIR;
+  if (dir && dir.startsWith('/tmp/den-notify-test-')) rmSync(dir, { recursive: true, force: true });
   if (tripHits.length > 0) {
     const list = tripHits.map(h => `${h.via}: ${h.what}`).join('\n  ');
     throw new Error(`[test tripwire] ${tripHits.length} blocked side effect(s) in this run:\n  ${list}`);

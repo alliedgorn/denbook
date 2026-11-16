@@ -18,6 +18,7 @@ import * as cpNamespace from 'child_process';
 import { enqueueNotification, deliverToPane, notifySink } from '../../notify.ts';
 import { registerForumRoutes } from '../../forum/routes.ts';
 import { registerPackRoutes } from '../../pack/routes.ts';
+import { initDaemons, drainAllowed, DRAIN_DIR } from '../../daemons/routes.ts';
 
 const hits = (): Array<{ via: string; what: string }> => (globalThis as any).__denTripwire.hits;
 const clearHits = () => { hits().length = 0; };
@@ -125,6 +126,22 @@ describe('T#981 tripwire (the guard), negative controls', () => {
     clearHits();
   });
 
+  it('fetch to the PROD server port is blocked, even on loopback (Bertus, PR 156)', async () => {
+    await expect(fetch('http://localhost:47778/api/health')).rejects.toThrow(/prod server port/);
+    await expect(fetch('http://127.0.0.1:47778/api/schedules', { method: 'POST' })).rejects.toThrow(/prod server port/);
+    expect(hits().map(h => h.what)).toEqual(['localhost:47778', '127.0.0.1:47778']);
+    clearHits();
+  });
+
+  it('tests run on a test port, and no integration file names the prod port', () => {
+    expect(process.env.ORACLE_PORT).toBe('47779');
+    expect(process.env.DEN_TEST_BASE_URL).toBe('http://localhost:47779');
+    const dir = path.join(import.meta.dir, '../../integration');
+    const offenders = require('fs').readdirSync(dir).filter((f: string) => f.endsWith('.ts'))
+      .filter((f: string) => require('fs').readFileSync(path.join(dir, f), 'utf-8').includes('47778'));
+    expect(offenders).toEqual([]);
+  });
+
   it('pack /terminal/input writes to panes directly (not via notify): the tripwire catches it', async () => {
     const app = new OpenAPIHono();
     registerPackRoutes(app, new Database(':memory:'), {
@@ -165,6 +182,44 @@ describe('T#981 tripwire (the guard), negative controls', () => {
   });
 });
 
+describe('T#981 the server drain never runs under the sink (Bertus, PR 156)', () => {
+  it('the drain dir is a private test dir, never the real /tmp/den-notify', () => {
+    expect(DRAIN_DIR).not.toBe('/tmp/den-notify');
+    expect(DRAIN_DIR.startsWith('/tmp/den-notify-test-')).toBe(true);
+    expect(process.env.DEN_NOTIFY_DIR).toBe(DRAIN_DIR);   // a child server inherits the same
+  });
+
+  it('a child server (env spread, as integration/http.test.ts does) gets the private dir too', () => {
+    const r = Bun.spawnSync(['bun', '-e', "import('./src/daemons/routes.ts').then(m => console.log(m.DRAIN_DIR))"],
+      { env: { ...process.env } as any, cwd: path.join(import.meta.dir, '../../..') });
+    expect(r.stdout.toString().trim()).toBe(DRAIN_DIR);
+  }, 30000);
+
+  it('and a child with a CLEANED env (no sink flags) still drains nothing real: dir from DEN_NOTIFY_DIR only', () => {
+    const env = { PATH: process.env.PATH!, HOME: process.env.HOME!, DEN_NOTIFY_DIR: process.env.DEN_NOTIFY_DIR!, ORACLE_DB_PATH: ':memory:' };
+    const r = Bun.spawnSync(['bun', '-e', "import('./src/daemons/routes.ts').then(m => console.log(m.DRAIN_DIR, m.drainAllowed()))"],
+      { env: env as any, cwd: path.join(import.meta.dir, '../../..') });
+    // Sink flags are gone, so drainAllowed is true, but the dir is the private one.
+    expect(r.stdout.toString().trim()).toBe(`${DRAIN_DIR} true`);
+  }, 30000);
+
+  it('drainAllowed is false under the sink, true for a real server env', () => {
+    expect(drainAllowed()).toBe(false);
+    const saved = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try { expect(drainAllowed()).toBe(true); } finally { process.env.NODE_ENV = saved; }
+  });
+
+  it('initDaemons does not start the drain: no real queue is touched past the 3s warmup', async () => {
+    expect(hits().length).toBe(0);
+    initDaemons(new Database(':memory:'));
+    await Bun.sleep(3500);
+    // Had the drain started, its flock + sed on /tmp/den-notify would have
+    // tripped the den-notify pattern here.
+    expect(hits().length).toBe(0);
+  }, 10000);
+});
+
 describe('T#981 the run itself (child bun test processes)', () => {
   const fixture = path.join(import.meta.dir, 'fixtures', 'tripwire-leak.fixture.ts');
   const quiet = path.join(import.meta.dir, 'json-fail-clean.test.ts');
@@ -190,6 +245,12 @@ describe('T#981 the run itself (child bun test processes)', () => {
       expect(out).not.toContain('x\n');   // names only, never the value
     }, 30000);
   }
+
+  it('refuses ORACLE_PORT set to the prod port', () => {
+    const r = Bun.spawnSync(['bun', 'test', quiet], { env: childEnv({ ORACLE_PORT: '47778' }), cwd: path.join(import.meta.dir, '../../..') });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr.toString()).toContain('prod port 47778');
+  }, 30000);
 
   it('refuses a sink value other than memory', () => {
     const r = Bun.spawnSync(['bun', 'test', quiet], { env: childEnv({ DEN_NOTIFY_SINK: 'off' }), cwd: path.join(import.meta.dir, '../../..') });
