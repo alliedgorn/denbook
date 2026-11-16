@@ -4,7 +4,7 @@ import type { Database } from 'bun:sqlite';
 import type { Role } from '../server/rbac.ts';
 import { checkGuestPostRate, checkGuestContentLength, scanForInjection } from '../server/guest-safety.ts';
 import { logSecurityEvent } from '../server/security-logger.ts';
-import { searchIndexUpsert } from '../search/routes.ts';
+import { searchIndexUpsert, searchIndexDelete } from '../search/routes.ts';
 import { handleThreadMessage, getFullThread, updateThreadStatus } from './handler.ts';
 import { emojiListRoute, emojiAddRoute, emojiRemoveRoute } from '../server/openapi.ts';
 
@@ -287,7 +287,7 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
              t.title as thread_title
       FROM forum_messages m
       JOIN forum_threads t ON m.thread_id = t.id
-      WHERE LOWER(m.content) LIKE ?
+      WHERE LOWER(m.content) LIKE ? AND m.deleted_at IS NULL
       ORDER BY m.created_at DESC
       LIMIT ?
     `).all(`%@${beast}%`, limit) as any[];
@@ -318,7 +318,7 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
              t.title as thread_title
       FROM forum_messages m
       JOIN forum_threads t ON m.thread_id = t.id
-      WHERE m.content LIKE ?`;
+      WHERE m.content LIKE ? AND m.deleted_at IS NULL`;
     const msgParams: any[] = [`%${q}%`];
     if (author) { msgQuery += ' AND LOWER(m.author) LIKE ?'; msgParams.push(`%${author.toLowerCase()}%`); }
     if (category) { msgQuery += ' AND t.category = ?'; msgParams.push(category); }
@@ -653,6 +653,10 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     } catch (error) {
       return c.json({ error: 'Database error during deletion' }, 500);
     }
+
+    // T#975: the row stays (soft delete), but the post must leave Den search
+    // (FTS5 + Meilisearch). Nothing else in this handler touched the index.
+    searchIndexDelete('forum', messageId);
 
     // Audit trail
     const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
