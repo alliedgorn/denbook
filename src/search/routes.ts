@@ -76,7 +76,7 @@ export async function backfillMeilisearch(): Promise<void> {
   for (const r of libRows) docs.push({ search_id: `library_${r.id}`, title: r.title, content: r.content, source_type: 'library', source_id: r.id, author: r.author, created_at: new Date(r.created_at).toISOString(), url: `/library?doc=${r.id}` });
 
   // Forum
-  const forumRows = sqlite.prepare('SELECT m.id, t.title, m.content, m.author, m.created_at, m.thread_id FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL').all() as any[];
+  const forumRows = sqlite.prepare('SELECT m.id, t.title, m.content, m.author, m.created_at, m.thread_id FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL AND t.deleted_at IS NULL').all() as any[];
   for (const r of forumRows) docs.push({ search_id: `forum_${r.id}`, title: r.title, content: r.content, source_type: 'forum', source_id: r.id, author: r.author, created_at: r.created_at, url: `/forum?thread=${r.thread_id}` });
 
   // Tasks
@@ -159,10 +159,16 @@ export function searchIndexDelete(sourceType: string, sourceId: number): void {
 // the DELETE handler removes the index entry, every rebuild skips deleted
 // rows, and this sweep removes anything already in the index (posts deleted
 // before the fix). It is idempotent and runs at startup.
+// A forum post is "dead" (must not be findable) when the post itself is
+// soft-deleted OR its thread is (T#978): a thread delete only flags the thread.
+const DEAD_FORUM_IDS_SQL = `SELECT m.id FROM forum_messages m
+  LEFT JOIN forum_threads t ON m.thread_id = t.id
+  WHERE m.deleted_at IS NOT NULL OR t.deleted_at IS NOT NULL`;
+
 function deletedForumIds(): number[] {
   if (!sqlite) return [];
   try {
-    return (sqlite.prepare('SELECT id FROM forum_messages WHERE deleted_at IS NOT NULL').all() as any[]).map(r => r.id);
+    return (sqlite.prepare(DEAD_FORUM_IDS_SQL).all() as any[]).map(r => r.id);
   } catch { return []; }
 }
 
@@ -173,7 +179,7 @@ export function sweepDeletedForumFromSearch(): { fts5: number; meili: number } {
   // SOURCE_ID_MATCH), so compare as integers. Count first: FTS5's `changes`
   // includes its shadow-table writes and overstates the rows removed.
   const where = `source_type = 'forum'
-    AND CAST(source_id AS INTEGER) IN (SELECT id FROM forum_messages WHERE deleted_at IS NOT NULL)`;
+    AND CAST(source_id AS INTEGER) IN (${DEAD_FORUM_IDS_SQL})`;
   try {
     fts5 = (sqlite.prepare(`SELECT COUNT(*) c FROM search_index WHERE ${where}`).get() as any)?.c || 0;
     if (fts5 > 0) sqlite.prepare(`DELETE FROM search_index WHERE ${where}`).run();
@@ -195,7 +201,7 @@ function dropDeletedForumHits<T extends { source_type: string; source_id: any }>
   let dead: Set<number>;
   try {
     const rows = sqlite.prepare(
-      `SELECT id FROM forum_messages WHERE deleted_at IS NOT NULL AND id IN (${forumIds.map(() => '?').join(',')})`
+      `SELECT id FROM (${DEAD_FORUM_IDS_SQL}) WHERE id IN (${forumIds.map(() => '?').join(',')})`
     ).all(...forumIds) as any[];
     dead = new Set(rows.map(r => r.id));
   } catch { return hits; }
@@ -281,7 +287,7 @@ export function initSearch(sqliteDb: Database): void {
        SELECT title, content, 'library', id, author, created_at FROM library`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
        SELECT t.title, m.content, 'forum', m.id, m.author, m.created_at
-       FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL`,
+       FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL AND t.deleted_at IS NULL`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
        SELECT title, COALESCE(description,''), 'risk', id, created_by, created_at FROM risks`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
@@ -486,7 +492,7 @@ export function registerSearchRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
        SELECT title, content, 'library', id, author, created_at FROM library`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
        SELECT t.title, m.content, 'forum', m.id, m.author, m.created_at
-       FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL`,
+       FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL AND t.deleted_at IS NULL`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
        SELECT title, COALESCE(description,''), 'risk', id, created_by, created_at FROM risks`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
@@ -526,7 +532,7 @@ export function registerSearchRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
     for (const r of indexedRows) indexed[r.source_type] = r.c;
 
     source.library = (sqliteDb.prepare('SELECT COUNT(*) as c FROM library').get() as any)?.c || 0;
-    source.forum = (sqliteDb.prepare('SELECT COUNT(*) as c FROM forum_messages WHERE deleted_at IS NULL').get() as any)?.c || 0;
+    source.forum = (sqliteDb.prepare('SELECT COUNT(*) as c FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL AND t.deleted_at IS NULL').get() as any)?.c || 0;
     source.spec = (sqliteDb.prepare('SELECT COUNT(*) as c FROM spec_reviews').get() as any)?.c || 0;
     source.risk = (sqliteDb.prepare('SELECT COUNT(*) as c FROM risks').get() as any)?.c || 0;
     source.task = (sqliteDb.prepare('SELECT COUNT(*) as c FROM tasks').get() as any)?.c || 0;
