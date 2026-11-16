@@ -3,7 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import styles from '../pages/Study.module.css';
 import { DRILL_TAG_RE, DRILL_VERDICT_RE, LAB_TAG_RE, VERDICT_RE } from './labTags';
-import { MD_COMPONENTS, PEER, REFRESH_EVENT, chatBreaks, publishThread, type Msg } from './studyChat';
+import { MD_COMPONENTS, REFRESH_EVENT, chatBreaks, publishThread } from './studyChat';
+import { PEER, type Msg } from './studyPeer';
 
 // "Ask Karo" (T#968) — a study-side view of the existing gorn ↔ karo DM thread.
 // Sending is a normal owner DM (POST /api/dm, sender derived server-side from the

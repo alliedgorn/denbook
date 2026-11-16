@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import styles from '../pages/Study.module.css';
-import { MD_COMPONENTS, PEER, chatBreaks, latestThread, refreshThread, THREAD_EVENT, type Msg } from './studyChat';
+import { MD_COMPONENTS, chatBreaks, latestThread, refreshThread, THREAD_EVENT } from './studyChat';
+import { PEER, type Msg } from './studyPeer';
 import { drillEntries, mergeEntries, pruneDeleted, toRounds, type Entry } from './drillParse';
 
 // Drill rounds (Gorn 11-16). Each drill card keeps every answer Gorn sends and every grade

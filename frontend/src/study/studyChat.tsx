@@ -1,14 +1,7 @@
 // Shared by the Ask Karo panel and the lab cards (LabCheck). Kept out of the
 // component files so React fast refresh keeps working (eslint only-export-components).
 
-export const PEER = 'karo';
-
-export interface Msg {
-  id: number;
-  sender: string;
-  message: string;
-  created_at: string;
-}
+import { type Msg } from './studyPeer';
 
 // Chat-style line breaks: a single newline starts a new line, like in the DMs.
 // Markdown would join those lines, so turn them into hard breaks, but leave

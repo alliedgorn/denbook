@@ -1,5 +1,5 @@
 // Pure helpers for DrillRounds.tsx (kept out of the component file for React fast refresh).
-import { PEER, type Msg } from './studyChat';
+import { PEER, type Msg } from './studyPeer';
 import { DRILL_TAG_RE, DRILL_VERDICT_RE } from './labTags';
 
 const CTX_RE = /^\[Study: [^\]\n]{1,200}\]\n?/;
