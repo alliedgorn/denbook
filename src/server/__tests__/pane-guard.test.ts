@@ -16,6 +16,12 @@ beforeAll(() => {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== 'TMUX') env[k] = v;
   env.TMUX_TMPDIR = dir;
+  // T#981: this harness tests real delivery on a PRIVATE tmux server (its own
+  // TMUX_TMPDIR, no TMUX), so it opts out of the test notify sink. That is the
+  // only reviewed exception. It runs as a child `bun` (not `bun test`), so the
+  // preload tripwire does not apply there, and the private socket is what
+  // keeps it off real seats (asserted by socketIsPrivate below).
+  delete env.DEN_NOTIFY_SINK;
   const child = Bun.spawnSync(['bun', path.join(import.meta.dir, 'pane-guard.harness.ts'), dir], { env });
   const stdout = child.stdout.toString().trim();
   if (child.exitCode !== 0 || !stdout) {
