@@ -36,17 +36,17 @@ describe('fetchPreviewHtml (T#962)', () => {
   });
 
   it('refuses a br response the server sends anyway, without decoding it', async () => {
-    let decoded = false;
+    // Behavioural, not a flag check: what came off the wire must be the exact
+    // br bytes the server sent, i.e. the decoder never ran on them.
+    const sent = new Uint8Array(brotliCompressSync(Buffer.from(HTML)));
+    let raw = new Uint8Array();
     const spy = async (url: string, init: RequestInit & { decompress?: boolean }) => {
-      expect(init.decompress).toBe(false);
       const r = await fetch(url, init);
-      // With decompress:false the body must still be the compressed bytes.
-      const raw = new Uint8Array(await r.clone().arrayBuffer());
-      decoded = new TextDecoder().decode(raw) === HTML;
+      raw = new Uint8Array(await r.clone().arrayBuffer());
       return r;
     };
     expect(await fetchPreviewHtml(`${base}/br`, spy)).toBeNull();
-    expect(decoded).toBe(false);
+    expect(raw).toEqual(sent);
   });
 
   it('refuses gzip too: nothing compressed is parsed', async () => {
