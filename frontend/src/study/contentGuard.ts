@@ -19,8 +19,23 @@ function inline(x: unknown): x is Inline {
 }
 const inlines = (x: unknown) => isArr(x) && x.every(inline);
 
+// A block has EXACTLY ONE kind key and nothing else it doesn't expect. The guard and
+// RichText test kinds in different orders, so a block with two kinds (tip + img)
+// could pass here as one kind and render as the other with its check skipped
+// (Bertus, PR 166). One kind per block makes the order irrelevant in both files.
+const BLOCK_KEYS: Record<string, readonly string[]> = {
+  p: ['p'], ul: ['ul'], tip: ['tip'], code: ['code'], img: ['img', 'alt', 'caption'],
+};
+function oneKind(x: Record<string, unknown>): boolean {
+  const keys = Object.keys(x);
+  const kinds = keys.filter(k => k in BLOCK_KEYS);
+  if (kinds.length !== 1) return false;
+  const allowed = BLOCK_KEYS[kinds[0]];
+  return keys.every(k => allowed.includes(k));
+}
+
 function block(x: unknown): x is Block {
-  if (!obj(x)) return false;
+  if (!obj(x) || !oneKind(x)) return false;
   if ('p' in x) return inlines(x.p);
   if ('tip' in x) return inlines(x.tip);
   if ('ul' in x) return isArr(x.ul) && x.ul.every(inlines);

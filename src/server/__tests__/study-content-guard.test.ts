@@ -14,3 +14,16 @@ test('img guard', () => {
   expect(ok({ img: '/api/f/a.png', alt: 'x', caption: 3 })).toBe(false);
   expect(ok({ p: ['still fine'] })).toBe(true);
 });
+
+test('one kind per block: two kinds or stray keys are rejected (Bertus, PR 166)', () => {
+  // tip + external img passed the guard as a tip and rendered as an unchecked image.
+  expect(ok({ tip: ['x'], img: 'https://evil.example/p.png', alt: 'x' })).toBe(false);
+  expect(ok({ p: ['x'], img: '/api/f/a.png', alt: 'x' })).toBe(false);
+  expect(ok({ ul: [['x']], code: 'y' })).toBe(false);
+  expect(ok({ p: ['x'], extra: 1 })).toBe(false);
+  expect(ok({ img: '/api/f/a.png', alt: 'x', src: 'https://evil.example/p.png' })).toBe(false);
+  expect(ok({})).toBe(false);
+  // single-kind blocks still pass
+  for (const b of [{ p: ['x'] }, { ul: [['x']] }, { tip: ['x'] }, { code: 'x' }, { img: '/api/f/a.png', alt: 'x', caption: 'c' }])
+    expect(ok(b)).toBe(true);
+});
