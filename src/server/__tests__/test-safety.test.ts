@@ -1,0 +1,268 @@
+// T#981: tests must not reach real seats, real panes, or Gorn.
+// Proves the two layers from scripts/test-preload.ts:
+//   - SINK (the fix): notifications land in notifySink, and the spawn layer
+//     records zero hits. Observed at the spawn layer, not inferred from the
+//     sink (Gnarl's review predicate).
+//   - TRIPWIRE (the guard): every bypass is blocked AND recorded, and an
+//     unconsumed hit fails the whole run.
+// Negative controls trip on purpose, assert, then clear the hits so the global
+// afterAll stays green. Every control targets a seat that does NOT exist
+// (nosuchseat): if the guard ever regresses, the test fails red and harmless
+// instead of typing into a live pane (Gnarl, PR 156).
+import { describe, it, expect, afterEach } from 'bun:test';
+import { Database } from 'bun:sqlite';
+import { OpenAPIHono } from '@hono/zod-openapi';
+import path from 'path';
+import { execSync as namedExecSync } from 'node:child_process';
+import * as cpNamespace from 'child_process';
+import { enqueueNotification, deliverToPane, notifySink } from '../../notify.ts';
+import { registerForumRoutes } from '../../forum/routes.ts';
+import { registerPackRoutes } from '../../pack/routes.ts';
+import { initDaemons, drainAllowed, DRAIN_DIR } from '../../daemons/routes.ts';
+
+const hits = (): Array<{ via: string; what: string }> => (globalThis as any).__denTripwire.hits;
+const clearHits = () => { hits().length = 0; };
+afterEach(() => { notifySink.length = 0; });
+
+describe('T#981 sink (the fix)', () => {
+  it('the preload turns the sink on', () => {
+    expect(process.env.DEN_NOTIFY_SINK).toBe('memory');
+    expect((globalThis as any).__denTripwire).toBeDefined();
+  });
+
+  it('enqueueNotification lands in the sink with zero spawns', () => {
+    expect(hits().length).toBe(0);
+    expect(enqueueNotification('nosuchseat', 'hello from a test')).toBe(true);
+    expect(notifySink).toEqual([{ via: 'enqueue', target: 'nosuchseat', text: 'hello from a test' }]);
+    expect(hits().length).toBe(0);
+  });
+
+  it('deliverToPane lands in the sink with zero spawns', () => {
+    expect(deliverToPane('Nosuchseat', 'typed text')).toBe('sent');
+    expect(notifySink[0]).toEqual({ via: 'pane', target: 'Nosuchseat', text: 'typed text' });
+    expect(hits().length).toBe(0);
+  });
+
+  it("an UNSTUBBED notifying handler (today's incident path) reaches the sink, not a seat", async () => {
+    const db = new Database(':memory:');
+    db.run(`CREATE TABLE forum_threads (id INTEGER PRIMARY KEY, title TEXT, status TEXT, category TEXT,
+            created_by TEXT, pinned INTEGER DEFAULT 0, visibility TEXT DEFAULT 'internal',
+            deleted_at TEXT, created_at TEXT, updated_at TEXT)`);
+    db.run("INSERT INTO forum_threads (id, title, created_by) VALUES (1, 'sink fixture', 'rax')");
+    const app = new OpenAPIHono();
+    app.use('*', async (c, next) => { c.set('role' as any, 'owner'); await next(); });
+    registerForumRoutes(app, db, {
+      hasSessionAuth: () => true,
+      requireBeastIdentity: () => 'gorn',
+      isTrustedRequest: () => true,
+      wsBroadcast: () => {},
+      withRetry: async (fn) => fn(),
+      getSupportedEmoji: () => new Set(),
+    });
+    const r = await app.request('/api/thread/1/visibility', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visibility: 'public' }),
+    });
+    expect(r.status).toBe(200);
+    expect(notifySink.length).toBeGreaterThan(0);
+    expect(notifySink.every(n => n.text.includes('New public thread: sink fixture'))).toBe(true);
+    expect(hits().length).toBe(0);
+  });
+});
+
+describe('T#981 tripwire (the guard), negative controls', () => {
+  it('Bun.spawnSync naming tmux is blocked and recorded', () => {
+    expect(() => Bun.spawnSync(['tmux', 'has-session', '-t', 'Nosuchseat'])).toThrow(/test tripwire/);
+    expect(hits().map(h => h.via)).toEqual(['Bun.spawnSync']);
+    clearHits();
+  });
+
+  it('Bun.spawn naming notify.sh is blocked and recorded', () => {
+    expect(() => Bun.spawn(['bash', '/nonexistent/nosuchseat/scripts/notify.sh', 'x'])).toThrow(/test tripwire/);
+    expect(hits().length).toBe(1);
+    clearHits();
+  });
+
+  it("child_process via a NAMED import (import { execSync } from 'node:child_process') is blocked", () => {
+    expect(() => namedExecSync('tmux has-session -t Nosuchseat')).toThrow(/test tripwire/);
+    expect(hits()[0].via).toBe('child_process.execSync');
+    clearHits();
+  });
+
+  it("child_process via a NAMESPACE import of 'child_process' is blocked, argv form too", () => {
+    expect(() => cpNamespace.execFileSync('tmux', ['send-keys', '-t', 'Nosuchseat', 'x'])).toThrow(/test tripwire/);
+    expect(hits()[0].via).toBe('child_process.execFileSync');
+    clearHits();
+  });
+
+  it('a harmless spawn still runs (the tripwire is targeted, not a blanket ban)', () => {
+    expect(Bun.spawnSync(['true']).exitCode).toBe(0);
+    expect(namedExecSync('echo ok', { encoding: 'utf-8' }).trim()).toBe('ok');
+    expect(hits().length).toBe(0);
+  });
+
+  it('the server drain popping a real /tmp/den-notify queue is blocked (would be silent loss under the sink)', () => {
+    expect(() => Bun.spawnSync(['bash', '-c', "head -1 '/tmp/den-notify/nosuchseat.queue'"])).toThrow(/test tripwire/);
+    expect(hits()[0].what).toContain('den-notify');
+    clearHits();
+  });
+
+  it('the sink is ignored without NODE_ENV=test (no prod kill switch)', () => {
+    const saved = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      expect(enqueueNotification('nosuchseat', 'sink must not swallow this')).toBe(false);
+    } finally {
+      process.env.NODE_ENV = saved;
+    }
+    expect(notifySink.length).toBe(0);
+    expect(hits().some(h => h.what.includes('notify.sh'))).toBe(true);   // it went for real delivery, and the tripwire stopped it
+    clearHits();
+  });
+
+  it('fetch to a non-loopback host (Telegram) is blocked and recorded', async () => {
+    await expect(fetch('https://api.telegram.org/botX/getMe')).rejects.toThrow(/test tripwire/);
+    expect(hits()).toEqual([{ via: 'fetch', what: 'api.telegram.org' }]);
+    clearHits();
+  });
+
+  it('fetch to the PROD server port is blocked, even on loopback (Bertus, PR 156)', async () => {
+    await expect(fetch('http://localhost:47778/api/health')).rejects.toThrow(/prod server port/);
+    await expect(fetch('http://127.0.0.1:47778/api/schedules', { method: 'POST' })).rejects.toThrow(/prod server port/);
+    expect(hits().map(h => h.what)).toEqual(['localhost:47778', '127.0.0.1:47778']);
+    clearHits();
+  });
+
+  it('tests run on a test port, and no integration file names the prod port', () => {
+    expect(process.env.ORACLE_PORT).toBe('47779');
+    expect(process.env.DEN_TEST_BASE_URL).toBe('http://localhost:47779');
+    const dir = path.join(import.meta.dir, '../../integration');
+    const offenders = require('fs').readdirSync(dir).filter((f: string) => f.endsWith('.ts'))
+      .filter((f: string) => require('fs').readFileSync(path.join(dir, f), 'utf-8').includes('47778'));
+    expect(offenders).toEqual([]);
+  });
+
+  it('pack /terminal/input writes to panes directly (not via notify): the tripwire catches it', async () => {
+    const app = new OpenAPIHono();
+    registerPackRoutes(app, new Database(':memory:'), {
+      hasSessionAuth: () => true,
+      requireBeastIdentity: () => 'gorn',
+      isTrustedRequest: () => true,
+      wsBroadcast: () => {},
+      getTmuxStatus: () => ({ tmuxStatus: {}, contextPctMap: {} }),
+      normalizeAvatarUrl: (u: string) => u,
+      webPresence: new Map(),
+      WEB_PRESENCE_TIMEOUT_MS: 0,
+    } as any);
+    const r = await app.request('/api/beast/nosuchseat/terminal/input', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys: 'typed by a test' }),
+    });
+    // The route swallows the error into a 404. That is why the tripwire
+    // RECORDS: a throw alone would pass green.
+    expect(r.status).toBe(404);
+    expect(hits().length).toBeGreaterThan(0);
+    expect(hits().every(h => /tmux/.test(h.what))).toBe(true);
+    clearHits();
+  });
+
+  it('with the sink OFF, notify goes for notify.sh then tmux, and the tripwire catches both', () => {
+    const saved = process.env.DEN_NOTIFY_SINK;
+    delete process.env.DEN_NOTIFY_SINK;
+    try {
+      expect(enqueueNotification('nosuchseat', 'would page a seat if the guard broke')).toBe(false);
+    } finally {
+      process.env.DEN_NOTIFY_SINK = saved;
+    }
+    const whats = hits().map(h => h.what);
+    expect(whats.some(w => w.includes('notify.sh'))).toBe(true);
+    expect(whats.some(w => w.includes('tmux'))).toBe(true);
+    expect(notifySink.length).toBe(0);
+    clearHits();
+  });
+});
+
+describe('T#981 the server drain never runs under the sink (Bertus, PR 156)', () => {
+  it('the drain dir is a private test dir, never the real /tmp/den-notify', () => {
+    expect(DRAIN_DIR).not.toBe('/tmp/den-notify');
+    expect(DRAIN_DIR.startsWith('/tmp/den-notify-test-')).toBe(true);
+    expect(process.env.DEN_NOTIFY_DIR).toBe(DRAIN_DIR);   // a child server inherits the same
+  });
+
+  it('a child server (env spread, as integration/http.test.ts does) gets the private dir too', () => {
+    const r = Bun.spawnSync(['bun', '-e', "import('./src/daemons/routes.ts').then(m => console.log(m.DRAIN_DIR))"],
+      { env: { ...process.env } as any, cwd: path.join(import.meta.dir, '../../..') });
+    expect(r.stdout.toString().trim()).toBe(DRAIN_DIR);
+  }, 30000);
+
+  it('and a child with a CLEANED env (no sink flags) still drains nothing real: dir from DEN_NOTIFY_DIR only', () => {
+    const env = { PATH: process.env.PATH!, HOME: process.env.HOME!, DEN_NOTIFY_DIR: process.env.DEN_NOTIFY_DIR!, ORACLE_DB_PATH: ':memory:' };
+    const r = Bun.spawnSync(['bun', '-e', "import('./src/daemons/routes.ts').then(m => console.log(m.DRAIN_DIR, m.drainAllowed()))"],
+      { env: env as any, cwd: path.join(import.meta.dir, '../../..') });
+    // Sink flags are gone, so drainAllowed is true, but the dir is the private one.
+    expect(r.stdout.toString().trim()).toBe(`${DRAIN_DIR} true`);
+  }, 30000);
+
+  it('drainAllowed is false under the sink, true for a real server env', () => {
+    expect(drainAllowed()).toBe(false);
+    const saved = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try { expect(drainAllowed()).toBe(true); } finally { process.env.NODE_ENV = saved; }
+  });
+
+  it('initDaemons does not start the drain: a seeded queue line survives the 3s warmup, with 0 pop attempts', async () => {
+    // Seed a line, so a running drain has something to pop (Gnarl: an empty
+    // dir let this pass with drainAllowed forced true).
+    const fs = require('fs');
+    const q = path.join(DRAIN_DIR, 'nosuchseat.queue');
+    const line = Buffer.from('seeded by test-safety').toString('base64');
+    fs.writeFileSync(q, line + '\n');
+    expect(hits().length).toBe(0);
+    initDaemons(new Database(':memory:'));
+    await Bun.sleep(3500);
+    // drainAllowed on its own: a running drain would have attempted the
+    // flock+sed pop, which the den-notify pattern records as a hit.
+    expect(hits().length).toBe(0);
+    expect(fs.readFileSync(q, 'utf-8')).toBe(line + '\n');
+    fs.rmSync(q);
+  }, 10000);
+});
+
+describe('T#981 the run itself (child bun test processes)', () => {
+  const fixture = path.join(import.meta.dir, 'fixtures', 'tripwire-leak.fixture.ts');
+  const quiet = path.join(import.meta.dir, 'json-fail-clean.test.ts');
+  const childEnv = (extra: Record<string, string> = {}) => {
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !k.startsWith('TELEGRAM_')) env[k] = v;
+    return { ...env, ...extra };
+  };
+
+  it('an unconsumed trip fails the whole run (the global afterAll)', () => {
+    const r = Bun.spawnSync(['bun', 'test', fixture], { env: childEnv(), cwd: path.join(import.meta.dir, '../../..') });
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr.toString() + r.stdout.toString()).toContain('[test tripwire] 1 blocked side effect');
+  }, 30000);
+
+  for (const key of ['TELEGRAM_BOTS', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID']) {
+    it(`refuses to start when ${key} is set (any one of the three)`, () => {
+      const r = Bun.spawnSync(['bun', 'test', quiet], { env: childEnv({ [key]: 'x' }), cwd: path.join(import.meta.dir, '../../..') });
+      expect(r.exitCode).toBe(1);
+      const out = r.stderr.toString();
+      expect(out).toContain('REFUSING to run');
+      expect(out).toContain(key);
+      expect(out).not.toContain('x\n');   // names only, never the value
+    }, 30000);
+  }
+
+  it('refuses ORACLE_PORT set to the prod port', () => {
+    const r = Bun.spawnSync(['bun', 'test', quiet], { env: childEnv({ ORACLE_PORT: '47778' }), cwd: path.join(import.meta.dir, '../../..') });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr.toString()).toContain('prod port 47778');
+  }, 30000);
+
+  it('refuses a sink value other than memory', () => {
+    const r = Bun.spawnSync(['bun', 'test', quiet], { env: childEnv({ DEN_NOTIFY_SINK: 'off' }), cwd: path.join(import.meta.dir, '../../..') });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr.toString()).toContain("DEN_NOTIFY_SINK must be 'memory'");
+  }, 30000);
+});

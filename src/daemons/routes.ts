@@ -6,7 +6,17 @@ import type { Database } from 'bun:sqlite';
 import { SECURITY_RETENTION_DAYS, pruneSecurityEvents } from '../server/security-logger.ts';
 import { pruneBeastTokens } from '../server/beast-tokens.ts';
 import { ORACLE_DATA_DIR } from '../config.ts';
-import { deliverToPane } from '../notify.ts';
+import { deliverToPane, notifySinkOn } from '../notify.ts';
+
+// T#981 (Bertus, PR 156): the drain pops REAL /tmp/den-notify queue lines with
+// flock + sed and then calls deliverToPane. Under the test sink that delivery
+// "succeeds" into an array, so every popped line would be lost silently. A test
+// can reach this through a child server (integration/http.test.ts starts
+// `bun run src/server.ts`, which inherits the sink env but not the preload).
+// So the drain never runs while the sink is on.
+export function drainAllowed(): boolean {
+  return !notifySinkOn();
+}
 
 const UPLOADS_DIR = path.join(ORACLE_DATA_DIR, 'uploads');
 const ARCHIVE_DIR = path.join(ORACLE_DATA_DIR, 'uploads', 'archive');
@@ -24,7 +34,12 @@ let daemonsStarted = false;
 
 const DRAIN_INTERVAL = 1000; // Check queues every 1s
 const DRAIN_SPACING = 1000; // 1s between sends to same Beast (was 3s — Tier 1 of notification queue smoothness fix, 2026-04-08)
-const DRAIN_DIR = '/tmp/den-notify';
+// Queue directory. Prod leaves DEN_NOTIFY_DIR unset, so this is the real
+// /tmp/den-notify. Under bun test the preload sets it to a private
+// /tmp/den-notify-test-* dir, so in-process code and any child server
+// (env inherited) never see the real queues, even with the sink flags dropped
+// (T#981, Gnarl/Bertus PR 156).
+export const DRAIN_DIR = process.env.DEN_NOTIFY_DIR || '/tmp/den-notify';
 const drainLastSent: Map<string, number> = new Map(); // beast → last send timestamp
 // T#973 (Bertus review note): a refusal is otherwise silent. If Claude Code ever
 // changes its argv0, every seat fails closed at once and queues just grow, so
@@ -66,6 +81,7 @@ function perBeastDrainAlive(pidPath: string): boolean {
 }
 
 function runDrainCycle() {
+  if (!drainAllowed()) return;
   try {
     if (!fs.existsSync(DRAIN_DIR)) return;
     const files = fs.readdirSync(DRAIN_DIR).filter(f => f.endsWith('.queue'));
@@ -290,10 +306,15 @@ export function initDaemons(sqliteDb: Database): void {
   if (daemonsStarted) return;
   daemonsStarted = true;
 
-  // Notification queue drain (1s interval, 3s warmup)
-  setInterval(runDrainCycle, DRAIN_INTERVAL);
-  setTimeout(runDrainCycle, 3000);
-  console.log('[Notify] Queue drain started (1s interval, 3s spacing)');
+  // Notification queue drain (1s interval, 3s warmup). Not under the test
+  // notify sink (T#981): see drainAllowed.
+  if (drainAllowed()) {
+    setInterval(runDrainCycle, DRAIN_INTERVAL);
+    setTimeout(runDrainCycle, 3000);
+    console.log('[Notify] Queue drain started (1s interval, 3s spacing)');
+  } else {
+    console.log('[Notify] Queue drain NOT started: the test notify sink is on (T#981)');
+  }
 
   // DB maintenance (6h interval, 30s warmup)
   setTimeout(runDbMaintenance, 30_000);

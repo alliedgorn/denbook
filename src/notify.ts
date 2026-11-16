@@ -67,6 +67,21 @@ function formatUtc7Timestamp(date: Date): string {
  */
 export const DELIVERY_PANE_COMMAND = 'claude';
 
+/**
+ * T#981: test-time notification sink. When DEN_NOTIFY_SINK=memory (set by
+ * scripts/test-preload.ts for every `bun test`, never in prod), both delivery
+ * paths below push here instead of spawning notify.sh or typing into tmux.
+ * Before this, a unit test that reached a notifying handler paged every live
+ * seat (2026-11-16 14:31, #20 31944). Tests read this array to assert on
+ * notifications; the preload tripwire catches anything that bypasses it.
+ */
+export const notifySink: Array<{ via: 'enqueue' | 'pane'; target: string; text: string }> = [];
+// Both are required: `bun test` sets NODE_ENV=test, and a plain server run does
+// not. So a stray DEN_NOTIFY_SINK line in a prod .env cannot silently swallow
+// every notification (Gnarl, PR 156).
+export const notifySinkOn = (): boolean => process.env.DEN_NOTIFY_SINK === 'memory' && process.env.NODE_ENV === 'test';
+const sinkOn = notifySinkOn;
+
 export type PaneDelivery = 'sent' | 'no-session' | 'not-claude';
 
 /**
@@ -80,6 +95,7 @@ export type PaneDelivery = 'sent' | 'no-session' | 'not-claude';
  * claude could exit; this closes the standing hole, not that race.
  */
 export function deliverToPane(sessionName: string, text: string): PaneDelivery {
+  if (sinkOn()) { notifySink.push({ via: 'pane', target: sessionName, text }); return 'sent'; }
   const hasSession = Bun.spawnSync(['tmux', 'has-session', '-t', sessionName]);
   if (hasSession.exitCode !== 0) return 'no-session';
 
@@ -115,6 +131,8 @@ export function enqueueNotification(beast: string, message: string, opts?: Enque
     console.error(`[notify] Invalid beast name: ${beast}`);
     return false;
   }
+
+  if (sinkOn()) { notifySink.push({ via: 'enqueue', target: beastLower, text: message }); return true; }
 
   const targetScript = path.join(WORKSPACE_ROOT, beastLower, 'scripts', 'notify.sh');
   const sender = opts?.from ?? 'server';

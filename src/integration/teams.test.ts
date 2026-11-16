@@ -6,7 +6,8 @@
  */
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 
-const BASE_URL = "http://localhost:47778";
+// T#981: never the prod port. The preload sets DEN_TEST_BASE_URL (ORACLE_PORT 47779).
+const BASE_URL = process.env.DEN_TEST_BASE_URL || "http://localhost:47779";
 const TEST_BEAST = "pip";
 const OTHER_BEAST = "bertus";
 const TEST_PREFIX = "test_team_";
@@ -42,7 +43,7 @@ async function createTeam(overrides: Record<string, unknown> = {}) {
 describe("Teams API Integration", () => {
   beforeAll(async () => {
     if (!(await isServerRunning())) {
-      throw new Error("Server not running on port 47778");
+      throw new Error(`Server not running at ${BASE_URL}`);
     }
   });
 
