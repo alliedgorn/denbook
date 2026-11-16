@@ -5,6 +5,7 @@ import styles from '../pages/Study.module.css';
 import { DRILL_TAG_RE, DRILL_VERDICT_RE, LAB_TAG_RE, VERDICT_RE } from './labTags';
 import { MD_COMPONENTS, REFRESH_EVENT, chatBreaks, publishThread } from './studyChat';
 import { PEER, type Msg } from './studyPeer';
+import { FileUpload } from '../components/FileUpload';
 
 // "Ask Karo" (T#968) — a study-side view of the existing gorn ↔ karo DM thread.
 // Sending is a normal owner DM (POST /api/dm, sender derived server-side from the
@@ -211,7 +212,9 @@ export function AskKaro({ context }: { context: string }) {
             })}
             <div ref={endRef} />
           </div>
-          <div className={styles.askCompose}>
+          {/* A form, not a div: FileUpload scopes its clipboard-paste listener to the
+              closest <form>, so an image pasted elsewhere on the page is not grabbed. */}
+          <form className={styles.askCompose} onSubmit={e => { e.preventDefault(); send(); }}>
             <span className={styles.askCtx}>About: {context}</span>
             <textarea
               maxLength={2000}
@@ -221,12 +224,13 @@ export function AskKaro({ context }: { context: string }) {
               onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }}
             />
             <div className={styles.row}>
-              <button className={`${styles.btn} ${styles.primary}`} disabled={!text.trim() || state === 'sending'} onClick={send}>
+              <button type="submit" className={`${styles.btn} ${styles.primary}`} disabled={!text.trim() || state === 'sending'}>
                 {state === 'sending' ? 'Sending…' : 'Send'}
               </button>
+              <FileUpload onUploadComplete={md => setText(prev => (prev && !prev.endsWith('\n') ? `${prev}\n${md}` : prev + md))} />
               <span className={styles.muted}>{state === 'error' ? "Didn't send. Try again." : '⌘/Ctrl + Enter'}</span>
             </div>
-          </div>
+          </form>
         </aside>
         </div>
       )}
