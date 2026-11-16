@@ -6,6 +6,7 @@ import { RichText } from './RichText';
 import { useStudyProgress, type SyncState } from './useStudyProgress';
 import type { StudyModule } from './types';
 import styles from '../pages/Study.module.css';
+import { DrillRounds } from './DrillRounds';
 
 // AI engineering interview block (T#963) — Learn / Quiz / Drill per topic.
 // Progress shape is unchanged from the original app so it stays importable.
@@ -240,7 +241,7 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
       <div role="tabpanel">
         {tab === 'learn' && <Learn m={m} state={state} touch={touch} />}
         {tab === 'quiz' && <Quiz m={m} state={state} touch={touch} />}
-        {tab === 'drill' && <Drills m={m} state={state} touch={touch} open={open} setOpen={setOpen} />}
+        {tab === 'drill' && <Drills m={m} state={state} touch={touch} open={open} setOpen={setOpen} where={`Interview block › ${m.name}`} />}
       </div>
       <div className={styles.footNav}>
         {ti < 2 && <button className={styles.btn} onClick={() => go(m.id, TABS[ti + 1])}>{ti === 0 ? 'Next: Quiz →' : 'Next: Drill →'}</button>}
@@ -325,7 +326,7 @@ export function Quiz({ m, state, touch }: PartProps) {
   );
 }
 
-export function Drills({ m, state, touch, open, setOpen }: PartProps & { open: Record<string, boolean>; setOpen: (k: string, v: boolean) => void }) {
+export function Drills({ m, state, touch, open, setOpen, where }: PartProps & { open: Record<string, boolean>; setOpen: (k: string, v: boolean) => void; where?: string }) {
   return (
     <>
       {m.drills.map((d, i) => {
@@ -356,6 +357,7 @@ export function Drills({ m, state, touch, open, setOpen }: PartProps & { open: R
                 >{lab}</button>
               ))}
             </div>
+            {where && <DrillRounds drillKey={key} context={`${where} › Drill ${i + 1}`} />}
           </div>
         );
       })}

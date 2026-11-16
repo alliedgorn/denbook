@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import styles from '../pages/Study.module.css';
-import { LAB_TAG_RE, VERDICT_RE } from './labTags';
+import { DRILL_TAG_RE, DRILL_VERDICT_RE, LAB_TAG_RE, VERDICT_RE } from './labTags';
 import { MD_COMPONENTS, PEER, REFRESH_EVENT, chatBreaks, publishThread, type Msg } from './studyChat';
 
 // "Ask Karo" (T#968) — a study-side view of the existing gorn ↔ karo DM thread.
@@ -183,6 +183,10 @@ export function AskKaro({ context }: { context: string }) {
               if (tag) { bodyText = bodyText.slice(tag[0].length); label = `${label ?? 'Lab'} · answer`; }
               const verdict = mine ? null : VERDICT_RE.exec(m.message);
               if (verdict) { bodyText = m.message.slice(verdict[0].length); label = verdict[2] === 'pass' ? 'Lab check · ✅ pass' : 'Lab check · ❌ fix'; }
+              const dtag = mine && !tag ? DRILL_TAG_RE.exec(bodyText) : null;
+              if (dtag) { bodyText = bodyText.slice(dtag[0].length); label = `${label ?? 'Drill'} · answer`; }
+              const dverdict = mine || verdict ? null : DRILL_VERDICT_RE.exec(m.message);
+              if (dverdict) { bodyText = m.message.slice(dverdict[0].length); label = dverdict[2] === 'pass' ? 'Drill grade · ✅ pass' : 'Drill grade · ❌ fix'; }
               return (
                 <div key={m.id} className={mine ? `${styles.askMsg} ${styles.askMine}` : styles.askMsg}>
                   {label && <span className={styles.askCtx}>{label}</span>}

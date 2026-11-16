@@ -268,7 +268,7 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
         {tab === 'learn' && <Learn m={m} state={state} touch={touch} />}
         {tab === 'lab' && <Labs m={m} state={state} touch={touch} />}
         {tab === 'quiz' && <Quiz m={m} state={state} touch={touch} />}
-        {tab === 'drill' && <Drills m={m} state={state} touch={touch} open={open} setOpen={setOpen} />}
+        {tab === 'drill' && <Drills m={m} state={state} touch={touch} open={open} setOpen={setOpen} where={`Bootcamp › ${m.name}`} />}
       </div>
       <div className={styles.footNav}>
         {ti < TABS.length - 1 && <button className={styles.btn} onClick={() => go(m.id, TABS[ti + 1])}>Next: {TAB_NAME[TABS[ti + 1]]} →</button>}
