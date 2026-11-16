@@ -1,26 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import styles from '../pages/Study.module.css';
+import { DRILL_TAG_RE, DRILL_VERDICT_RE, LAB_TAG_RE, VERDICT_RE } from './labTags';
+import { MD_COMPONENTS, REFRESH_EVENT, chatBreaks, publishThread } from './studyChat';
+import { PEER, type Msg } from './studyPeer';
 
 // "Ask Karo" (T#968) — a study-side view of the existing gorn ↔ karo DM thread.
 // Sending is a normal owner DM (POST /api/dm, sender derived server-side from the
 // owner session); each message is prefixed with where Gorn is in the course so
-// Karo has context. Everything renders as React text — no HTML path.
+// Karo has context. Messages render as markdown through react-markdown, the same
+// as the DMs page: no rehype-raw, so raw HTML in a message stays text, and
+// react-markdown's default urlTransform drops javascript: and other unsafe URLs.
 // DM GETs are audited, so polling is deliberately slow (Bertus, T#968): the
 // panel refetches right after a send instead of polling fast.
 
-const PEER = 'karo';
 const OPEN_POLL_MS = 10000;
 const CLOSED_POLL_MS = 120000;
 const SEEN_KEY = 'study-ask-karo-seen';
-const BIG_KEY = 'study-ask-karo-big';
+const BIG_KEY = 'study-ask-karo-big'; // T#972, Gorn 11-11: the panel is too small for long replies
 const CTX_RE = /^\[Study: ([^\]\n]{1,200})\]\n?/;
-
-interface Msg {
-  id: number;
-  sender: string;
-  message: string;
-  created_at: string;
-}
+// A Karo message starting with [Pin] replaces the pinned note beside the chat
+// (Gorn 11-13: "so I don't need to scroll back for the next challenge"). An empty
+// [Pin] clears it. The last pin is kept in localStorage, so it survives after the
+// message scrolls out of the 40 loaded. Frontend only: no new route, no new table.
+const PIN_RE = /^\[Pin\][ \t]*\n?/;
+const PIN_KEY = 'study-ask-karo-pin';
+const NOTE_HIDDEN_KEY = 'study-ask-karo-note-hidden';
 
 function readSeen(): number {
   try { return Number(localStorage.getItem(SEEN_KEY)) || 0; } catch { return 0; }
@@ -28,15 +34,25 @@ function readSeen(): number {
 function writeSeen(id: number) {
   try { localStorage.setItem(SEEN_KEY, String(id)); } catch { /* private mode: badge just resets */ }
 }
-
 function readBig(): boolean {
   try { return localStorage.getItem(BIG_KEY) === '1'; } catch { return false; }
 }
 
-// **bold** spans only, rendered as React elements; everything else stays plain text.
-function Bolded({ text }: { text: string }) {
-  const parts = text.split(/\*\*([^*\n]{1,200})\*\*/g);
-  return <>{parts.map((x, i) => (i % 2 ? <b key={i}>{x}</b> : <span key={i}>{x}</span>))}</>;
+interface Pin { id: number; text: string }
+function readPin(): Pin | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(PIN_KEY) || 'null');
+    return v && typeof v.id === 'number' && typeof v.text === 'string' ? v : null;
+  } catch { return null; }
+}
+function writePin(p: Pin) {
+  try { localStorage.setItem(PIN_KEY, JSON.stringify(p)); } catch { /* private mode: pin lasts while loaded */ }
+}
+function readFlag(key: string): boolean {
+  try { return localStorage.getItem(key) === '1'; } catch { return false; }
+}
+function writeFlag(key: string, on: boolean) {
+  try { localStorage.setItem(key, on ? '1' : '0'); } catch { /* ignore */ }
 }
 
 function time(iso: string) {
@@ -51,6 +67,13 @@ export function AskKaro({ context }: { context: string }) {
   const [state, setState] = useState<'idle' | 'sending' | 'error' | 'load-error'>('idle');
   const [seen, setSeen] = useState(readSeen);
   const [big, setBig] = useState(readBig);
+  const toggleBig = () => {
+    const next = !big;
+    setBig(next);
+    try { localStorage.setItem(BIG_KEY, next ? '1' : '0'); } catch { /* size just resets */ }
+  };
+  const [cachedPin, setCachedPin] = useState<Pin | null>(readPin);
+  const [noteHidden, setNoteHidden] = useState(() => readFlag(NOTE_HIDDEN_KEY));
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
@@ -60,6 +83,7 @@ export function AskKaro({ context }: { context: string }) {
       const body = await res.json();
       const list: Msg[] = (body.messages || []).slice().reverse();
       setMsgs(list);
+      publishThread(list);
       setState(s => (s === 'load-error' ? 'idle' : s));
     } catch {
       setState(s => (s === 'sending' ? s : 'load-error'));
@@ -74,7 +98,27 @@ export function AskKaro({ context }: { context: string }) {
     return () => clearInterval(id);
   }, [open, load]);
 
+  useEffect(() => {
+    const onRefresh = () => { load(); };
+    window.addEventListener(REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(REFRESH_EVENT, onRefresh);
+  }, [load]);
+
   const lastKaro = msgs.filter(m => m.sender === PEER).reduce((a, m) => Math.max(a, m.id), 0);
+
+  const loadedPin = msgs.filter(m => m.sender === PEER && PIN_RE.test(m.message))
+    .reduce<Pin | null>((a, m) => (!a || m.id > a.id ? { id: m.id, text: m.message.replace(PIN_RE, '').trim() } : a), null);
+  useEffect(() => {
+    if (loadedPin && (!cachedPin || loadedPin.id > cachedPin.id)) {
+      setCachedPin(loadedPin);
+      writePin(loadedPin);
+      setNoteHidden(false); // a new pin shows itself
+      writeFlag(NOTE_HIDDEN_KEY, false);
+    }
+  }, [loadedPin?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pin = loadedPin && (!cachedPin || loadedPin.id >= cachedPin.id) ? loadedPin : cachedPin;
+  const hasNote = !!pin && pin.text.length > 0;
+  const toggleNote = (hidden: boolean) => { setNoteHidden(hidden); writeFlag(NOTE_HIDDEN_KEY, hidden); };
   const unread = !open && lastKaro > seen;
 
   useEffect(() => {
@@ -83,12 +127,6 @@ export function AskKaro({ context }: { context: string }) {
     endRef.current?.scrollIntoView({ block: 'end' });
     fetch(`/api/dm/gorn/${PEER}/read`, { method: 'PATCH' }).catch(() => { /* badge only */ });
   }, [open, lastKaro, seen, msgs.length]);
-
-  const toggleBig = () => {
-    const next = !big;
-    setBig(next);
-    try { localStorage.setItem(BIG_KEY, next ? '1' : '0'); } catch { /* size just resets */ }
-  };
 
   const send = async () => {
     const body = text.trim();
@@ -117,11 +155,26 @@ export function AskKaro({ context }: { context: string }) {
         </button>
       )}
       {open && (
-        <aside className={big ? `${styles.askPanel} ${styles.askBig}` : styles.askPanel} aria-label="Ask Karo">
+        <div className={big ? `${styles.askDock} ${styles.askDockBig}` : styles.askDock}>
+        {hasNote && !noteHidden && (
+          <aside className={styles.askNote} aria-label="Pinned note from Karo">
+            <div className={styles.askHead}>
+              <b>📌 Note</b>
+              <button className={styles.linkBtn} onClick={() => toggleNote(true)}>Hide</button>
+            </div>
+            <div className={`${styles.askNoteBody} ${styles.askText}`}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{chatBreaks(pin!.text)}</ReactMarkdown>
+            </div>
+          </aside>
+        )}
+        <aside className={styles.askPanel} aria-label="Ask Karo">
           <div className={styles.askHead}>
             <b>Ask Karo</b>
             <span className={styles.row}>
-              <button className={styles.linkBtn} onClick={toggleBig}>{big ? 'Shrink' : 'Expand'}</button>
+              {hasNote && noteHidden && (
+                <button className={styles.linkBtn} onClick={() => toggleNote(false)}>📌 Show note</button>
+              )}
+              <button className={styles.linkBtn} aria-pressed={big} onClick={toggleBig}>{big ? 'Shrink' : 'Expand'}</button>
               <button className={styles.linkBtn} onClick={() => setOpen(false)}>Close</button>
             </span>
           </div>
@@ -132,12 +185,26 @@ export function AskKaro({ context }: { context: string }) {
             )}
             {msgs.map(m => {
               const mine = m.sender !== PEER;
+              if (!mine && PIN_RE.test(m.message)) {
+                return <span key={m.id} className={styles.askPinLine}>📌 Karo updated the note · {time(m.created_at)}</span>;
+              }
               const ctx = mine ? CTX_RE.exec(m.message) : null;
-              const bodyText = ctx ? m.message.slice(ctx[0].length) : m.message;
+              let bodyText = ctx ? m.message.slice(ctx[0].length) : m.message;
+              let label = ctx ? ctx[1] : null;
+              const tag = mine ? LAB_TAG_RE.exec(bodyText) : null;
+              if (tag) { bodyText = bodyText.slice(tag[0].length); label = `${label ?? 'Lab'} · answer`; }
+              const verdict = mine ? null : VERDICT_RE.exec(m.message);
+              if (verdict) { bodyText = m.message.slice(verdict[0].length); label = verdict[2] === 'pass' ? 'Lab check · ✅ pass' : 'Lab check · ❌ fix'; }
+              const dtag = mine && !tag ? DRILL_TAG_RE.exec(bodyText) : null;
+              if (dtag) { bodyText = bodyText.slice(dtag[0].length); label = `${label ?? 'Drill'} · answer`; }
+              const dverdict = mine || verdict ? null : DRILL_VERDICT_RE.exec(m.message);
+              if (dverdict) { bodyText = m.message.slice(dverdict[0].length); label = dverdict[2] === 'pass' ? 'Drill grade · ✅ pass' : 'Drill grade · ❌ fix'; }
               return (
                 <div key={m.id} className={mine ? `${styles.askMsg} ${styles.askMine}` : styles.askMsg}>
-                  {ctx && <span className={styles.askCtx}>{ctx[1]}</span>}
-                  <div className={styles.askText}><Bolded text={bodyText} /></div>
+                  {label && <span className={styles.askCtx}>{label}</span>}
+                  <div className={styles.askText}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{chatBreaks(bodyText)}</ReactMarkdown>
+                  </div>
                   <span className={styles.askTime}>{mine ? 'You' : 'Karo'} · {time(m.created_at)}</span>
                 </div>
               );
@@ -161,6 +228,7 @@ export function AskKaro({ context }: { context: string }) {
             </div>
           </div>
         </aside>
+        </div>
       )}
     </>
   );

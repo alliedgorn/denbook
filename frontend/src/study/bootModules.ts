@@ -110,6 +110,22 @@ export const BOOT_MODULES: BootModule[] = [
         ],
         say: 'Most AI engineering is compensating for weaknesses that follow from how models work: grounding for frozen or private knowledge, tools for exactness, validation for structure, guarded tools for actions, and evals for truth.',
       },
+      {
+        t: 'How a model gets trained',
+        b: [
+          { p: [{ b: 'The puzzle. ' }, 'Ask a good model to reverse a random string and it may spell the letters out one by one, flip them, and join them back up. Nobody wrote that trick into it. So where do behaviours like that come from? Three training stages, no maths needed.'] },
+          { ul: [
+            [{ b: '1. Pretraining.' }, ' The model reads a huge pile of text and learns to predict the next token, gets corrected, and repeats that billions of times. The result is a base model. It knows a lot, but it does not follow anything: ask it a question and it may just continue with more questions, because that is what text on the internet often does.'],
+            [{ b: '2. Instruction tuning.' }, ' Now it trains on example conversations written in the chat template: a system prompt, a user message, and a good answer. This is where it learns to play the assistant and to treat the system slot as instructions (the "Anatomy of a chat call" lesson).'],
+            [{ b: '3. Preference training.' }, ' The model writes two answers, a human or a judge model picks the better one, and the model is nudged toward the winner. This is where tone, polish and refusals come from. You will see it called RLHF (reinforcement learning from human feedback). Anthropic\'s version uses a written set of principles, a "constitution".'],
+          ] },
+          { p: [{ b: 'Reinforcement learning, the core idea. ' }, 'Nobody shows the model the right steps. It tries something, a reward says good or bad, and whatever earned the reward becomes more likely next time. It is like learning to ride a bike: nobody tells you the angle to lean, you just learn from not falling. Newer "thinking" models get a lot of this on tasks with checkable answers, such as maths, code and puzzles. Attempts that reach the right answer are rewarded, so step-by-step habits like the spell-it-out trick grow on their own.'] },
+          { p: [{ b: 'The catch: reward hacking. ' }, 'The model learns to please the reward, not to be right. If raters prefer confident, agreeable answers, it learns to sound confident and to agree with you (flattery, or sycophancy). If a coding model is rewarded only when tests pass, it can learn to make the tests pass without fixing the code. You get exactly what you measure, and that is why the evals module exists.'] },
+          { tip: [{ b: 'Try it. ' }, 'On Hugging Face, find a model family like Qwen and look for the "Base" and "Instruct" versions side by side. Base is stage 1 only; Instruct has had stages 2 and 3.'] },
+          { p: [{ b: 'Check yourself. ' }, '(1) A base model is asked "What is the capital of France?" Why might it answer with more quiz questions instead of "Paris"? (2) Your support bot agrees with angry customers even when they are wrong. Which training stage most likely taught that, and why? (3) A team rewards its coding model only when the tests pass. What could go wrong?'] },
+        ],
+        say: 'Pretraining gives a model knowledge by predicting text, instruction tuning teaches it the assistant role, and preference or reinforcement learning shapes behaviour by rewarding results. The model learns whatever the reward measures, so reward hacking such as flattery or gaming tests is the risk, and evals are the defence.',
+      },
     ],
     labs: [
       {
@@ -127,6 +143,17 @@ export const BOOT_MODULES: BootModule[] = [
           { tip: ['Type it, don\'t paste it. Today the point is your hands on the keyboard.'] },
         ],
         done: 'python hello.py "what is a token?" prints an answer and three numbers, and it is committed to git.',
+        tools: [
+          { name: 'ollama.chat()', use: 'sends messages to the model and waits for the whole reply.', code: 'import ollama\n\nresp = ollama.chat(\n    model="qwen3.5:9b",\n    messages=[{"role": "user", "content": "hi"}],\n)\nprint(resp["message"]["content"])' },
+          { name: 'the numbers on the reply', use: 'the response carries counts and why it stopped.', code: 'resp["prompt_eval_count"]   # tokens in\nresp["eval_count"]          # tokens out\nresp["done_reason"]         # "stop", "length", ...' },
+          { name: 'sys.argv', use: 'the words typed after the script name, as a list of strings.', code: 'import sys\nprint(sys.argv)      # python hello.py "hi there" -> [\'hello.py\', \'hi there\']' },
+          { name: 'help()', use: 'prints any function\'s parameters without leaving Python.', code: 'help(ollama.chat)' },
+        ],
+        docs: [
+          { label: 'ollama-python README: every function with an example', url: 'https://github.com/ollama/ollama-python' },
+          { label: 'Ollama chat API: every field in the request and the response', url: 'https://docs.ollama.com/api/chat' },
+          { label: 'Python sys.argv', url: 'https://docs.python.org/3/library/sys.html' },
+        ],
       },
       {
         t: 'A chat that remembers (because you make it)',
@@ -142,6 +169,15 @@ export const BOOT_MODULES: BootModule[] = [
           ] },
         ],
         done: 'The second version remembers your name, the first does not, and you can explain why in one sentence.',
+        tools: [
+          { name: 'input() and a loop', use: 'read a line from the keyboard, forever, until the user quits.', code: 'while True:\n    text = input("you: ")\n    if text == "quit":\n        break' },
+          { name: 'the messages list', use: 'a list of dicts, oldest first. Each turn is one user dict plus one assistant dict.', code: 'messages = [{"role": "system", "content": "You are terse."}]\nmessages.append({"role": "user", "content": text})' },
+          { name: 'list tools', use: 'for the limit: how long it is, and removing by position.', code: 'len(messages)       # how many items\nmessages.pop(1)     # remove the item at index 1 (index 0 is the first)\nmessages[-4:]       # the last 4 items, as a new list' },
+        ],
+        docs: [
+          { label: 'Python tutorial: lists and their methods', url: 'https://docs.python.org/3/tutorial/datastructures.html' },
+          { label: 'Ollama chat API: every field in the request and the response', url: 'https://docs.ollama.com/api/chat' },
+        ],
       },
       {
         t: 'Temperature experiment',
@@ -156,6 +192,16 @@ export const BOOT_MODULES: BootModule[] = [
           ] },
         ],
         done: 'README.md has your results table and your own conclusion, in your own words.',
+        tools: [
+          { name: 'options={"temperature": ...}', use: 'sampling settings go in options, not as their own argument.', code: 'ollama.chat(model=..., messages=..., options={"temperature": 0})' },
+          { name: 'range() and nested loops', use: 'run the same thing N times, for each setting.', code: 'for temp in [0, 1.2]:\n    for i in range(5):     # i = 0..4\n        ...' },
+          { name: 'writing to a file', use: '"w" starts fresh, "a" adds to the end. with closes the file for you.', code: 'with open("output.txt", "a") as f:\n    print(f"--- temp {temp} run {i} ---", file=f)\n    print(answer, file=f)' },
+          { name: 'set()', use: 'drops duplicates, so len(set(...)) is the number of distinct answers. Exact match only.', code: 'len(set(["a", "b", "a"]))    # 2' },
+        ],
+        docs: [
+          { label: 'Ollama model options (temperature, top_p, num_ctx...)', url: 'https://docs.ollama.com/modelfile' },
+          { label: 'Python tutorial: reading and writing files', url: 'https://docs.python.org/3/tutorial/inputoutput.html' },
+        ],
       },
       {
         t: 'Streaming and failure handling',
@@ -170,6 +216,17 @@ export const BOOT_MODULES: BootModule[] = [
           { tip: ['Production AI code is mostly this part. Interviewers love it when you mention it unprompted.'] },
         ],
         done: 'Killing Ollama mid-answer gives a clean message instead of a crash, and the chat recovers when it comes back.',
+        tools: [
+          { name: 'stream=True', use: 'chat() returns chunks as they are made instead of one reply. The last chunk has done=True and the token counts.', code: 'for chunk in ollama.chat(model=..., messages=..., stream=True):\n    print(chunk["message"]["content"], end="", flush=True)' },
+          { name: 'ollama.Client(timeout=...)', use: 'the timeout goes on the client, not on chat(). Default is no timeout at all.', code: 'client = ollama.Client(host="http://localhost:11434", timeout=10)\nclient.chat(...)' },
+          { name: 'try / except', use: 'catch the errors you expect, by name. Can\'t connect: ConnectionError. Timeouts and dropped streams: httpx.TransportError.', code: 'import httpx\n\ntry:\n    ...\nexcept (ConnectionError, httpx.TransportError) as e:\n    print(type(e).__name__)' },
+          { name: 'time.sleep() and for ... else', use: 'wait between retries. The else runs only if the loop never hit break.', code: 'import time\n\nfor attempt in range(3):\n    ...          # break when it works\n    time.sleep(2 ** attempt)\nelse:\n    print("gave up")' },
+        ],
+        docs: [
+          { label: 'Ollama: streaming', url: 'https://docs.ollama.com/capabilities/streaming' },
+          { label: 'httpx exceptions: which error means what', url: 'https://www.python-httpx.org/exceptions/' },
+          { label: 'Python tutorial: errors and exceptions', url: 'https://docs.python.org/3/tutorial/errors.html' },
+        ],
       },
       {
         t: 'Structured output + your first portfolio push',
@@ -184,6 +241,17 @@ export const BOOT_MODULES: BootModule[] = [
           ] },
         ],
         done: 'A public repo with 4 working scripts and a README. Send me the link and I will review it like a hiring manager.',
+        tools: [
+          { name: 'format=', use: '"json" asks for any JSON. A JSON schema asks for exactly your fields.', code: 'schema = {\n    "type": "object",\n    "properties": {"company": {"type": "string"}, "salary": {"type": "number"}},\n    "required": ["company", "salary"],\n}\nresp = ollama.chat(model=..., messages=..., format=schema)' },
+          { name: 'json.loads()', use: 'turns the reply text into a dict. Throws json.JSONDecodeError if it is not valid JSON.', code: 'import json\n\ndata = json.loads(resp["message"]["content"])' },
+          { name: 'checking types', use: 'the model can still give you the wrong type. Check before you trust it.', code: 'isinstance(data.get("salary"), (int, float))   # True or False' },
+          { name: 'pushing to GitHub', use: 'make an empty repo on github.com first, then:', code: 'git remote add origin https://github.com/<you>/<repo>.git\ngit push -u origin main' },
+        ],
+        docs: [
+          { label: 'Ollama: structured outputs', url: 'https://docs.ollama.com/capabilities/structured-outputs' },
+          { label: 'Python json module', url: 'https://docs.python.org/3/library/json.html' },
+          { label: 'GitHub: your first repository', url: 'https://docs.github.com/en/get-started/start-your-journey/hello-world' },
+        ],
       },
     ],
     quiz: [
@@ -201,9 +269,9 @@ export const BOOT_MODULES: BootModule[] = [
       },
       {
         q: 'Why do LLMs sometimes state wrong facts very confidently?',
-        o: ['They are trained to lie', 'They predict plausible next tokens, not verified facts', 'The context window is too large', 'Streaming corrupts the answer'],
+        o: ['They decide to deceive the user', 'They predict plausible next tokens, not verified facts', 'The context window is too large', 'Streaming corrupts the answer'],
         a: 1,
-        w: 'Fluency and truth are different things. The model produces what is likely given its training, which is why we ground answers in real sources and evaluate them.',
+        w: 'Fluency and truth are different things. The model produces what is likely given its training, which is why we ground answers in real sources and evaluate them. Two things feed it: false claims in the training text get repeated as smoothly as true ones (to the model, a common myth is just likely text), and post-training rewards a confident answer over "I don\'t know", so guessing pays. Neither is deciding to deceive: there is no step where the model checks the truth and hides it.',
       },
       {
         q: 'A Thai message and an English message have the same number of characters. Which usually uses more tokens?',

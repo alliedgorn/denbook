@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { BOOT_MODULES, BOOT_PLANNED } from './bootModules';
+import { useBootContent } from './bootContent';
 import { AskKaro } from './AskKaro';
+import { LabCheck } from './LabCheck';
+import { LabToolbox } from './LabToolbox';
 import { RichText } from './RichText';
 import { useStudyProgress } from './useStudyProgress';
 import { Drills, Learn, Plates, Quiz, SyncBadge } from './AiTrack';
@@ -26,6 +28,7 @@ function dayKey(d: Date) {
 }
 
 export function BootcampTrack() {
+  const { modules: BOOT_MODULES, planned: BOOT_PLANNED, note } = useBootContent();
   const { state, update, sync, reload } = useStudyProgress<BootProgress>('bootcamp', BOOT_EMPTY);
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -56,6 +59,7 @@ export function BootcampTrack() {
         <div>
           <h1>AI engineer bootcamp</h1>
           <SyncBadge sync={sync} onRetry={reload} />
+          {note && <p className={styles.muted} role="status">{note}</p>}
         </div>
         <div className={styles.total}><Plates pct={total} /><b>{total}%</b></div>
       </div>
@@ -108,6 +112,7 @@ export function BootcampTrack() {
 type Touch = (fn: (s: BootProgress) => void) => void;
 
 function Plan({ state, touch, go }: { state: BootProgress; touch: Touch; go: (id: string | null, t?: Tab) => void }) {
+  const { modules: BOOT_MODULES, planned: BOOT_PLANNED } = useBootContent();
   const today = dayKey(new Date());
   const entry = state.log[today];
   const next = BOOT_MODULES.map(m => ({ m, s: modStats(m, state) })).find(x => x.s.labs < x.m.labs.length);
@@ -237,6 +242,7 @@ interface ModuleViewProps {
 }
 
 function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps) {
+  const { modules: BOOT_MODULES } = useBootContent();
   const idx = BOOT_MODULES.indexOf(m);
   const s = modStats(m, state);
   const counts: Record<Tab, string> = {
@@ -262,7 +268,7 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
         {tab === 'learn' && <Learn m={m} state={state} touch={touch} />}
         {tab === 'lab' && <Labs m={m} state={state} touch={touch} />}
         {tab === 'quiz' && <Quiz m={m} state={state} touch={touch} />}
-        {tab === 'drill' && <Drills m={m} state={state} touch={touch} open={open} setOpen={setOpen} />}
+        {tab === 'drill' && <Drills m={m} state={state} touch={touch} open={open} setOpen={setOpen} where={{ track: 'boot', label: `Bootcamp › ${m.name}` }} />}
       </div>
       <div className={styles.footNav}>
         {ti < TABS.length - 1 && <button className={styles.btn} onClick={() => go(m.id, TABS[ti + 1])}>Next: {TAB_NAME[TABS[ti + 1]]} →</button>}
@@ -284,7 +290,9 @@ function Labs({ m, state, touch }: { m: BootModule; state: BootProgress; touch: 
             <h3>{lab.t}</h3>
             <p className={styles.muted}>{lab.goal}</p>
             <div className={styles.body}><RichText blocks={lab.steps} /></div>
+            <LabToolbox tools={lab.tools} docs={lab.docs} />
             <div className={styles.say}><b>Done when</b>{lab.done}</div>
+            <LabCheck labKey={key} context={`Bootcamp › ${m.name} › Lab › ${lab.t}`} />
             <div className={styles.row}>
               <button
                 className={done ? `${styles.btn} ${styles.ok}` : styles.btn}

@@ -1,4 +1,4 @@
-import { BOOT_MODULES } from './bootModules';
+import { bootContent } from './bootContent';
 import type { AiProgress } from './AiTrack';
 import type { BootModule } from './types';
 
@@ -38,6 +38,6 @@ export function modStats(m: BootModule, s: BootProgress) {
 }
 
 export function bootTrackPct(s: BootProgress) {
-  const all = BOOT_MODULES.map(m => modStats(m, s).pct);
+  const all = bootContent().modules.map(m => modStats(m, s).pct);
   return Math.round(all.reduce((a, b) => a + b, 0) / all.length);
 }

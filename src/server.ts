@@ -89,6 +89,7 @@ import {
 
 import { enqueueNotification } from './notify.ts';
 import { rbacMiddleware, getGuestAllowlist } from './server/rbac.ts';
+import { jsonFailClean } from './server/json-fail-clean.ts';
 import type { Role } from './server/rbac.ts';
 import { registerGovernanceRoutes } from './governance/routes.ts';
 import { registerProwlRoutes } from './prowl/routes.ts';
@@ -708,6 +709,14 @@ app.use('/api/*', async (c, next) => {
     }
   } catch { /* never block requests for logging failures */ }
 });
+
+// ============================================================================
+// Malformed-JSON fail-clean middleware (T#954)
+// A malformed JSON body returns a clean 400, not a bare 500, for the whole class
+// of ~85 `c.req.json()` sites. Central + order-independent (validates via a raw
+// clone that does not consume the handler's stream). See src/server/json-fail-clean.ts.
+// ============================================================================
+app.use('/api/*', jsonFailClean());
 
 // ============================================================================
 // Auth — rate-limit infrastructure (route handlers extracted to src/server/routes.ts, T#781)
@@ -1356,7 +1365,7 @@ registerTeamsRoutes(app, sqlite, { hasSessionAuth });
 // Study area — owner-only learning tracks + progress (T#963)
 // ============================================================================
 try { ensureStudyTables(sqlite); } catch { /* exists */ }
-registerStudyRoutes(app, sqlite, { hasSessionAuth });
+registerStudyRoutes(app, sqlite, { hasSessionAuth, contentDir: path.join(ORACLE_DATA_DIR, 'study') });
 
 
 // Scheduler routes + helpers + auto-trigger daemon — extracted to src/scheduler/routes.ts (T#772)
@@ -1395,7 +1404,7 @@ registerSupersedeRoutes(app);
 // ============================================================================
 
 // Inbox routes (handoff + inbox + learn) extracted to src/inbox/routes.ts (T#805 P3-J)
-registerInboxRoutes(app, sqlite, { isTrustedRequest, wsBroadcast, repoRoot: REPO_ROOT });
+registerInboxRoutes(app, sqlite, { isTrustedRequest, requireBeastIdentity, wsBroadcast, repoRoot: REPO_ROOT });
 
 
 // Specs routes (Spec Review SDD workflow) — extracted to src/specs/routes.ts (T#776)

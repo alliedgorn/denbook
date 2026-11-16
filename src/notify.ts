@@ -59,6 +59,45 @@ function formatUtc7Timestamp(date: Date): string {
 }
 
 /**
+ * T#973 (Bertus F5): the process a pane must be running before we type into it.
+ * A notification is meant for Claude Code's input box. If the Beast's claude
+ * has exited and the pane is back at a bash prompt, bash parses the text and
+ * runs it as uid gorn: $( ), backticks and > all work, and a guest DM preview
+ * reaches it with no # before the body (T#973 comment 3203).
+ */
+export const DELIVERY_PANE_COMMAND = 'claude';
+
+export type PaneDelivery = 'sent' | 'no-session' | 'not-claude';
+
+/**
+ * Type `text` into the Beast's tmux pane and press Enter, but only when that
+ * pane is running claude. Anything else is refused without sending a key, and
+ * the caller re-queues. Fail-closed: if the pane command can't be read, refuse.
+ *
+ * `-t sessionName` resolves to the session's active pane for both
+ * display-message and send-keys, so the check and the send hit the same pane.
+ * There is still a window of milliseconds between check and send in which
+ * claude could exit; this closes the standing hole, not that race.
+ */
+export function deliverToPane(sessionName: string, text: string): PaneDelivery {
+  const hasSession = Bun.spawnSync(['tmux', 'has-session', '-t', sessionName]);
+  if (hasSession.exitCode !== 0) return 'no-session';
+
+  const pane = Bun.spawnSync(['tmux', 'display-message', '-p', '-t', sessionName, '#{pane_current_command}']);
+  if (pane.exitCode !== 0 || pane.stdout.toString().trim() !== DELIVERY_PANE_COMMAND) {
+    return 'not-claude';
+  }
+
+  Bun.spawnSync(['tmux', 'send-keys', '-t', sessionName, '-l', text]);
+  // T#714 (follow-up to T#713 scope-miss): sleep 200ms between text-paste and
+  // Enter to break the race with Claude Code's Ink TUI renderer. Without it,
+  // Enter can land mid-frame and the message sits stuck in the input box.
+  Bun.sleepSync(200);
+  Bun.spawnSync(['tmux', 'send-keys', '-t', sessionName, 'Enter']);
+  return 'sent';
+}
+
+/**
  * Enqueue a notification for a Beast by invoking the target Beast's own notify.sh.
  *
  * Per Spec #54 v4 (Phase 2d): this is a thin adaptor. Target script content
@@ -90,15 +129,17 @@ export function enqueueNotification(beast: string, message: string, opts?: Enque
   }
 
   // Tier 2: direct tmux send-keys with synthesized stamp. Final fallback.
+  // T#973: only into a pane running claude. There is no queue to put the line
+  // back on here, so a refusal is reported as a failed notify.
   try {
     const sessionName = beastLower.charAt(0).toUpperCase() + beastLower.slice(1);
     const stamp = formatUtc7Timestamp(opts?.sentAt ?? new Date());
     const stamped = `${stamp} [from ${sender}] ${message}`;
-    Bun.spawnSync(['tmux', 'send-keys', '-t', sessionName, '-l', stamped]);
-    // T#714 (follow-up to T#713 scope-miss): sleep 200ms between text-paste and
-    // Enter to break the Claude Code Ink-TUI race. Same fix as runDrainCycle.
-    Bun.sleepSync(200);
-    Bun.spawnSync(['tmux', 'send-keys', '-t', sessionName, 'Enter']);
+    const outcome = deliverToPane(sessionName, stamped);
+    if (outcome !== 'sent') {
+      console.error(`[notify] Tier-2 refused for ${beastLower}: ${outcome}`);
+      return false;
+    }
     return true;
   } catch {
     return false;
