@@ -780,9 +780,11 @@ const CHAIN_WALK_LIMIT = 1000;
 // Walks back from the caller's head through next_token_id links, staying on
 // the caller's own rows. The walk ends at a row with no predecessor. That row
 // is a true root when someone else minted it (created_by != beast: an owner or
-// recruiter issue). If the Beast minted it itself, its parent existed and was
-// removed by pruneBeastTokens, so `truncated` is true and the real root is
-// older than anything the table still holds.
+// recruiter issue). If the Beast minted it itself, its parent existed but the
+// walk cannot reach it: either pruneBeastTokens removed it, or the legacy
+// POST /api/auth/tokens/rotate (rotateToken) revoked it and minted the new row
+// with no next_token_id link (Karo, PR 162). Either way `truncated` is true:
+// the real root is older than what the walk can see.
 export function getTokenChain(headId: number, beast: string): {
   beast: string;
   chain: ChainLink[];
