@@ -89,6 +89,16 @@
 /* Learn */
 .cards { display: flex; flex-direction: column; gap: 14px; }
 .card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.cards [id] { scroll-margin-top: 80px; }
+.learnIndex { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 18px; background: var(--bg-card); }
+.learnIndex ol { margin: 6px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 2px; }
+.inLesson { border-left: 3px solid var(--accent); background: var(--bg-elevated); border-radius: 0 8px 8px 0; padding: 8px 14px; }
+.inLesson ul { margin: 4px 0 0; padding-left: 18px; columns: 2 220px; column-gap: 24px; }
+.inLesson li { break-inside: avoid; }
+.linkBtn { background: none; border: 0; padding: 2px 0; margin: 0; color: var(--accent); cursor: pointer; text-align: left; font: inherit; }
+.linkBtn:hover, .linkBtn:focus-visible { text-decoration: underline; }
+.toTop { position: fixed; left: 20px; bottom: 20px; z-index: 40; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary, inherit); border-radius: 999px; padding: 8px 14px; font: inherit; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+.toTop:hover { border-color: var(--accent); }
 .card.done { border-color: var(--success); }
 .card h3 { font-size: 18px; }
 .body { max-width: 68ch; }

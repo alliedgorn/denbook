@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AI_MODULES } from './aiModules';
 import { AskKaro } from './AskKaro';
 import { RichText } from './RichText';
+import { leadIn, sectionId } from './leadIn';
 import { useStudyProgress, type SyncState } from './useStudyProgress';
 import type { StudyModule } from './types';
 import styles from '../pages/Study.module.css';
@@ -255,16 +256,66 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
 
 export type PartProps = { m: StudyModule; state: AiProgress; touch: (fn: (s: AiProgress) => void) => void };
 
+// Smooth-scroll to an element on this page. Buttons, not #hash links, so the
+// router's URL is never touched.
+function jumpTo(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// "↑ Top" corner button, shown once the page has scrolled a fair way.
+function ToTop() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShow(window.scrollY > 600);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  if (!show) return null;
+  return (
+    <button type="button" className={styles.toTop} aria-label="Back to top"
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>↑ Top</button>
+  );
+}
+
 export function Learn({ m, state, touch }: PartProps) {
+  const lessonId = (i: number) => `learn-${m.id}-${i}`;
   return (
     <div className={styles.cards}>
+      {m.concepts.length > 1 && (
+        <nav className={styles.learnIndex} aria-label="Lessons in this module">
+          <b>Lessons</b>
+          <ol>
+            {m.concepts.map((c, i) => (
+              <li key={i}>
+                <button type="button" className={styles.linkBtn} onClick={() => jumpTo(lessonId(i))}>
+                  {state.read[`${m.id}:${i}`] ? '✓ ' : ''}{c.t}
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
       {m.concepts.map((c, i) => {
         const key = `${m.id}:${i}`;
         const done = !!state.read[key];
+        const secs = c.b.flatMap((blk, j) => { const label = leadIn(blk); return label ? [{ j, label }] : []; });
         return (
-          <article key={key} className={done ? `${styles.card} ${styles.done}` : styles.card}>
+          <article key={key} id={lessonId(i)} className={done ? `${styles.card} ${styles.done}` : styles.card}>
             <h3>{c.t}</h3>
-            <div className={styles.body}><RichText blocks={c.b} /></div>
+            {secs.length >= 3 && (
+              <nav className={styles.inLesson} aria-label="In this lesson">
+                <b>In this lesson</b>
+                <ul>
+                  {secs.map(s => (
+                    <li key={s.j}>
+                      <button type="button" className={styles.linkBtn} onClick={() => jumpTo(sectionId(lessonId(i), s.j))}>{s.label}</button>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            )}
+            <div className={styles.body}><RichText blocks={c.b} idPrefix={lessonId(i)} /></div>
             <div className={styles.say}><b>Say it in the interview</b>{c.say}</div>
             <div className={styles.row}>
               <button
@@ -276,6 +327,7 @@ export function Learn({ m, state, touch }: PartProps) {
           </article>
         );
       })}
+      <ToTop />
     </div>
   );
 }
