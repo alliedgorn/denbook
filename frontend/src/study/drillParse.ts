@@ -1,10 +1,10 @@
 // Pure helpers for DrillRounds.tsx (kept out of the component file for React fast refresh).
 import { PEER, type Msg } from './studyPeer';
-import { DRILL_TAG_RE, DRILL_VERDICT_RE } from './labTags';
+import { DRILL_CARRY_RE, DRILL_TAG_RE, DRILL_VERDICT_RE } from './labTags';
 
 const CTX_RE = /^\[Study: [^\]\n]{1,200}\]\n?/;
 
-export interface Entry { id: number; kind: 'answer' | 'grade'; ok?: boolean; text: string; at: string }
+export interface Entry { id: number; kind: 'answer' | 'grade'; ok?: boolean; carried?: boolean; text: string; at: string }
 
 // The entries in this thread that belong to this drill.
 export function drillEntries(msgs: Msg[], key: string): Entry[] {
@@ -13,6 +13,8 @@ export function drillEntries(msgs: Msg[], key: string): Entry[] {
     if (m.sender === PEER) {
       const v = DRILL_VERDICT_RE.exec(m.message);
       if (v && v[1] === key) out.push({ id: m.id, kind: 'grade', ok: v[2] === 'pass', text: m.message.slice(v[0].length).trim(), at: m.created_at });
+      const c = v ? null : DRILL_CARRY_RE.exec(m.message);
+      if (c && c[1] === key) out.push({ id: m.id, kind: 'answer', carried: true, text: m.message.slice(c[0].length).trim(), at: m.created_at });
     } else {
       const ctx = CTX_RE.exec(m.message);
       const body = ctx ? m.message.slice(ctx[0].length) : m.message;

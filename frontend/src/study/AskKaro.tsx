@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import styles from '../pages/Study.module.css';
-import { DRILL_TAG_RE, DRILL_VERDICT_RE, LAB_TAG_RE, VERDICT_RE } from './labTags';
+import { DRILL_CARRY_RE, DRILL_TAG_RE, DRILL_VERDICT_RE, LAB_TAG_RE, VERDICT_RE } from './labTags';
 import { MD_COMPONENTS, REFRESH_EVENT, chatBreaks, publishThread } from './studyChat';
 import { PEER, type Msg } from './studyPeer';
 
@@ -188,6 +188,8 @@ export function AskKaro({ context }: { context: string }) {
               if (dtag) { bodyText = bodyText.slice(dtag[0].length); label = `${label ?? 'Drill'} · answer`; }
               const dverdict = mine || verdict ? null : DRILL_VERDICT_RE.exec(m.message);
               if (dverdict) { bodyText = m.message.slice(dverdict[0].length); label = dverdict[2] === 'pass' ? 'Drill grade · ✅ pass' : 'Drill grade · ❌ fix'; }
+              const dcarry = mine || verdict || dverdict ? null : DRILL_CARRY_RE.exec(m.message);
+              if (dcarry) { bodyText = m.message.slice(dcarry[0].length); label = 'Drill · your answer, carried onto the card'; }
               return (
                 <div key={m.id} className={mine ? `${styles.askMsg} ${styles.askMine}` : styles.askMsg}>
                   {label && <span className={styles.askCtx}>{label}</span>}

@@ -19,3 +19,7 @@ export function fence(text: string): string {
 // Gorn's answer: "[Study: …]\n[Drill <key>]\n<text>". Karo's grade: "[Drill <key> pass|fix]".
 export const DRILL_TAG_RE = /^\[Drill ([a-z0-9-]{1,60}:\d{1,3})\][ \t]*\n?/;
 export const DRILL_VERDICT_RE = /^\[Drill ([a-z0-9-]{1,60}:\d{1,3}) (pass|fix)\][ \t]*\n?/;
+// Gorn 11-16: "put my answers in drill 1". An answer he sent through the plain chat before the box
+// existed, carried onto the card by Karo: "[Drill <key> carry]\n<his text, quoted>". Only Karo can
+// carry (Karo can't send as Gorn), and the card marks it as carried.
+export const DRILL_CARRY_RE = /^\[Drill ([a-z0-9-]{1,60}:\d{1,3}) carry\][ \t]*\n?/;

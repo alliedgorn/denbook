@@ -102,3 +102,33 @@ describe('drillKeyFor (Gnarl, PR 150: the two tracks share module ids)', () => {
     }
   });
 });
+
+describe('carried answers (Gorn 11-16: put my earlier answers on drill 1)', () => {
+  const k = 'boot-llm-basics:0';
+  test('Karo can carry an old answer onto the card, and it is marked carried', () => {
+    const msgs = [
+      msg(1, 'karo', `[Drill ${k} carry]\nhis first answer`),
+      msg(2, 'karo', `[Drill ${k} fix]\nmissing sampling`),
+      msg(3, 'karo', `[Drill ${k} carry]\nhis rewrite`),
+      msg(4, 'karo', `[Drill ${k} pass]\nsampling ok`),
+    ];
+    const rounds = toRounds(drillEntries(msgs, k));
+    expect(rounds.map(r => [r.answer.text, r.answer.carried, r.grades.map(g => g.ok)])).toEqual([
+      ['his first answer', true, [false]],
+      ['his rewrite', true, [true]],
+    ]);
+  });
+
+  test('only Karo carries: a carry tag from Gorn is not an answer', () => {
+    expect(drillEntries([msg(1, 'gorn', `[Drill ${k} carry]\nx`)], k)).toEqual([]);
+  });
+
+  test('a normal answer from Gorn is not marked carried', () => {
+    const e = drillEntries([msg(1, 'gorn', `[Drill ${k}]\nlive answer`)], k);
+    expect(e[0].carried).toBeUndefined();
+  });
+
+  test('a carry for another drill does not land', () => {
+    expect(drillEntries([msg(1, 'karo', `[Drill boot-llm-basics:1 carry]\nx`)], k)).toEqual([]);
+  });
+});

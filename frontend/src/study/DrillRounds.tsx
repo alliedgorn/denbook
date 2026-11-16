@@ -90,7 +90,7 @@ export function DrillRounds({ drillKey, context }: { drillKey: string; context: 
       <b className={styles.labCheckHead}>Answer to Karo{rounds.length ? ` · ${rounds.length} round${rounds.length > 1 ? 's' : ''}` : ''}</b>
       {rounds.map((r, i) => (
         <div key={r.answer.id} className={styles.round}>
-          <span className={styles.askCtx}>Round {i + 1} · {when(r.answer.at)}</span>
+          <span className={styles.askCtx}>Round {i + 1} · {r.answer.carried ? 'carried over from chat by Karo' : when(r.answer.at)}</span>
           <div className={styles.askText}>
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{chatBreaks(r.answer.text)}</ReactMarkdown>
           </div>
