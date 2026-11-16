@@ -4,7 +4,7 @@ import styles from '../pages/Study.module.css';
 
 // Chat images are squeezed to the bubble width, so a diagram is unreadable there.
 // Tap one to open it full screen; tap anywhere or press Escape to close. The
-// overlay is portalled to <body> so it sits above the expanded panel (z 150).
+// overlay is portalled to <body> so it sits above the expanded panel (150) and the DM chat overlay (9000).
 export function ChatImage({ src, alt }: { src?: string; alt: string }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
