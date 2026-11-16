@@ -5,6 +5,7 @@ import { getCookie } from 'hono/cookie';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
+import { processImageForStorage, ImageProcessingError } from '../server/image-processing.ts';
 
 const MAX_IMAGE_SIZE = 30 * 1024 * 1024; // 30MB for images
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB for other files
@@ -111,32 +112,17 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       let finalExt = isImage ? (imageType!.ext) : ext;
       let finalMime = isImage ? (imageType!.mime) : (allowed?.mime || 'application/octet-stream');
 
-      // Image processing: resize, EXIF strip (existing behavior)
+      // Image processing: resize + EXIF strip, fail CLOSED (T#937, T#881).
+      // A failure refuses the upload; the original is never stored.
       if (isImage) {
         try {
-          const sharp = require('sharp');
-          const metadata = await sharp(buffer).metadata();
-          if (metadata.width && metadata.width > 1920) {
-            processedBuffer = await sharp(buffer)
-              .rotate()
-              .resize(1920, null, { withoutEnlargement: true })
-              .jpeg({ quality: 95 })
-              .toBuffer();
-            finalExt = '.jpg';
-            finalMime = 'image/jpeg';
-          } else if (buffer.length > 2 * 1024 * 1024) {
-            processedBuffer = await sharp(buffer)
-              .rotate()
-              .jpeg({ quality: 95 })
-              .toBuffer();
-            finalExt = '.jpg';
-            finalMime = 'image/jpeg';
-          } else {
-            processedBuffer = await sharp(buffer)
-              .rotate()
-              .toBuffer();
-          }
-        } catch { /* sharp not available — save original */ }
+          const out = await processImageForStorage(buffer, { ext: finalExt, mime: finalMime, jpegAboveBytes: 2 * 1024 * 1024 });
+          processedBuffer = out.buffer; finalExt = out.ext; finalMime = out.mime;
+        } catch (e) {
+          const unavailable = e instanceof ImageProcessingError && e.sharpUnavailable;
+          console.error(`[Upload] image refused (T#937): ${(e as Error).message}`);
+          return c.json({ error: unavailable ? 'Image processing unavailable. Try again later.' : 'Could not process image.' }, unavailable ? 503 : 400);
+        }
       }
 
       const filename = `${crypto.randomUUID()}${finalExt}`;

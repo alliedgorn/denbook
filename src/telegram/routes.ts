@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { enqueueNotification } from '../notify.ts';
+import { processImageForStorage } from '../server/image-processing.ts';
 
 const TG_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const TG_POLL_INTERVAL = 3000; // ms
@@ -132,18 +133,13 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
           if (imageRes.ok) {
             const buffer = Buffer.from(await imageRes.arrayBuffer());
             if (buffer.length <= 20 * 1024 * 1024) {
-              let processedBuffer = buffer;
-              let ext = '.' + (filePath.split('.').pop() || 'jpg');
-              try {
-                const sharp = require('sharp');
-                const metadata = await sharp(buffer).metadata();
-                if (metadata.width && metadata.width > 1920) {
-                  processedBuffer = await sharp(buffer).rotate().resize(1920, null, { withoutEnlargement: true }).jpeg({ quality: 95 }).toBuffer();
-                  ext = '.jpg';
-                } else {
-                  processedBuffer = await sharp(buffer).rotate().toBuffer();
-                }
-              } catch { /* sharp not available */ }
+              // Resize + EXIF strip, fail CLOSED (T#937, T#881). On failure the
+              // photo is DROPPED and the message is still delivered: losing a chat
+              // message is worse than losing its attachment.
+              const inExt = '.' + (filePath.split('.').pop() || 'jpg');
+              const out = await processImageForStorage(buffer, { ext: inExt, mime: inExt === '.png' ? 'image/png' : 'image/jpeg' });
+              const processedBuffer = out.buffer;
+              const ext = out.ext;
 
               if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
               const filename = `telegram_${crypto.randomUUID()}${ext}`;
