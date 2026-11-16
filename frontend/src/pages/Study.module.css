@@ -224,6 +224,9 @@ td .linkBtn { margin-left: 0; }
 .askText pre { margin: 0 0 6px; padding: 8px 10px; background: var(--bg-card); border-radius: 8px; overflow-x: auto; }
 .askText pre code { padding: 0; background: none; font-size: 12px; }
 .askText img { max-width: 100%; border-radius: 8px; }
+.figure { margin: 12px 0; }
+.figure img { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+.figure figcaption { font-size: 13px; color: var(--text-secondary, var(--text-muted)); margin-top: 6px; }
 .chatImgBtn { display: block; padding: 0; margin: 4px 0; border: 0; background: none; cursor: zoom-in; max-width: 100%; }
 .chatImgBtn img { display: block; }
 /* z-index 10000: above the global DM chat overlay (9000), the expanded Ask Karo panel (150)

@@ -6,6 +6,10 @@ import type { Block, BootModule, Inline, PlannedModule } from './types';
 // by RichText, so this guards against a broken page, not against HTML injection.
 
 const isStr = (x: unknown): x is string => typeof x === 'string';
+// Images in study content come only from our own uploads (Gorn 11-16). No external
+// URL, no protocol-relative "//host", no "..": a lesson must never make the page fetch
+// from somewhere else (tracking, IP leak) or reach another route.
+const IMG_SRC = /^\/api\/f\/[A-Za-z0-9-]+\.(png|jpe?g|webp|gif)$/;
 const isArr = Array.isArray;
 const obj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !isArr(x);
 
@@ -21,6 +25,8 @@ function block(x: unknown): x is Block {
   if ('tip' in x) return inlines(x.tip);
   if ('ul' in x) return isArr(x.ul) && x.ul.every(inlines);
   if ('code' in x) return isStr(x.code);
+  if ('img' in x) return isStr(x.img) && IMG_SRC.test(x.img) && isStr(x.alt) && x.alt.length > 0
+    && (x.caption === undefined || isStr(x.caption));
   return false;
 }
 const blocks = (x: unknown) => isArr(x) && x.every(block);
