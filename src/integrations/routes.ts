@@ -5,6 +5,7 @@ import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { Database } from 'bun:sqlite';
 import { logSecurityEvent } from '../server/security-logger.ts';
+import { clientIp } from '../server/client-ip.ts';
 
 // ============================================================================
 // Module-level state for Withings auto-sync daemon
@@ -296,7 +297,7 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
       }
     } catch { /* best effort */ }
     sqlite.prepare("DELETE FROM oauth_tokens WHERE provider = 'withings'").run();
-    const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+    const ip = clientIp(c, 'local');
     logSecurityEvent({
       eventType: 'token_revoked',
       severity: 'info',
@@ -727,7 +728,7 @@ export function registerIntegrationsRoutes(app: OpenAPIHono, sqliteDb: Database,
       }
     } catch { /* best effort */ }
     sqlite.prepare("DELETE FROM oauth_tokens WHERE provider = 'google'").run();
-    const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+    const ip = clientIp(c, 'local');
     logSecurityEvent({
       eventType: 'token_revoked',
       severity: 'info',

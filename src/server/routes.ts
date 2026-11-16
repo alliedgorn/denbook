@@ -21,6 +21,7 @@ import {
 } from './beast-tokens.ts';
 import { getSetting } from '../db/index.ts';
 import { authStatusRoute, authLoginRoute, authLogoutRoute } from './openapi.ts';
+import { clientIp } from './client-ip.ts';
 
 // ============================================================================
 // Server routes — Phase 2.3 of Library #102 (T#781)
@@ -103,7 +104,7 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
 
   // Cast: see authStatusRoute note above re multi-branch response-shape narrowing.
   app.openapi(authLoginRoute, (async (c: Context) => {
-    const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
+    const ip = clientIp(c, '127.0.0.1');
     const now = Date.now();
     const attempts = getRateLimit(ip);
     if (attempts) {
@@ -243,7 +244,7 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
 
   // Logout
   app.openapi(authLogoutRoute, (c) => {
-    const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+    const ip = clientIp(c, 'local');
     logSecurityEvent({
       eventType: 'session_destroyed',
       severity: 'info',

@@ -8,6 +8,7 @@ import { getBeastProfile } from '../db/index.ts';
 import { getGuestByUsername, changeGuestPassword, updateGuestProfile } from '../server/guest-accounts.ts';
 import { checkGuestPostRate, checkGuestDmRate, checkGuestContentLength, scanForInjection } from '../server/guest-safety.ts';
 import { logSecurityEvent } from '../server/security-logger.ts';
+import { clientIp } from '../server/client-ip.ts';
 
 interface GuestHelpers {
   wsBroadcast: (event: string, data: any) => void;
@@ -189,7 +190,7 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         actorType: 'guest',
         target: `/api/guest/thread/${threadId}/message`,
         details: { patterns: scan.patterns, content_preview: data.message.slice(0, 200) },
-        ipSource: c.req.header('x-real-ip') || 'local',
+        ipSource: clientIp(c, 'local'),
         requestId: (c.get as any)('requestId'),
       });
     }
@@ -236,7 +237,7 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         actorType: 'guest',
         target: '/api/guest/thread',
         details: { patterns: scan.patterns, content_preview: (data.title + ': ' + data.message).slice(0, 200) },
-        ipSource: c.req.header('x-real-ip') || 'local',
+        ipSource: clientIp(c, 'local'),
         requestId: (c.get as any)('requestId'),
       });
     }
@@ -368,7 +369,7 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         actorType: 'guest',
         target: `/api/guest/dm/${data.to}`,
         details: { patterns: scan.patterns, content_preview: data.message.slice(0, 200) },
-        ipSource: c.req.header('x-real-ip') || 'local',
+        ipSource: clientIp(c, 'local'),
         requestId: (c.get as any)('requestId'),
       });
     }
@@ -409,7 +410,7 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
           actorType: 'guest',
           target: '/api/guest/change-password',
           details: { attempts: attempts.count, window_ms: PASSWORD_CHANGE_RATE_WINDOW_MS },
-          ipSource: c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
+          ipSource: clientIp(c, '127.0.0.1'),
           requestId: (c.get as any)('requestId'),
         });
         return c.json({ error: `Too many password change attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes.` }, 429);
@@ -458,7 +459,7 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
           actorType: 'guest',
           target: '/api/guest/reset-password',
           details: { attempts: attempts.count, window_ms: PASSWORD_CHANGE_RATE_WINDOW_MS },
-          ipSource: c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
+          ipSource: clientIp(c, '127.0.0.1'),
           requestId: (c.get as any)('requestId'),
         });
         return c.json({ error: `Too many password change attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes.` }, 429);
