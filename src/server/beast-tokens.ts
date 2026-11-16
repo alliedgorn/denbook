@@ -158,6 +158,12 @@ const getNextInChainStmt = sqlite.prepare(
   `SELECT id, next_token_id, revoked_at FROM beast_tokens WHERE id = ?`
 );
 
+// T#935 — chain-walk backward: the row whose successor is this id, same beast only.
+const getPrevInChainStmt = sqlite.prepare(
+  `SELECT id, created_at, expires_at, rotated_at, revoked_at, next_token_id, created_by
+   FROM beast_tokens WHERE next_token_id = ? AND beast = ?`
+);
+
 // Spec #52 — find all non-revoked tokens for a beast (for chain-compromise sweep).
 const findActiveAndRotatedByBeastStmt = sqlite.prepare(
   `SELECT id FROM beast_tokens WHERE beast = ? AND revoked_at IS NULL`
@@ -753,4 +759,54 @@ export function pruneBeastTokens(): number {
     console.error(`[BeastTokens] Prune failed: ${err}`);
     return 0;
   }
+}
+
+// ============================================================================
+// T#935 — a Beast reads its own token chain, root -> head. No hashes, no values.
+// ============================================================================
+
+export type ChainLink = {
+  id: number;
+  created_at: string;
+  expires_at: string;
+  rotated_at: string | null;
+  revoked_at: string | null;
+  next_token_id: number | null;
+  created_by: string;
+};
+
+const CHAIN_WALK_LIMIT = 1000;
+
+// Walks back from the caller's head through next_token_id links, staying on
+// the caller's own rows. The walk ends at a row with no predecessor. That row
+// is a true root when someone else minted it (created_by != beast: an owner or
+// recruiter issue). If the Beast minted it itself, its parent existed and was
+// removed by pruneBeastTokens, so `truncated` is true and the real root is
+// older than anything the table still holds.
+export function getTokenChain(headId: number, beast: string): {
+  beast: string;
+  chain: ChainLink[];
+  root_issued_by: string | null;
+  truncated: boolean;
+} | null {
+  const head = getTokenByIdStmt.get(headId) as (ChainLink & { beast: string }) | undefined;
+  if (!head || head.beast !== beast) return null;
+  const link = (r: any): ChainLink => ({
+    id: r.id, created_at: r.created_at, expires_at: r.expires_at, rotated_at: r.rotated_at,
+    revoked_at: r.revoked_at, next_token_id: r.next_token_id, created_by: r.created_by,
+  });
+  const chain: ChainLink[] = [link(head)];
+  const seen = new Set<number>([head.id]);
+  let cur = head.id;
+  while (chain.length < CHAIN_WALK_LIMIT) {
+    const prev = getPrevInChainStmt.get(cur, beast) as ChainLink | undefined;
+    if (!prev || seen.has(prev.id)) break;
+    chain.push(link(prev));
+    seen.add(prev.id);
+    cur = prev.id;
+  }
+  chain.reverse();
+  const root = chain[0];
+  const selfMinted = root.created_by.toLowerCase() === beast.toLowerCase();
+  return { beast, chain, root_issued_by: selfMinted ? null : root.created_by, truncated: selfMinted };
 }

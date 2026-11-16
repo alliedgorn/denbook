@@ -17,7 +17,7 @@ import {
 import { logSecurityEvent } from './security-logger.ts';
 import {
   createToken, listTokens, revokeToken, rotateToken,
-  selfRotateToken, getTokenInfo,
+  selfRotateToken, getTokenInfo, getTokenChain,
 } from './beast-tokens.ts';
 import { getSetting } from '../db/index.ts';
 import { authStatusRoute, authLoginRoute, authLogoutRoute } from './openapi.ts';
@@ -578,6 +578,23 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
     return c.json(info);
   });
   
+  // T#935 — GET /api/auth/chain: the caller's own token chain, root -> head.
+  // Bearer only, scoped to the bearer's beast, read-only. Never returns a hash
+  // or a token value, and accepts none: presenting an ancestor is the replay
+  // trigger that revokes the live family, so this endpoint exists so nobody
+  // has to.
+  app.get('/api/auth/chain', (c) => {
+    const authMethod = (c.get as any)('authMethod');
+    const beast = (c.get as any)('actor') as string;
+    const tokenId = (c.get as any)('tokenId') as number;
+    if (authMethod !== 'token' || !beast || !tokenId) {
+      return c.json({ error: 'Bearer-token Beast identity required' }, 403);
+    }
+    const result = getTokenChain(tokenId, beast);
+    if (!result) return c.json({ error: 'Token not found' }, 404);
+    return c.json(result);
+  });
+
   // Spec #52 — Beast-self chain-aware rotation.
   // Beast presents CURRENT VALID token via Bearer auth; server issues fresh token,
   // chain-links old → new (rotated_at + next_token_id). Replay on the old token
