@@ -30,6 +30,13 @@
   display: none;
 }
 
+/* T#987: with several composers on a page, the one under the pointer is outlined
+   (FileUpload sets data-file-drop on its form) instead of a full-screen drop zone. */
+:global([data-file-drop="over"]) {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+
 /* Drag-over overlay */
 .dropOverlay {
   position: fixed;
