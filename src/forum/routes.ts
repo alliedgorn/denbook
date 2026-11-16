@@ -37,6 +37,34 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   const sqlite: Database = sqliteDb;
   let SUPPORTED_EMOJI: Set<string> = getSupportedEmoji();
 
+  // Thread-admin gate (T#719 thread-admin section, T#978). One helper for all 8
+  // thread-admin handlers (7 PATCH + DELETE) so they cannot drift apart (Bertus).
+  // - Guests: 403, whatever RBAC does upstream (defence in depth).
+  // - Caller = the bearer actor (set only by the token middleware), else 'gorn'
+  //   for an OWNER session (verified cookie AND role owner). Not
+  //   requireBeastIdentity: it returns 'gorn' for ANY session, guests included
+  //   (T#887). ?as= and body fields are never consulted.
+  // - No caller: 401, checked before the lookup so an anonymous caller learns
+  //   nothing about which threads exist.
+  // - ownerOnly (visibility): Gorn only. Otherwise the creator or Gorn.
+  function threadAdminGate(c: Context, threadId: number, ownerOnly = false):
+    { caller: string; thread: any } | { error: Response } {
+    const role = (c.get as any)('role') as Role | undefined;
+    if (role === 'guest') return { error: c.json({ error: 'Forbidden' }, 403) };
+    const bearer = ((c.get as any)('actor') as string | undefined)?.toLowerCase() || '';
+    const isOwnerSession = hasSessionAuth(c) && role === 'owner';
+    const caller = bearer || (isOwnerSession ? 'gorn' : '');
+    if (!caller) return { error: c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401) };
+    if (isNaN(threadId)) return { error: c.json({ error: 'Invalid ID' }, 400) };
+    const thread = sqlite.prepare('SELECT * FROM forum_threads WHERE id = ?').get(threadId) as any;
+    if (!thread) return { error: c.json({ error: 'Thread not found' }, 404) };
+    if (ownerOnly && caller !== 'gorn') return { error: c.json({ error: 'Only Gorn can change thread visibility' }, 403) };
+    if (caller !== 'gorn' && caller !== (thread.created_by || '').toLowerCase()) {
+      return { error: c.json({ error: 'Only the thread creator or Gorn can change this thread' }, 403) };
+    }
+    return { caller, thread };
+  }
+
   app.post('/api/forum/read', async (c) => {
     try {
       const body = await c.req.json();
@@ -861,6 +889,8 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.patch('/api/thread/:id/category', async (c) => {
     const threadId = parseInt(c.req.param('id'), 10);
+    const gate = threadAdminGate(c, threadId);
+    if ('error' in gate) return gate.error;
     try {
       const data = await c.req.json();
       const allowed = ['announcement', 'task', 'discussion', 'decision', 'question', 'gorn-queue'];
@@ -876,6 +906,8 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.patch('/api/thread/:id/lock', async (c) => {
     const threadId = parseInt(c.req.param('id'), 10);
+    const gate = threadAdminGate(c, threadId);
+    if ('error' in gate) return gate.error;
     try {
       const data = await c.req.json();
       const locked = data.locked ? 1 : 0;
@@ -893,12 +925,16 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.patch('/api/thread/:id/archive', async (c) => {
     const threadId = parseInt(c.req.param('id'), 10);
+    const gate = threadAdminGate(c, threadId);
+    if ('error' in gate) return gate.error;
     sqlite.prepare('UPDATE forum_threads SET status = ? WHERE id = ?').run('archived', threadId);
     return c.json({ success: true, thread_id: threadId, status: 'archived' });
   });
 
   app.patch('/api/thread/:id/pin', async (c) => {
     const threadId = parseInt(c.req.param('id'), 10);
+    const gate = threadAdminGate(c, threadId);
+    if ('error' in gate) return gate.error;
     try {
       const data = await c.req.json();
       const pinned = data.pinned ? 1 : 0;
@@ -911,6 +947,8 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.patch('/api/thread/:id/title', async (c) => {
     const threadId = parseInt(c.req.param('id'), 10);
+    const gate = threadAdminGate(c, threadId);
+    if ('error' in gate) return gate.error;
     try {
       const data = await c.req.json();
       if (!data.title?.trim()) return c.json({ error: 'title required' }, 400);
@@ -927,10 +965,12 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   });
 
   app.patch('/api/thread/:id/visibility', async (c) => {
-    const role = (c.get as any)('role') as Role | undefined;
-    if (role === 'guest') return c.json({ error: 'Forbidden' }, 403);
-
     const threadId = parseInt(c.req.param('id'), 10);
+    // Gorn only (Bertus, T#719 c3398 reply): the threads we least want public
+    // (#20 security, #578 rules) were created by Beasts, and Beasts are the
+    // seats guest text can reach. Guests are refused inside the gate.
+    const gate = threadAdminGate(c, threadId, true);
+    if ('error' in gate) return gate.error;
     try {
       const data = await c.req.json();
       if (data.visibility !== 'public' && data.visibility !== 'internal') {
@@ -959,6 +999,8 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.patch('/api/thread/:id/status', async (c) => {
     const threadId = parseInt(c.req.param('id'), 10);
+    const gate = threadAdminGate(c, threadId);
+    if ('error' in gate) return gate.error;
     try {
       const data = await c.req.json();
       if (!data.status) {
@@ -974,28 +1016,15 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   app.delete('/api/thread/:id', (c) => {
     const id = parseInt(c.req.param('id'));
     if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
-    // Identity comes from auth, never from ?as= (T#978, #20 31909): a local
-    // request is "authenticated" by the local bypass, so ?as=gorn used to let
-    // any process on the box delete any thread as Gorn.
-    // Owner = a verified session cookie AND the owner role: a guest session also
-    // passes hasSessionAuth (Bertus, #20 31912; T#887). Not requireBeastIdentity:
-    // it returns 'gorn' for ANY verified session, so it would shadow this check
-    // (Bertus, PR 154). The bearer actor is set only by the token middleware.
-    const isOwnerSession = hasSessionAuth(c) && (c.get as any)('role') === 'owner';
-    const bearer = ((c.get as any)('actor') as string | undefined)?.toLowerCase() || '';
-    const as = bearer || (isOwnerSession ? 'gorn' : '');
-    if (!as) return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
-    const existing = sqlite.prepare('SELECT * FROM forum_threads WHERE id = ?').get(id) as any;
-    if (!existing) return c.json({ error: 'Thread not found' }, 404);
-    if (as !== 'gorn' && as !== existing.created_by?.toLowerCase()) {
-      return c.json({ error: 'Only the thread creator or Gorn can delete a thread' }, 403);
-    }
+    // Identity from auth, never ?as= (T#978, #20 31909); shared gate (T#719).
+    const gate = threadAdminGate(c, id);
+    if ('error' in gate) return gate.error;
     // Soft delete — set deleted_at timestamp (Nothing is Deleted)
     sqlite.prepare("UPDATE forum_threads SET deleted_at = datetime('now'), status = 'deleted' WHERE id = ?").run(id);
     // T#978: the thread is soft-deleted, but its posts must leave Den search too.
     const posts = sqlite.prepare('SELECT id FROM forum_messages WHERE thread_id = ?').all(id) as any[];
     for (const p of posts) searchIndexDelete('forum', p.id);
-    return c.json({ deleted: id, title: existing.title, soft: true });
+    return c.json({ deleted: id, title: gate.thread.title, soft: true });
   });
 
 
