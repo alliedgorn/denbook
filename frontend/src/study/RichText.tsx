@@ -1,6 +1,7 @@
 import type { Block, Inline } from './types';
 import styles from '../pages/Study.module.css';
 import { ChatImage } from './ChatImage';
+import { leadIn, sectionId } from './leadIn';
 
 // Renders typed content blocks as React elements. Every string goes through
 // React's text escaping — there is deliberately no HTML path here.
@@ -17,11 +18,14 @@ function Inlines({ parts }: { parts: Inline[] }) {
   );
 }
 
-export function RichText({ blocks }: { blocks: Block[] }) {
+export function RichText({ blocks, idPrefix }: { blocks: Block[]; idPrefix?: string }) {
   return (
     <>
       {blocks.map((blk, i) => {
-        if ('p' in blk) return <p key={i}><Inlines parts={blk.p} /></p>;
+        if ('p' in blk) {
+          const id = idPrefix && leadIn(blk) ? sectionId(idPrefix, i) : undefined;
+          return <p key={i} id={id}><Inlines parts={blk.p} /></p>;
+        }
         if ('ul' in blk) {
           return (
             <ul key={i}>
