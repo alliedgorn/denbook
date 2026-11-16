@@ -9,22 +9,16 @@
 // verified cookie (a guest's too), and requireBeastIdentity returns actor, or
 // 'gorn' for any session. A friendlier mock let a guest test pass vacuously on
 // PR 154 (Bertus).
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { OpenAPIHono } from '@hono/zod-openapi';
-
-// The visibility handler fans out a REAL "New public thread" notification to
-// every seat (notifyMentioned → enqueueNotification → each Beast's notify.sh,
-// then tmux). An in-memory DB does not isolate that. The first version of this
-// test paged the whole pack at 14:31 (#20 31944). Stub the delivery boundary
-// BEFORE the routes load, and record what would have been sent.
-const sent: Array<[string, string]> = [];
-mock.module('../../notify.ts', () => ({
-  enqueueNotification: (beast: string, message: string) => { sent.push([beast, message]); return true; },
-  deliverToPane: () => 'no-session',
-  DELIVERY_PANE_COMMAND: 'claude',
-}));
-const { registerForumRoutes } = await import('../../forum/routes.ts');
+import { registerForumRoutes } from '../../forum/routes.ts';
+// The visibility handler fans out a "New public thread" notification to every
+// seat. Under bun test that lands in notifySink (T#981, preload), never on a
+// real seat. This file used to mock notify.ts itself after it paged the pack
+// at 14:31 on 11-16 (#20 31944).
+import { notifySink } from '../../notify.ts';
+const sent = notifySink;
 
 let db: Database;
 
@@ -125,7 +119,7 @@ describe('T#719 thread-admin gate', () => {
       });
 
       if (h.ownerOnly) {
-        it('refused calls send no notification; a real flip sends them (stubbed)', async () => {
+        it('refused calls send no notification; a real flip sends them (into the T#981 sink)', async () => {
           await call({ kind: 'none' }, h);
           await call({ kind: 'guest' }, h);
           await call({ kind: 'bearer', beast: 'karo' }, h);
@@ -136,7 +130,7 @@ describe('T#719 thread-admin gate', () => {
           // real seat. > 0 also proves the stub is wired: a miss would mean
           // the real path ran.
           expect(sent.length).toBeGreaterThan(0);
-          expect(sent.every(([, msg]) => msg.includes('New public thread'))).toBe(true);
+          expect(sent.every(n => n.text.includes('New public thread'))).toBe(true);
         });
       }
 
