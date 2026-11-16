@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { autolinkIds } from '../utils/autolink';
+import { chatTime, chatTimeFull } from '../utils/chatTime';
 import { FileUpload } from './FileUpload';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { getGuestPack, getGuestDmConversation, sendGuestDm } from '../api/guest';
@@ -57,8 +58,8 @@ const ChatMessage = memo(function ChatMessage({ msg, onImgClick, isSent }: {
           components={mdComponentsStable}
         >{autolinkIds(msg.message)}</ReactMarkdown>
       </div>
-      <span className={styles.msgTime}>
-        {new Date(msg.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+      <span className={styles.msgTime} title={chatTimeFull(msg.created_at)}>
+        {chatTime(msg.created_at)}
         {isSent && (
           <span className={styles.readStatus}>{msg.read_at ? ' \u2713\u2713' : ' \u2713'}</span>
         )}
