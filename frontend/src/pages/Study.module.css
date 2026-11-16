@@ -251,6 +251,7 @@ td .linkBtn { margin-left: 0; }
   padding: 10px 12px; font-family: var(--font-mono); font-size: 13px; background: var(--bg-primary); color: var(--text-primary);
   box-sizing: border-box;
 }
+.round { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px dashed var(--border); }
 .verdict { border-radius: 8px; padding: 10px 14px; font-size: 14px; border: 1px solid var(--border); }
 .verdict > b { display: block; margin-bottom: 2px; }
 .verdictOk { border-color: var(--success); background: var(--st-good-soft); }
