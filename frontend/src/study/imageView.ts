@@ -16,8 +16,9 @@ export function announceImage(alt: string | null) {
 export function openAskKaro() { window.dispatchEvent(new Event(ASK_OPEN_EVENT)); }
 
 // The alt rides inside the "[Study: …]" context header, which CTX_RE caps at 200
-// chars and ends at "]" or a newline, so strip both and keep it short.
+// chars and ends at "]" or a newline, so strip both, plus "[" so no half
+// stamp marker can appear inside the header (Bertus nit), and keep it short.
 export function pictureLabel(alt: string): string {
-  const clean = alt.replace(/[\]\n\r]/g, ' ').replace(/\s+/g, ' ').trim();
+  const clean = alt.replace(/[[\]\n\r]/g, ' ').replace(/\s+/g, ' ').trim();
   return clean.length > 80 ? `${clean.slice(0, 79)}…` : clean;
 }
