@@ -12,11 +12,12 @@ Inventory source: the beat 2199 baseline, 2026-11-16 (`bertus/ψ/memory/oauth-in
 |---|---|---|---|---|
 | Beast token | `beast_tokens`; seat `.env` `BEAST_TOKEN` | **Yes.** Rotation sets `rotated_at`; a late replay returns `chain_compromised` and never authenticates (`beast-tokens.ts` validateToken). | None needed. | Yes, 24h (auto-refresh up to max lifetime). |
 | Server session secret | server env `ORACLE_SESSION_SECRET` | **Yes** for new checks: the server stops accepting cookies signed with the old key. ⚠️ It also keys the beast-token HMAC (`beast-tokens.ts:47`), so rotating it logs out every seat (T#919). | None (self-issued). | No. |
+| Owner session cookie | the browser cookie, and any captured copy (HAR, transcript, screenshot) | **No.** It is stateless: `role:data:expires` signed with the session secret (`server.ts` session helpers), nothing stored server-side. **A password change does not touch it**; logout only drops the browser copy. | None at a provider. The only revoke is rotating `ORACLE_SESSION_SECRET`, which today also logs out every seat (T#919). The HMAC key split is what makes this cheap. | Yes, 7 days after login. (Guest cookies: 4h, and disabled or locked accounts are re-checked per request.) |
 | Token HMAC secret | server env `ORACLE_TOKEN_SECRET` | Yes, but today it is only the fallback; the session secret wins when both are set. | None. | No. |
 | OAuth encryption key | server env `OAUTH_ENCRYPTION_KEY` | **Partly.** New writes use the new key, but the old key still decrypts every `oauth_tokens` row in old DB snapshots (`~/.oracle/backups`, hourly) and archives. | Rotate the **wrapped** credentials too: revoke the Google and Withings refresh tokens at the provider. | No. |
 | Meilisearch master key | server env `MEILI_MASTER_KEY` | **Yes**, once Meili restarts with the new key; derived API keys change with it. Meili binds loopback with no edge route, so an old value is only usable on-box. | None (self-hosted). | No. |
 | Hevy webhook token | server env `HEVY_WEBHOOK_TOKEN` | **Yes** on our side: our endpoint compares against the env value. Hevy must be updated or webhooks stop. | Update the webhook config in Hevy. | No. |
-| Telegram bot token | server env `TELEGRAM_BOTS` (9), `TELEGRAM_BOT_TOKEN`; seat `.env` | **No.** | BotFather: `/revoke` for that bot. One bot per revoke (see the BotFather memory note). | **Never.** |
+| Telegram bot token | server env `TELEGRAM_BOTS` (9), `TELEGRAM_BOT_TOKEN`; seat `.env` | **No.** | BotFather: `/revoke` for that bot. One `/revoke` covers one bot only, so each bot needs its own. | **Never.** |
 | Discord bot token | server env, karo seat `.env` | **No.** | Developer portal → the app → Bot → Reset Token. | Never. |
 | Google OAuth client secret | server env | **No.** | Cloud Console → Credentials → the client: add a new secret, then disable and delete the old one. | Never. |
 | Google refresh token (gmail.readonly) | `oauth_tokens` (encrypted) | **No.** | Revoke the grant at the Google account's third-party access page, or POST it to the OAuth revoke endpoint. | Not while in use; Google drops grants unused for 6 months. |
@@ -40,6 +41,6 @@ Every sweep report must carry this line, verbatim, next to its result:
 
 > Blind spot (T#917): this sweep checks only credentials the seat holds now. Superseded provider-issued credentials (Telegram, Discord, Google, Withings, Hevy, GitHub tokens and SSH keys) are invisible to it and stay live until revoked at the provider. A clean result says nothing about them.
 
-To actually cover the superseded set, use a shape scan (e.g. the Telegram token regex) across archives and decompressed sessions, and then check each hit's liveness at the provider without using it (BotFather `/mybots`, the provider's token list). Never "test" a found credential by calling the API with it.
+To actually cover the superseded set, use a shape scan (e.g. the Telegram token regex) across archives and decompressed sessions. **A superseded provider credential found that way is treated as LIVE unless a provider-side revoke is on record (date and who). The action is revoke, not test.** Provider listings (BotFather `/mybots`, token lists) show which credentials exist, not whether an old value still works, so there is no safe liveness check. Never call the API with a found credential to see if it works.
 
 -- Bertus, 2026-11-16
