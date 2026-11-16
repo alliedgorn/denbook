@@ -6,6 +6,7 @@ import { DRILL_TAG_RE, DRILL_VERDICT_RE, LAB_TAG_RE, VERDICT_RE } from './labTag
 import { MD_COMPONENTS, REFRESH_EVENT, chatBreaks, publishThread } from './studyChat';
 import { PEER, type Msg } from './studyPeer';
 import { FileUpload } from '../components/FileUpload';
+import { ASK_OPEN_EVENT, IMAGE_VIEW_EVENT, type ImageView, pictureLabel, viewingImage } from './imageView';
 
 // "Ask Karo" (T#968) — a study-side view of the existing gorn ↔ karo DM thread.
 // Sending is a normal owner DM (POST /api/dm, sender derived server-side from the
@@ -61,8 +62,12 @@ function time(iso: string) {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export function AskKaro({ context }: { context: string }) {
+export function AskKaro({ context: pageContext }: { context: string }) {
   const [open, setOpen] = useState(false);
+  // The picture open in the full-screen viewer, if any. While one is open the
+  // dock sits beside it (wide screens) and questions say which picture they are about.
+  const [picture, setPicture] = useState<string | null>(viewingImage);
+  const context = picture ? `${pageContext} › picture: ${pictureLabel(picture)}` : pageContext;
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'error' | 'load-error'>('idle');
@@ -98,6 +103,14 @@ export function AskKaro({ context }: { context: string }) {
     }, open ? OPEN_POLL_MS : CLOSED_POLL_MS);
     return () => clearInterval(id);
   }, [open, load]);
+
+  useEffect(() => {
+    const onView = (e: Event) => setPicture((e as CustomEvent<ImageView>).detail?.alt ?? null);
+    const onAsk = () => setOpen(true);
+    window.addEventListener(IMAGE_VIEW_EVENT, onView);
+    window.addEventListener(ASK_OPEN_EVENT, onAsk);
+    return () => { window.removeEventListener(IMAGE_VIEW_EVENT, onView); window.removeEventListener(ASK_OPEN_EVENT, onAsk); };
+  }, []);
 
   useEffect(() => {
     const onRefresh = () => { load(); };
@@ -156,7 +169,7 @@ export function AskKaro({ context }: { context: string }) {
         </button>
       )}
       {open && (
-        <div className={big ? `${styles.askDock} ${styles.askDockBig}` : styles.askDock}>
+        <div className={[styles.askDock, big && styles.askDockBig, picture && styles.askDockSide].filter(Boolean).join(' ')}>
         {hasNote && !noteHidden && (
           <aside className={styles.askNote} aria-label="Pinned note from Karo">
             <div className={styles.askHead}>
