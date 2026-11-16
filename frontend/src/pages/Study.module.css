@@ -224,6 +224,13 @@ td .linkBtn { margin-left: 0; }
 .askText pre { margin: 0 0 6px; padding: 8px 10px; background: var(--bg-card); border-radius: 8px; overflow-x: auto; }
 .askText pre code { padding: 0; background: none; font-size: 12px; }
 .askText img { max-width: 100%; border-radius: 8px; }
+.chatImgBtn { display: block; padding: 0; margin: 4px 0; border: 0; background: none; cursor: zoom-in; max-width: 100%; }
+.chatImgBtn img { display: block; }
+/* z-index 10000: above the global DM chat overlay (9000), the expanded Ask Karo panel (150)
+   and the app header (100). Same value as the chat overlay's own lightbox. */
+.chatImgOverlay { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; cursor: zoom-out; }
+.chatImgOverlay img { max-width: 100%; max-height: calc(100vh - 60px); object-fit: contain; border-radius: 8px; background: #fff; }
+.chatImgHint { color: #ddd; font-size: 13px; }
 .askText table { border-collapse: collapse; font-size: 12px; margin: 0 0 6px; }
 .askText th, .askText td { border: 1px solid var(--border); padding: 2px 6px; }
 .askText a { color: var(--accent); }
