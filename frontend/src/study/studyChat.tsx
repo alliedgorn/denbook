@@ -2,6 +2,7 @@
 // component files so React fast refresh keeps working (eslint only-export-components).
 
 import { type Msg } from './studyPeer';
+import { ChatImage } from './ChatImage';
 
 // Chat-style line breaks: a single newline starts a new line, like in the DMs.
 // Markdown would join those lines, so turn them into hard breaks, but leave
@@ -26,7 +27,7 @@ export const MD_COMPONENTS = {
       : <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
   },
   img({ src, alt }: { src?: string; alt?: string }) {
-    return <img src={src} alt={alt || ''} loading="lazy" />;
+    return <ChatImage src={src} alt={alt || ''} />;
   },
 };
 
