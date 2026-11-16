@@ -448,8 +448,8 @@ export function registerKnowledgeRoutes(app: OpenAPIHono, sqlite: Database, help
       const events: any[] = [];
 
       const forumQuery = since
-        ? 'SELECT m.id, m.content, m.author, m.created_at, t.title as thread_title, t.id as thread_id FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.created_at > ? AND m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT ?'
-        : 'SELECT m.id, m.content, m.author, m.created_at, t.title as thread_title, t.id as thread_id FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT ?';
+        ? 'SELECT m.id, m.content, m.author, m.created_at, t.title as thread_title, t.id as thread_id FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.created_at > ? AND m.deleted_at IS NULL AND t.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT ?'
+        : 'SELECT m.id, m.content, m.author, m.created_at, t.title as thread_title, t.id as thread_id FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL AND t.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT ?';
       const forumParams = since ? [since, limit] : [limit];
       if (!type || type === 'forum') {
         const posts = sqlite.prepare(forumQuery).all(...forumParams) as any[];

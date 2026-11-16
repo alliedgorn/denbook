@@ -269,7 +269,7 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
              t.title as thread_title, t.category
       FROM forum_messages m
       JOIN forum_threads t ON m.thread_id = t.id
-      WHERE m.deleted_at IS NULL
+      WHERE m.deleted_at IS NULL AND t.deleted_at IS NULL
       ORDER BY m.created_at DESC
       LIMIT ?
     `).all(limit) as any[];
@@ -297,7 +297,7 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
              t.title as thread_title
       FROM forum_messages m
       JOIN forum_threads t ON m.thread_id = t.id
-      WHERE LOWER(m.content) LIKE ? AND m.deleted_at IS NULL
+      WHERE LOWER(m.content) LIKE ? AND m.deleted_at IS NULL AND t.deleted_at IS NULL
       ORDER BY m.created_at DESC
       LIMIT ?
     `).all(`%@${beast}%`, limit) as any[];
@@ -328,7 +328,7 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
              t.title as thread_title
       FROM forum_messages m
       JOIN forum_threads t ON m.thread_id = t.id
-      WHERE m.content LIKE ? AND m.deleted_at IS NULL`;
+      WHERE m.content LIKE ? AND m.deleted_at IS NULL AND t.deleted_at IS NULL`;
     const msgParams: any[] = [`%${q}%`];
     if (author) { msgQuery += ' AND LOWER(m.author) LIKE ?'; msgParams.push(`%${author.toLowerCase()}%`); }
     if (category) { msgQuery += ' AND t.category = ?'; msgParams.push(category); }
@@ -632,6 +632,16 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       // Update message
       sqlite.prepare('UPDATE forum_messages SET content = ?, edited_at = ? WHERE id = ?')
         .run(body.content, now, messageId);
+
+      // T#978: re-index the new text, so search stops matching the pre-edit
+      // version. A deleted post (or one in a deleted thread) stays out.
+      const row = sqlite.prepare(`
+        SELECT m.author, m.created_at, m.deleted_at, m.thread_id, t.title, t.deleted_at AS thread_deleted_at
+        FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.id = ?
+      `).get(messageId) as any;
+      if (row && !row.deleted_at && !row.thread_deleted_at) {
+        searchIndexUpsert('forum', messageId, row.title, body.content, row.author, row.created_at, `/forum?thread=${row.thread_id}`);
+      }
 
       return c.json({ success: true, message_id: messageId, edited_at: new Date(now).toISOString() });
     } catch (error) {
@@ -964,8 +974,14 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   app.delete('/api/thread/:id', (c) => {
     const id = parseInt(c.req.param('id'));
     if (isNaN(id)) return c.json({ error: 'Invalid ID' }, 400);
-    const as = c.req.query('as')?.toLowerCase() || (hasSessionAuth(c) ? 'gorn' : '');
-    if (!as) return c.json({ error: 'as param required for DELETE' }, 400);
+    // Identity comes from auth, never from ?as= (T#978, #20 31909): a local
+    // request is "authenticated" by the local bypass, so ?as=gorn used to let
+    // any process on the box delete any thread as Gorn.
+    // Owner = a verified session cookie AND the owner role: a guest session also
+    // passes hasSessionAuth (Bertus, #20 31912; T#887).
+    const isOwnerSession = hasSessionAuth(c) && (c.get as any)('role') === 'owner';
+    const as = requireBeastIdentity(c) || (isOwnerSession ? 'gorn' : '');
+    if (!as) return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
     const existing = sqlite.prepare('SELECT * FROM forum_threads WHERE id = ?').get(id) as any;
     if (!existing) return c.json({ error: 'Thread not found' }, 404);
     if (as !== 'gorn' && as !== existing.created_by?.toLowerCase()) {
@@ -973,6 +989,9 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     }
     // Soft delete — set deleted_at timestamp (Nothing is Deleted)
     sqlite.prepare("UPDATE forum_threads SET deleted_at = datetime('now'), status = 'deleted' WHERE id = ?").run(id);
+    // T#978: the thread is soft-deleted, but its posts must leave Den search too.
+    const posts = sqlite.prepare('SELECT id FROM forum_messages WHERE thread_id = ?').all(id) as any[];
+    for (const p of posts) searchIndexDelete('forum', p.id);
     return c.json({ deleted: id, title: existing.title, soft: true });
   });
 

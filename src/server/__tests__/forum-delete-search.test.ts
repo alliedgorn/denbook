@@ -14,9 +14,11 @@ let db: Database;
 let app: OpenAPIHono;
 
 function schema(d: Database) {
-  d.run('CREATE TABLE forum_threads (id INTEGER PRIMARY KEY, title TEXT, status TEXT, category TEXT, created_at TEXT, updated_at TEXT)');
+  d.run(`CREATE TABLE forum_threads (id INTEGER PRIMARY KEY, title TEXT, status TEXT, category TEXT, created_at TEXT,
+         updated_at TEXT, created_by TEXT, deleted_at TEXT)`);
+  d.run('CREATE TABLE forum_message_edits (id INTEGER PRIMARY KEY, message_id INTEGER, original_content TEXT, edited_by TEXT, created_at INTEGER)');
   d.run(`CREATE TABLE forum_messages (id INTEGER PRIMARY KEY, thread_id INTEGER, role TEXT, author TEXT,
-         content TEXT, created_at TEXT, deleted_at TEXT, deleted_by TEXT)`);
+         content TEXT, created_at TEXT, deleted_at TEXT, deleted_by TEXT, edited_at INTEGER)`);
   d.run('CREATE TABLE library (id INTEGER PRIMARY KEY, title TEXT, content TEXT, author TEXT, created_at TEXT)');
   d.run('CREATE TABLE risks (id INTEGER PRIMARY KEY, title TEXT, description TEXT, created_by TEXT, created_at TEXT)');
   d.run('CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT, description TEXT, assigned_to TEXT, created_at TEXT)');
@@ -26,10 +28,25 @@ function schema(d: Database) {
          repo TEXT, created_at TEXT)`);
 }
 
-const post = (id: number, word: string, deleted = false) => db.run(
-  'INSERT INTO forum_messages (id, thread_id, author, content, created_at, deleted_at) VALUES (?, 1, ?, ?, ?, ?)',
-  [id, 'guest-x', `hello ${word} there`, '2026-11-16T00:00:00Z', deleted ? '2026-11-15T00:00:00Z' : null],
+const post = (id: number, word: string, deleted = false, thread = 1) => db.run(
+  'INSERT INTO forum_messages (id, thread_id, author, content, created_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?)',
+  [id, thread, 'guest-x', `hello ${word} there`, '2026-11-16T00:00:00Z', deleted ? '2026-11-15T00:00:00Z' : null],
 );
+
+// A second app on the same db with a chosen caller, for the auth-sensitive routes.
+function forumApp(identity: string | null, session: boolean, role: 'owner' | 'guest' = 'owner'): OpenAPIHono {
+  const a = new OpenAPIHono();
+  a.use('*', async (c, next) => { c.set('role' as any, role); await next(); });  // what the auth middleware sets
+  registerForumRoutes(a, db, {
+    hasSessionAuth: () => session,
+    requireBeastIdentity: () => identity,
+    isTrustedRequest: () => true,
+    wsBroadcast: () => {},
+    withRetry: async (fn) => fn(),
+    getSupportedEmoji: () => new Set(),
+  });
+  return a;
+}
 
 async function hits(word: string): Promise<number> {
   const r = await app.request(`/api/search?q=${word}&as=karo`);
@@ -46,11 +63,20 @@ beforeAll(() => {
   db = new Database(':memory:');
   schema(db);
   db.run("INSERT INTO forum_threads (id, title) VALUES (1, 'guest thread')");
+  db.run("INSERT INTO forum_threads (id, title, created_by) VALUES (2, 'thread to delete', 'rax')");
+  db.run("INSERT INTO forum_threads (id, title, created_by) VALUES (3, 'gorns thread', 'gorn')");
+  db.run("INSERT INTO forum_threads (id, title, created_by) VALUES (4, 'deleted before the fix', 'gorn')");
+  post(50, 'zebrathreadpost', false, 2);
+  post(60, 'zebrakeep', false, 3);
+  post(70, 'zebraoldthread @karo', false, 4);
+  post(80, 'zebrabefore', false, 1);
   post(1, 'zebraalive');            // stays live
   post(2, 'zebraold');              // live at first index, deleted "before the fix"
   post(3, 'zebrahandler');          // deleted through the API after the fix
   post(4, 'zebramention @karo');    // deleted; checked on the non-search read paths
-  initSearch(db);                   // first boot: backfill indexes 1, 2, 3
+  initSearch(db);                   // first boot: backfill indexes every post
+  // Thread 4 is deleted the old way: thread flagged, its posts and index untouched.
+  db.run("UPDATE forum_threads SET deleted_at = '2026-11-15 00:00:00', status = 'deleted' WHERE id = 4");
 
   // Post 2 is deleted the old way: row flagged, index untouched (prod today).
   db.run("UPDATE forum_messages SET deleted_at = '2026-11-15T00:00:00Z', deleted_by = 'gorn' WHERE id = 2");
@@ -114,7 +140,9 @@ describe('T#975 deleted forum posts leave Den search', () => {
     const r = await app.request('/api/search/status');
     const body = await r.json() as any;
     const src = body.source?.forum ?? body.sources?.forum;
-    expect(src).toBe(1);
+    // Live at this point: 1, 50, 60, 80. Not counted: 2, 3, 4 (deleted posts)
+    // and 70 (its thread was deleted).
+    expect(src).toBe(4);
   });
 
   it('upsert replaces a backfilled row instead of stacking a duplicate', () => {
@@ -164,5 +192,79 @@ describe('T#975 deleted forum posts leave Den search', () => {
     expect(search.messages.length).toBe(200);
     const junk = await (await app.request('/api/forum/activity?limit=abc')).json() as any;
     expect(junk.activity.length).toBe(30);
+  });
+});
+
+describe('T#978 thread delete, edits, and thread-delete identity', () => {
+  it('a post in a thread deleted before the fix is out of search and the read paths', async () => {
+    expect(await hits('zebraoldthread')).toBe(0);          // result guard
+    initSearch(db);                                         // restart: sweep
+    expect(ftsRows(70)).toBe(0);
+    const m = await (await app.request('/api/forum/mentions/karo')).json() as any;
+    expect(m.mentions.map((x: any) => x.message_id)).not.toContain(70);
+    const f = await (await app.request('/api/forum/search?q=zebraoldthread')).json() as any;
+    expect(f.messages.length).toBe(0);
+    const act = await (await app.request('/api/forum/activity?limit=200')).json() as any;
+    expect(act.activity.map((x: any) => x.message_id)).not.toContain(70);
+    const feed = await (await app.request('/api/feed?type=forum&limit=200')).text();
+    expect(feed).not.toContain('zebraoldthread');
+  });
+
+  it('tokenless ?as=gorn cannot delete a thread (401), thread untouched', async () => {
+    const r = await forumApp(null, false).request('/api/thread/3?as=gorn', { method: 'DELETE' });
+    expect(r.status).toBe(401);
+    expect((db.query('SELECT deleted_at FROM forum_threads WHERE id = 3').get() as any).deleted_at).toBeNull();
+    expect(await hits('zebrakeep')).toBe(1);
+  });
+
+  it('a guest session cannot delete a thread as Gorn (401), thread untouched', async () => {
+    const r = await forumApp(null, true, 'guest').request('/api/thread/3?as=gorn', { method: 'DELETE' });
+    expect(r.status).toBe(401);
+    expect((db.query('SELECT deleted_at FROM forum_threads WHERE id = 3').get() as any).deleted_at).toBeNull();
+  });
+
+  it('a Beast cannot delete a thread it did not create, even with ?as=gorn (403)', async () => {
+    const r = await forumApp('karo', false).request('/api/thread/3?as=gorn', { method: 'DELETE' });
+    expect(r.status).toBe(403);
+    expect((db.query('SELECT deleted_at FROM forum_threads WHERE id = 3').get() as any).deleted_at).toBeNull();
+  });
+
+  it('the creator deletes their thread and its posts leave search', async () => {
+    expect(ftsRows(50)).toBe(1);
+    const r = await forumApp('rax', false).request('/api/thread/2', { method: 'DELETE' });
+    expect(r.status).toBe(200);
+    expect(ftsRows(50)).toBe(0);
+    expect(await hits('zebrathreadpost')).toBe(0);
+    const re = await app.request('/api/search/reindex', { method: 'POST' });
+    expect(re.status).toBe(200);
+    expect(ftsRows(50)).toBe(0);                            // rebuild skips it too
+  });
+
+  it('Gorn (owner session) can still delete any thread', async () => {
+    const r = await forumApp(null, true).request('/api/thread/3', { method: 'DELETE' });
+    expect(r.status).toBe(200);
+    expect(ftsRows(60)).toBe(0);
+  });
+
+  it('an edit is re-indexed: the old word stops matching, the new word matches', async () => {
+    expect(await hits('zebrabefore')).toBe(1);
+    const r = await forumApp('gorn', true).request('/api/message/80', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: 'hello zebraafter there' }),
+    });
+    expect(r.status).toBe(200);
+    expect(await hits('zebrabefore')).toBe(0);
+    expect(await hits('zebraafter')).toBe(1);
+    expect(ftsRows(80)).toBe(1);                            // replaced, not stacked
+  });
+
+  it('editing a deleted post does not put it back in search', async () => {
+    const r = await forumApp('gorn', true).request('/api/message/3', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: 'hello zebraresurrect there' }),
+    });
+    expect(r.status).toBe(200);
+    expect(ftsRows(3)).toBe(0);
+    expect(await hits('zebraresurrect')).toBe(0);
   });
 });
