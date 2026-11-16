@@ -978,9 +978,12 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     // request is "authenticated" by the local bypass, so ?as=gorn used to let
     // any process on the box delete any thread as Gorn.
     // Owner = a verified session cookie AND the owner role: a guest session also
-    // passes hasSessionAuth (Bertus, #20 31912; T#887).
+    // passes hasSessionAuth (Bertus, #20 31912; T#887). Not requireBeastIdentity:
+    // it returns 'gorn' for ANY verified session, so it would shadow this check
+    // (Bertus, PR 154). The bearer actor is set only by the token middleware.
     const isOwnerSession = hasSessionAuth(c) && (c.get as any)('role') === 'owner';
-    const as = requireBeastIdentity(c) || (isOwnerSession ? 'gorn' : '');
+    const bearer = ((c.get as any)('actor') as string | undefined)?.toLowerCase() || '';
+    const as = bearer || (isOwnerSession ? 'gorn' : '');
     if (!as) return c.json({ error: 'Beast identity required — bearer-token or owner session', requiresAuth: true }, 401);
     const existing = sqlite.prepare('SELECT * FROM forum_threads WHERE id = ?').get(id) as any;
     if (!existing) return c.json({ error: 'Thread not found' }, 404);

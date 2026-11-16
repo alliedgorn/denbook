@@ -34,12 +34,20 @@ const post = (id: number, word: string, deleted = false, thread = 1) => db.run(
 );
 
 // A second app on the same db with a chosen caller, for the auth-sensitive routes.
-function forumApp(identity: string | null, session: boolean, role: 'owner' | 'guest' = 'owner'): OpenAPIHono {
+// The helpers mirror PRODUCTION (server.ts): the token middleware sets `actor`
+// for a bearer, and requireBeastIdentity returns that actor, else 'gorn' for ANY
+// verified session, guest sessions included (T#887). A friendlier mock let the
+// guest test pass vacuously (Bertus, PR 154).
+function forumApp(bearer: string | null, session: boolean, role: 'owner' | 'guest' = 'owner'): OpenAPIHono {
   const a = new OpenAPIHono();
-  a.use('*', async (c, next) => { c.set('role' as any, role); await next(); });  // what the auth middleware sets
+  a.use('*', async (c, next) => {
+    c.set('role' as any, role);
+    if (bearer) c.set('actor' as any, bearer);
+    await next();
+  });
   registerForumRoutes(a, db, {
     hasSessionAuth: () => session,
-    requireBeastIdentity: () => identity,
+    requireBeastIdentity: (c) => ((c.get as any)('actor') as string | undefined) || (session ? 'gorn' : null),
     isTrustedRequest: () => true,
     wsBroadcast: () => {},
     withRetry: async (fn) => fn(),
@@ -248,7 +256,7 @@ describe('T#978 thread delete, edits, and thread-delete identity', () => {
 
   it('an edit is re-indexed: the old word stops matching, the new word matches', async () => {
     expect(await hits('zebrabefore')).toBe(1);
-    const r = await forumApp('gorn', true).request('/api/message/80', {
+    const r = await forumApp(null, true).request('/api/message/80', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: 'hello zebraafter there' }),
     });
@@ -259,7 +267,7 @@ describe('T#978 thread delete, edits, and thread-delete identity', () => {
   });
 
   it('editing a deleted post does not put it back in search', async () => {
-    const r = await forumApp('gorn', true).request('/api/message/3', {
+    const r = await forumApp(null, true).request('/api/message/3', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: 'hello zebraresurrect there' }),
     });
