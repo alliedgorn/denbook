@@ -76,7 +76,7 @@ export async function backfillMeilisearch(): Promise<void> {
   for (const r of libRows) docs.push({ search_id: `library_${r.id}`, title: r.title, content: r.content, source_type: 'library', source_id: r.id, author: r.author, created_at: new Date(r.created_at).toISOString(), url: `/library?doc=${r.id}` });
 
   // Forum
-  const forumRows = sqlite.prepare('SELECT m.id, t.title, m.content, m.author, m.created_at, m.thread_id FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id').all() as any[];
+  const forumRows = sqlite.prepare('SELECT m.id, t.title, m.content, m.author, m.created_at, m.thread_id FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL').all() as any[];
   for (const r of forumRows) docs.push({ search_id: `forum_${r.id}`, title: r.title, content: r.content, source_type: 'forum', source_id: r.id, author: r.author, created_at: r.created_at, url: `/forum?thread=${r.thread_id}` });
 
   // Tasks
@@ -123,13 +123,19 @@ function indexSpecFiles(): void {
 // Search index helpers (cross-domain, exported)
 // ============================================================================
 
+// source_id is stored as TEXT by searchIndexUpsert but as INTEGER by the SQL
+// backfills, and FTS5 columns do no type coercion, so `source_id = '42'` never
+// matched a backfilled row: deletes and upserts silently missed every entry
+// that came from a backfill (T#975). Compare as text.
+const SOURCE_ID_MATCH = 'CAST(source_id AS TEXT) = ?';
+
 // Helper: index a document
 export function searchIndexUpsert(sourceType: string, sourceId: number, title: string, content: string, author: string, createdAt: string, url?: string): void {
   if (!sqlite) return;
   const resolvedUrl = searchUrlFor(sourceType, sourceId, url);
   // FTS5 (sync)
   try {
-    sqlite.prepare('DELETE FROM search_index WHERE source_type = ? AND source_id = ?').run(sourceType, String(sourceId));
+    sqlite.prepare(`DELETE FROM search_index WHERE source_type = ? AND ${SOURCE_ID_MATCH}`).run(sourceType, String(sourceId));
     sqlite.prepare('INSERT INTO search_index(title, content, source_type, source_id, author, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(title, content, sourceType, String(sourceId), author, createdAt);
   } catch { /* ignore indexing errors */ }
   // Meilisearch (async, fire-and-forget)
@@ -143,10 +149,58 @@ export function searchIndexUpsert(sourceType: string, sourceId: number, title: s
 
 export function searchIndexDelete(sourceType: string, sourceId: number): void {
   if (!sqlite) return;
-  try { sqlite.prepare('DELETE FROM search_index WHERE source_type = ? AND source_id = ?').run(sourceType, String(sourceId)); } catch { /* ignore */ }
+  try { sqlite.prepare(`DELETE FROM search_index WHERE source_type = ? AND ${SOURCE_ID_MATCH}`).run(sourceType, String(sourceId)); } catch { /* ignore */ }
   if (meili && meiliAvailable) {
     meili.index('denbook').deleteDocument(`${sourceType}_${sourceId}`).catch(() => {});
   }
+}
+
+// T#975 — soft-deleted forum posts must not be findable. Three layers:
+// the DELETE handler removes the index entry, every rebuild skips deleted
+// rows, and this sweep removes anything already in the index (posts deleted
+// before the fix). It is idempotent and runs at startup.
+function deletedForumIds(): number[] {
+  if (!sqlite) return [];
+  try {
+    return (sqlite.prepare('SELECT id FROM forum_messages WHERE deleted_at IS NOT NULL').all() as any[]).map(r => r.id);
+  } catch { return []; }
+}
+
+export function sweepDeletedForumFromSearch(): { fts5: number; meili: number } {
+  if (!sqlite) return { fts5: 0, meili: 0 };
+  let fts5 = 0;
+  // source_id is text or integer depending on who wrote the row (see
+  // SOURCE_ID_MATCH), so compare as integers. Count first: FTS5's `changes`
+  // includes its shadow-table writes and overstates the rows removed.
+  const where = `source_type = 'forum'
+    AND CAST(source_id AS INTEGER) IN (SELECT id FROM forum_messages WHERE deleted_at IS NOT NULL)`;
+  try {
+    fts5 = (sqlite.prepare(`SELECT COUNT(*) c FROM search_index WHERE ${where}`).get() as any)?.c || 0;
+    if (fts5 > 0) sqlite.prepare(`DELETE FROM search_index WHERE ${where}`).run();
+  } catch { /* table may not exist yet */ }
+  const ids = deletedForumIds();
+  if (meili && meiliAvailable && ids.length > 0) {
+    meili.index('denbook').deleteDocuments(ids.map(id => `forum_${id}`)).catch(() => {});
+  }
+  if (fts5 > 0 || ids.length > 0) console.log(`[SEARCH] Deleted-post sweep: ${fts5} FTS5 rows removed, ${ids.length} Meili ids sent for delete`);
+  return { fts5, meili: meili && meiliAvailable ? ids.length : 0 };
+}
+
+// Defence in depth: drop any forum hit whose message is soft-deleted, in case
+// an index entry slipped past the layers above.
+function dropDeletedForumHits<T extends { source_type: string; source_id: any }>(hits: T[]): T[] {
+  if (!sqlite) return hits;
+  const forumIds = hits.filter(h => h.source_type === 'forum').map(h => parseInt(String(h.source_id), 10)).filter(n => !isNaN(n));
+  if (forumIds.length === 0) return hits;
+  let dead: Set<number>;
+  try {
+    const rows = sqlite.prepare(
+      `SELECT id FROM forum_messages WHERE deleted_at IS NOT NULL AND id IN (${forumIds.map(() => '?').join(',')})`
+    ).all(...forumIds) as any[];
+    dead = new Set(rows.map(r => r.id));
+  } catch { return hits; }
+  if (dead.size === 0) return hits;
+  return hits.filter(h => !(h.source_type === 'forum' && dead.has(parseInt(String(h.source_id), 10))));
 }
 
 // Sanitize FTS5 query — prevent column targeting
@@ -186,7 +240,7 @@ function fts5Search(q: string, type: string | undefined, limit: number, offset: 
 
   // Deduplicate by URL — keep first (best-ranked) result per URL
   const seen = new Set<string>();
-  const deduped = rows.reduce((acc: any[], r: any) => {
+  const deduped = dropDeletedForumHits(rows).reduce((acc: any[], r: any) => {
     const url = r.source_type === 'forum' ? forumUrl(r.source_id) : (urlMap[r.source_type] || (() => '#'))(r.source_id);
     if (url !== '#' && seen.has(url)) return acc;
     if (url !== '#') seen.add(url);
@@ -227,7 +281,7 @@ export function initSearch(sqliteDb: Database): void {
        SELECT title, content, 'library', id, author, created_at FROM library`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
        SELECT t.title, m.content, 'forum', m.id, m.author, m.created_at
-       FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id`,
+       FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
        SELECT title, COALESCE(description,''), 'risk', id, created_by, created_at FROM risks`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
@@ -243,12 +297,17 @@ export function initSearch(sqliteDb: Database): void {
     console.log(`[SEARCH] Backfill complete: ${total} documents indexed.`);
   }
 
+  // T#975: remove posts deleted before the fix (and any drift) from FTS5 now;
+  // the Meili half runs once Meili is connected, below.
+  sweepDeletedForumFromSearch();
+
   // Init Meilisearch (async, fire-and-forget — matches original initMeilisearch().then(...) shape)
   initMeilisearch().then(() => {
     if (meiliAvailable && meili) {
       meili.index('denbook').getStats().then(stats => {
         if (stats.numberOfDocuments === 0) backfillMeilisearch();
         else console.log(`[MEILI] Index has ${stats.numberOfDocuments} docs, skipping backfill`);
+        sweepDeletedForumFromSearch();
       }).catch(() => backfillMeilisearch());
     }
   }).catch(() => {});
@@ -389,7 +448,7 @@ export function registerSearchRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
         });
         // Deduplicate by URL — keep first (best-ranked) result per URL
         const seen = new Set<string>();
-        const deduped = (results.hits || []).reduce((acc: any[], h: any) => {
+        const deduped = dropDeletedForumHits((results.hits || []) as any[]).reduce((acc: any[], h: any) => {
           const url = h.url || '#';
           if (url !== '#' && seen.has(url)) return acc;
           if (url !== '#') seen.add(url);
@@ -427,7 +486,7 @@ export function registerSearchRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
        SELECT title, content, 'library', id, author, created_at FROM library`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
        SELECT t.title, m.content, 'forum', m.id, m.author, m.created_at
-       FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id`,
+       FROM forum_messages m JOIN forum_threads t ON m.thread_id = t.id WHERE m.deleted_at IS NULL`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
        SELECT title, COALESCE(description,''), 'risk', id, created_by, created_at FROM risks`,
       `INSERT INTO search_index(title, content, source_type, source_id, author, created_at)
@@ -467,7 +526,7 @@ export function registerSearchRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
     for (const r of indexedRows) indexed[r.source_type] = r.c;
 
     source.library = (sqliteDb.prepare('SELECT COUNT(*) as c FROM library').get() as any)?.c || 0;
-    source.forum = (sqliteDb.prepare('SELECT COUNT(*) as c FROM forum_messages').get() as any)?.c || 0;
+    source.forum = (sqliteDb.prepare('SELECT COUNT(*) as c FROM forum_messages WHERE deleted_at IS NULL').get() as any)?.c || 0;
     source.spec = (sqliteDb.prepare('SELECT COUNT(*) as c FROM spec_reviews').get() as any)?.c || 0;
     source.risk = (sqliteDb.prepare('SELECT COUNT(*) as c FROM risks').get() as any)?.c || 0;
     source.task = (sqliteDb.prepare('SELECT COUNT(*) as c FROM tasks').get() as any)?.c || 0;

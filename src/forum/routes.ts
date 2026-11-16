@@ -4,7 +4,7 @@ import type { Database } from 'bun:sqlite';
 import type { Role } from '../server/rbac.ts';
 import { checkGuestPostRate, checkGuestContentLength, scanForInjection } from '../server/guest-safety.ts';
 import { logSecurityEvent } from '../server/security-logger.ts';
-import { searchIndexUpsert } from '../search/routes.ts';
+import { searchIndexUpsert, searchIndexDelete } from '../search/routes.ts';
 import { handleThreadMessage, getFullThread, updateThreadStatus } from './handler.ts';
 import { emojiListRoute, emojiAddRoute, emojiRemoveRoute } from '../server/openapi.ts';
 
@@ -21,6 +21,15 @@ interface ForumHelpers {
   wsBroadcast: (event: string, data: any) => void;
   withRetry: <T>(fn: () => T | Promise<T>, maxRetries?: number, delayMs?: number) => Promise<T>;
   getSupportedEmoji: () => Set<string>;
+}
+
+// Read endpoints that return post content cap their page size (Bertus, PR 152:
+// /api/forum/activity handed back 31,843 rows in one call). A bad or missing
+// value falls back to the default.
+const MAX_READ_LIMIT = 200;
+function clampLimit(raw: string | undefined, fallback: number): number {
+  const n = parseInt(raw || '', 10);
+  return Number.isFinite(n) ? Math.min(MAX_READ_LIMIT, Math.max(1, n)) : fallback;
 }
 
 export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: ForumHelpers): void {
@@ -254,12 +263,13 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   });
 
   app.get('/api/forum/activity', (c) => {
-    const limit = parseInt(c.req.query('limit') || '30');
+    const limit = clampLimit(c.req.query('limit'), 30);
     const rows = sqlite.prepare(`
       SELECT m.id, m.thread_id, m.role, m.content, m.author, m.created_at,
              t.title as thread_title, t.category
       FROM forum_messages m
       JOIN forum_threads t ON m.thread_id = t.id
+      WHERE m.deleted_at IS NULL
       ORDER BY m.created_at DESC
       LIMIT ?
     `).all(limit) as any[];
@@ -281,13 +291,13 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
 
   app.get('/api/forum/mentions/:beast', (c) => {
     const beast = c.req.param('beast').toLowerCase();
-    const limit = parseInt(c.req.query('limit') || '30');
+    const limit = clampLimit(c.req.query('limit'), 30);
     const rows = sqlite.prepare(`
       SELECT m.id, m.thread_id, m.content, m.author, m.created_at,
              t.title as thread_title
       FROM forum_messages m
       JOIN forum_threads t ON m.thread_id = t.id
-      WHERE LOWER(m.content) LIKE ?
+      WHERE LOWER(m.content) LIKE ? AND m.deleted_at IS NULL
       ORDER BY m.created_at DESC
       LIMIT ?
     `).all(`%@${beast}%`, limit) as any[];
@@ -309,7 +319,7 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
   app.get('/api/forum/search', (c) => {
     const q = c.req.query('q');
     if (!q) return c.json({ error: 'Missing query parameter: q' }, 400);
-    const limit = parseInt(c.req.query('limit') || '20');
+    const limit = clampLimit(c.req.query('limit'), 20);
     const author = c.req.query('author');
     const category = c.req.query('category');
 
@@ -318,7 +328,7 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
              t.title as thread_title
       FROM forum_messages m
       JOIN forum_threads t ON m.thread_id = t.id
-      WHERE m.content LIKE ?`;
+      WHERE m.content LIKE ? AND m.deleted_at IS NULL`;
     const msgParams: any[] = [`%${q}%`];
     if (author) { msgQuery += ' AND LOWER(m.author) LIKE ?'; msgParams.push(`%${author.toLowerCase()}%`); }
     if (category) { msgQuery += ' AND t.category = ?'; msgParams.push(category); }
@@ -653,6 +663,10 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     } catch (error) {
       return c.json({ error: 'Database error during deletion' }, 500);
     }
+
+    // T#975: the row stays (soft delete), but the post must leave Den search
+    // (FTS5 + Meilisearch). Nothing else in this handler touched the index.
+    searchIndexDelete('forum', messageId);
 
     // Audit trail
     const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';

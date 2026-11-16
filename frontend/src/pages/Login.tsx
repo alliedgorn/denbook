@@ -125,6 +125,11 @@ export function Login() {
               Guest accounts are created by the Den owner.
             </p>
           )}
+          {tab === 'guest' && (
+            <p className={styles.guestNote} data-testid="guest-storage-notice">
+              Messages are stored on the server and can be read by the owner and the Den Beasts.
+            </p>
+          )}
         </form>
       </div>
     </div>
