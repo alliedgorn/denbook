@@ -34,9 +34,11 @@ let daemonsStarted = false;
 
 const DRAIN_INTERVAL = 1000; // Check queues every 1s
 const DRAIN_SPACING = 1000; // 1s between sends to same Beast (was 3s — Tier 1 of notification queue smoothness fix, 2026-04-08)
-// DEN_NOTIFY_DIR lets the test preload point the drain away from the real
-// queues (T#981, Gnarl/Bertus PR 156). This holds even for a child server
-// started with a cleaned env that drops the sink flags. Prod never sets it.
+// Queue directory. Prod leaves DEN_NOTIFY_DIR unset, so this is the real
+// /tmp/den-notify. Under bun test the preload sets it to a private
+// /tmp/den-notify-test-* dir, so in-process code and any child server
+// (env inherited) never see the real queues, even with the sink flags dropped
+// (T#981, Gnarl/Bertus PR 156).
 export const DRAIN_DIR = process.env.DEN_NOTIFY_DIR || '/tmp/den-notify';
 const drainLastSent: Map<string, number> = new Map(); // beast → last send timestamp
 // T#973 (Bertus review note): a refusal is otherwise silent. If Claude Code ever

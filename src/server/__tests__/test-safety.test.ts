@@ -210,13 +210,21 @@ describe('T#981 the server drain never runs under the sink (Bertus, PR 156)', ()
     try { expect(drainAllowed()).toBe(true); } finally { process.env.NODE_ENV = saved; }
   });
 
-  it('initDaemons does not start the drain: no real queue is touched past the 3s warmup', async () => {
+  it('initDaemons does not start the drain: a seeded queue line survives the 3s warmup, with 0 pop attempts', async () => {
+    // Seed a line, so a running drain has something to pop (Gnarl: an empty
+    // dir let this pass with drainAllowed forced true).
+    const fs = require('fs');
+    const q = path.join(DRAIN_DIR, 'nosuchseat.queue');
+    const line = Buffer.from('seeded by test-safety').toString('base64');
+    fs.writeFileSync(q, line + '\n');
     expect(hits().length).toBe(0);
     initDaemons(new Database(':memory:'));
     await Bun.sleep(3500);
-    // Had the drain started, its flock + sed on /tmp/den-notify would have
-    // tripped the den-notify pattern here.
+    // drainAllowed on its own: a running drain would have attempted the
+    // flock+sed pop, which the den-notify pattern records as a hit.
     expect(hits().length).toBe(0);
+    expect(fs.readFileSync(q, 'utf-8')).toBe(line + '\n');
+    fs.rmSync(q);
   }, 10000);
 });
 
