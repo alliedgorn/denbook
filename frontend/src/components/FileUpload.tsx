@@ -97,6 +97,26 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
+// Every mounted FileUpload registers how to find its composer (the form around it).
+// Drag and drop listen on the whole document, so with two composers on one page
+// (Ask Karo and a DM chat window) one drop used to upload into BOTH (T#987, Gnarl).
+// Rule: a drop over a composer goes to that composer. A drop anywhere else goes to
+// the only composer when exactly one is mounted (so the DM page keeps drop-anywhere),
+// and is refused with a hint when there are several.
+type ScopeGetter = () => HTMLElement | null;
+const uploaders = new Map<symbol, ScopeGetter>();
+function scopeOf(btn: HTMLElement | null): HTMLElement | null {
+  return btn?.closest('form') || btn?.closest<HTMLElement>('[class*="overlay"]') || null;
+}
+function owningUploader(target: EventTarget | null): symbol | null {
+  if (!(target instanceof Node)) return null;
+  for (const [id, getScope] of uploaders) {
+    if (getScope()?.contains(target)) return id;
+  }
+  return null;
+}
+const DROP_HINT = 'More than one message box is open. Drop the file onto the one you mean.';
+
 export function FileUpload({ onUploadComplete }: FileUploadProps) {
   const [staged, setStaged] = useState<StagedFile | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -107,10 +127,16 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
 
   // Clipboard paste support — only when focus is within the same form/container
   const containerRef = useRef<HTMLElement | null>(null);
+  const idRef = useRef(Symbol('FileUpload'));
+  useEffect(() => {
+    const id = idRef.current;
+    uploaders.set(id, () => scopeOf(containerRef.current));
+    return () => { uploaders.delete(id); };
+  }, []);
   useEffect(() => {
     function handlePaste(e: ClipboardEvent) {
       // Only handle paste if focus is within this component's parent form/container
-      const form = containerRef.current?.closest('form') || containerRef.current?.closest('[class*="overlay"]');
+      const form = scopeOf(containerRef.current);
       if (form && !form.contains(document.activeElement)) return;
       const items = e.clipboardData?.items;
       if (!items) return;
@@ -127,28 +153,47 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     return () => document.removeEventListener('paste', handlePaste);
   }, []);
 
-  // Drag-over detection on document
+  // Drag and drop on the document, routed by the T#987 rule above.
   useEffect(() => {
+    const me = idRef.current;
     let dragCounter = 0;
+    const scope = () => scopeOf(containerRef.current);
+    const mark = (on: boolean) => {
+      const el = scope();
+      if (!el) return;
+      if (on) el.setAttribute('data-file-drop', 'over'); else el.removeAttribute('data-file-drop');
+    };
     function handleDragEnter(e: DragEvent) {
       e.preventDefault();
       dragCounter++;
-      if (dragCounter === 1) setDragging(true);
+      // The full-screen drop zone only makes sense when there is one composer to drop into.
+      if (dragCounter === 1 && uploaders.size === 1) setDragging(true);
     }
     function handleDragLeave(e: DragEvent) {
       e.preventDefault();
       dragCounter--;
-      if (dragCounter === 0) setDragging(false);
+      if (dragCounter === 0) { setDragging(false); mark(false); }
     }
     function handleDragOver(e: DragEvent) {
       e.preventDefault();
+      // With several composers, outline the one under the pointer instead.
+      if (uploaders.size > 1) mark(owningUploader(e.target) === me);
     }
     function handleDrop(e: DragEvent) {
       e.preventDefault();
       dragCounter = 0;
       setDragging(false);
+      mark(false);
       const file = e.dataTransfer?.files?.[0];
-      if (file) handleFile(file);
+      if (!file) return;
+      const owner = owningUploader(e.target);
+      if (owner) {
+        if (owner === me) handleFile(file);
+        return;
+      }
+      if (uploaders.size === 1) { handleFile(file); return; }
+      // Ambiguous: refuse, and let exactly one composer (the first mounted) say why.
+      if (uploaders.keys().next().value === me) setError(DROP_HINT);
     }
     document.addEventListener('dragenter', handleDragEnter);
     document.addEventListener('dragleave', handleDragLeave);
@@ -159,6 +204,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       document.removeEventListener('dragleave', handleDragLeave);
       document.removeEventListener('dragover', handleDragOver);
       document.removeEventListener('drop', handleDrop);
+      mark(false);
     };
   }, []);
 
