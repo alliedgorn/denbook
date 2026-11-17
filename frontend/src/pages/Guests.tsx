@@ -13,6 +13,7 @@ interface Guest {
   disabled_at: string | null;
   study_enabled?: number; // 0/1: the AI bootcamp on the Study page (11-17)
   terms_accepted_at?: string | null; // message terms accepted (11-17)
+  terms_current?: boolean;           // accepted the CURRENT terms version (server-computed)
   created_at: string;
   last_login_at: string | null;
   last_active_at: string | null;
@@ -425,7 +426,9 @@ export function Guests() {
                 <div className={styles.detailMetaItem}>
                   <span className={styles.metaLabel}>Terms</span>
                   <span className={styles.metaValue}>
-                    {selected.terms_accepted_at ? `accepted ${formatTime(selected.terms_accepted_at)}` : <em style={{ opacity: 0.6 }}>not yet</em>}
+                    {selected.terms_current && selected.terms_accepted_at
+                      ? `accepted ${formatTime(selected.terms_accepted_at)}`
+                      : <em style={{ opacity: 0.6 }}>{selected.terms_accepted_at ? 'old terms, not yet re-accepted' : 'not yet'}</em>}
                   </span>
                 </div>
                 <div className={styles.detailMetaItem}>

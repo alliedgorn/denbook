@@ -237,9 +237,11 @@ export function guestTermsNote(sqlite: Database, name: string): string | null {
 /**
  * List all guest accounts (no password hashes returned).
  */
-export function listGuests(sqlite: Database): Omit<GuestAccount, 'password_hash'>[] {
+export function listGuests(sqlite: Database): (Omit<GuestAccount, 'password_hash'> & { terms_current: boolean })[] {
   const guests = sqlite.prepare('SELECT * FROM guest_accounts ORDER BY created_at DESC').all() as GuestAccount[];
-  return guests.map(({ password_hash, ...rest }) => rest);
+  // terms_current: accepted the CURRENT version, so the owner's page never shows an
+  // acceptance of older wording as if it covered today's (Bertus, PR 177 review).
+  return guests.map(({ password_hash, ...rest }) => ({ ...rest, terms_current: guestTermsAccepted(rest) }));
 }
 
 /**

@@ -81,3 +81,47 @@ describe('guest terms', () => {
     expect(guestTermsNote(db, 'nobody')).toBeNull();
   });
 });
+
+// Bertus, PR 177 review: dropping the upload gate failed no test. Real files route.
+import { registerFilesRoutes } from '../../files/routes.ts';
+import { listGuests, acceptGuestTerms } from '../guest-accounts.ts';
+describe('POST /api/upload for a guest', () => {
+  let up: OpenAPIHono;
+  beforeEach(() => {
+    up = new OpenAPIHono();
+    up.use('*', async (c, next) => { c.set('role' as any, 'guest'); c.set('guestUsername' as any, 'alice'); return next(); });
+    registerFilesRoutes(up, db, {
+      hasSessionAuth: () => true, isTrustedRequest: () => false, isLocalNetwork: () => false,
+      verifySessionToken: () => true, uploadsDir: '/nonexistent-upload-dir', sessionCookieName: 'x',
+    });
+  });
+  const upload = () => {
+    const fd = new FormData();
+    fd.append('file', new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'a.png', { type: 'image/png' }));
+    return up.request('/api/upload', { method: 'POST', body: fd });
+  };
+
+  test('refused with terms_required before accepting', async () => {
+    const r = await upload();
+    expect(r.status).toBe(403);
+    expect((await r.json()).code).toBe('terms_required');
+  });
+
+  test('after accepting, the terms gate no longer answers (positive control)', async () => {
+    acceptGuestTerms(db, (db.prepare("SELECT id FROM guest_accounts WHERE username = 'alice'").get() as any).id);
+    const r = await upload();
+    const j = await r.json().catch(() => ({}));
+    expect(j.code).not.toBe('terms_required');
+  });
+});
+
+describe('owner guest list', () => {
+  test('terms_current is true only for the current version', () => {
+    const id = (db.prepare("SELECT id FROM guest_accounts WHERE username = 'alice'").get() as any).id;
+    expect(listGuests(db)[0].terms_current).toBe(false);
+    acceptGuestTerms(db, id);
+    expect(listGuests(db)[0].terms_current).toBe(true);
+    db.prepare('UPDATE guest_accounts SET terms_version = ? WHERE id = ?').run(GUEST_TERMS_VERSION - 1, id);
+    expect(listGuests(db)[0].terms_current).toBe(false);
+  });
+});
