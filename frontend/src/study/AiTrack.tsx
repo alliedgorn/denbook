@@ -9,6 +9,7 @@ import type { StudyModule } from './types';
 import styles from '../pages/Study.module.css';
 import { DrillRounds } from './DrillRounds';
 import { drillKeyFor, type DrillTrack } from './drillParse';
+import { effectiveBest, pinBestCount, recordBest } from './quizBest';
 
 // AI engineering interview block (T#963) — Learn / Quiz / Drill per topic.
 // Progress shape is unchanged from the original app so it stays importable.
@@ -19,6 +20,7 @@ export interface AiProgress {
   read: Record<string, true>;
   quiz: Record<string, Record<number, number>>;
   best: Record<string, number>;
+  bestN?: Record<string, number>; // question count each best was earned on (quizBest.ts)
   drill: Record<string, DrillRating>;
   notes: Record<string, string>;
   updatedAt: number;
@@ -30,7 +32,7 @@ type Tab = (typeof TABS)[number];
 
 function modStats(m: StudyModule, s: AiProgress) {
   const read = m.concepts.filter((_, i) => s.read[`${m.id}:${i}`]).length;
-  const best = s.best[m.id] || 0;
+  const best = effectiveBest(s, m.id, m.quiz.length) || 0;
   let dsum = 0;
   let rated = 0;
   m.drills.forEach((_, i) => {
@@ -336,14 +338,15 @@ export function Quiz({ m, state, touch }: PartProps) {
   const ans = state.quiz[m.id] || {};
   const answered = Object.keys(ans).length;
   const correct = m.quiz.filter((q, i) => ans[i] === q.a).length;
-  const best = state.best[m.id];
+  const best = effectiveBest(state, m.id, m.quiz.length);
   const answer = (qi: number, oi: number) => touch(s => {
+    pinBestCount(s, m.id, m.quiz.length);
     const a = (s.quiz[m.id] = { ...(s.quiz[m.id] || {}) });
     if (a[qi] != null) return;
     a[qi] = oi;
     if (Object.keys(a).length === m.quiz.length) {
       const sc = m.quiz.filter((q, i) => a[i] === q.a).length / m.quiz.length;
-      s.best[m.id] = Math.max(s.best[m.id] || 0, sc);
+      recordBest(s, m.id, m.quiz.length, sc);
     }
   });
   return (
@@ -352,7 +355,7 @@ export function Quiz({ m, state, touch }: PartProps) {
         {answered === m.quiz.length
           ? <div>Score <b>{correct}/{m.quiz.length}</b> · best {Math.round((best || 0) * 100)}%</div>
           : <div>{answered}/{m.quiz.length} answered{best != null && <> · best so far <b>{Math.round(best * 100)}%</b></>}</div>}
-        {answered > 0 && <button className={styles.btn} onClick={() => touch(s => { delete s.quiz[m.id]; })}>Retake quiz</button>}
+        {answered > 0 && <button className={styles.btn} onClick={() => touch(s => { pinBestCount(s, m.id, m.quiz.length); delete s.quiz[m.id]; })}>Retake quiz</button>}
       </div>
       {m.quiz.map((q, qi) => {
         const pick = ans[qi];

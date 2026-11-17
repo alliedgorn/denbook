@@ -1,6 +1,7 @@
 import { bootContent } from './bootContent';
 import type { AiProgress } from './AiTrack';
 import type { BootModule } from './types';
+import { effectiveBest } from './quizBest';
 
 // Bootcamp progress shape and scoring (T#967). Kept out of BootcampTrack.tsx so
 // that file only exports components (react-refresh).
@@ -22,7 +23,7 @@ export const BOOT_EMPTY = (): BootProgress => ({
 export function modStats(m: BootModule, s: BootProgress) {
   const read = m.concepts.filter((_, i) => s.read[`${m.id}:${i}`]).length;
   const labs = m.labs.filter((_, i) => s.labs[`${m.id}:${i}`]).length;
-  const best = s.best[m.id] || 0;
+  const best = effectiveBest(s, m.id, m.quiz.length) || 0;
   let dsum = 0;
   let rated = 0;
   m.drills.forEach((_, i) => {
