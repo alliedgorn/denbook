@@ -7,6 +7,7 @@ import { LabToolbox } from './LabToolbox';
 import { RichText } from './RichText';
 import { useStudyProgress } from './useStudyProgress';
 import { useAuth } from '../contexts/AuthContext';
+import { useOwnerPlan } from './ownerPlan';
 import { Drills, Learn, Plates, Quiz, SyncBadge } from './AiTrack';
 import { BOOT_EMPTY, bootTrackPct, modStats, type BootProgress, type LogEntry } from './bootProgress';
 import type { BootModule } from './types';
@@ -118,6 +119,7 @@ type Touch = (fn: (s: BootProgress) => void) => void;
 function Plan({ state, touch, go }: { state: BootProgress; touch: Touch; go: (id: string | null, t?: Tab) => void }) {
   const { modules: BOOT_MODULES, planned: BOOT_PLANNED } = useBootContent();
   const { isGuest } = useAuth();
+  const plan = useOwnerPlan(!isGuest);
   const today = dayKey(new Date());
   const entry = state.log[today];
   const next = BOOT_MODULES.map(m => ({ m, s: modStats(m, state) })).find(x => x.s.labs < x.m.labs.length);
@@ -178,22 +180,20 @@ function Plan({ state, touch, go }: { state: BootProgress; touch: Touch; go: (id
           return <span key={k} className={styles.logDay} data-v={v} title={`${k}${e?.shipped ? `: ${e.shipped}` : ''}`}>{d.getDate()}</span>;
         })}
       </div>
-      <p className={styles.muted}>Green: code ran. Amber: logged, nothing ran. Grey: weekend.{isGuest ? '' : ' An empty weekday is a skip, and Karo will ask about it.'}</p>
+      <p className={styles.muted}>Green: code ran. Amber: logged, nothing ran. Grey: weekend.{plan !== 'loading' && plan !== 'none' ? ` ${plan.logNote}` : ''}</p>
 
-      {/* The owner's own schedule and job hunt: not shown to guests (11-17). */}
-      {!isGuest && <>
-      <h3 className={styles.sectionH}>The working day</h3>
+      {/* The owner's own schedule: runtime file, owner session only (ownerPlan.ts). */}
+      {plan !== 'loading' && plan !== 'none' && <>
+      <h3 className={styles.sectionH}>{plan.dayTitle}</h3>
       <div className={styles.tbl}>
         <table className={styles.log}>
           <thead><tr><th>Time</th><th>Block</th><th>What</th></tr></thead>
           <tbody>
-            <tr><td>09:30 – 12:30</td><td>Build</td><td>The module's lab. Hands on the keyboard.</td></tr>
-            <tr><td>13:30 – 15:30</td><td>Learn + drill</td><td>Lessons, quiz, then interview drills out loud with Karo.</td></tr>
-            <tr><td>15:30 – 17:00</td><td>Job hunt</td><td>Portfolio, CV, applications, reaching out to people.</td></tr>
+            {plan.workingDay.map(([time, block, what], i) => <tr key={i}><td>{time}</td><td>{block}</td><td>{what}</td></tr>)}
           </tbody>
         </table>
       </div>
-      <p className={styles.muted}>Ramp: week 1 is about 4 hours a day (build + learn), week 2 about 6, week 3 the full day. Evenings are for training.</p>
+      <p className={styles.muted}>{plan.ramp}</p>
       </>}
 
       <h3 className={styles.sectionH}>Rules</h3>
@@ -204,14 +204,11 @@ function Plan({ state, touch, go }: { state: BootProgress; touch: Touch; go: (id
         <div><b>Honest ratings</b>Mid is mid. Skips get named, then we plan tomorrow.</div>
       </div>
 
-      {!isGuest && <>
-      <h3 className={styles.sectionH}>Job hunt runs alongside</h3>
+      {plan !== 'loading' && plan !== 'none' && plan.jobHunt.length > 0 && <>
+      <h3 className={styles.sectionH}>{plan.sideTitle}</h3>
       <div className={styles.body}>
         <ul>
-          <li><b>Week 1:</b> GitHub profile cleaned up; the bootcamp repo is public by Friday.</li>
-          <li><b>Week 2:</b> CV and LinkedIn rewritten around the projects; a target list of 20 companies.</li>
-          <li><b>Week 3 onward:</b> applications every week, in parallel. Don't wait to "finish the course".</li>
-          <li>Aim wide: AI engineer, applied AI, and solutions or sales engineer at AI companies.</li>
+          {plan.jobHunt.map((it, i) => <li key={i}>{it.b && <b>{it.b}</b>}{it.b ? ' ' : ''}{it.t}</li>)}
         </ul>
       </div>
       </>}
