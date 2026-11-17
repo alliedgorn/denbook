@@ -1,8 +1,7 @@
 // Drill rounds parser (frontend/src/study/drillParse.ts, Gorn 11-16). Pure functions, run here
 // because the frontend has no unit runner (its `test` is Playwright).
 import { describe, expect, test } from 'bun:test';
-import { drillEntries, drillKeyFor, gradeRating, latestRating, mergeEntries, pruneDeleted, ratingOfWord, toRounds } from '../../../frontend/src/study/drillParse';
-import { BOOT_EMPTY, modStats } from '../../../frontend/src/study/bootProgress';
+import { drillEntries, drillKeyFor, drillScore, gradeRating, latestRating, mergeEntries, pruneDeleted, ratingOfWord, toRounds } from '../../../frontend/src/study/drillParse';
 
 const msg = (id: number, sender: string, message: string) => ({ id, sender, message, created_at: '2026-11-16T04:00:00Z' });
 
@@ -179,14 +178,11 @@ describe('mentor ratings', () => {
 });
 
 describe('progress counts the mentor grade only', () => {
-  test('modStats reads graded, not the old self-ratings', () => {
-    const m = { id: 'x', concepts: [{}], labs: [{}], quiz: [], drills: [{}, {}] } as unknown as Parameters<typeof modStats>[0];
-    const base = { ...BOOT_EMPTY() };
-    const selfRated = { ...base, drill: { 'x:0': 'solid' as const, 'x:1': 'solid' as const } };
-    expect(modStats(m, selfRated).rated).toBe(0);
-    expect(modStats(m, selfRated).pct).toBe(0);
-    const graded = { ...base, graded: { 'x:0': 'solid' as const, 'x:1': 'shaky' as const } };
-    expect(modStats(m, graded).rated).toBe(2);
-    expect(modStats(m, graded).pct).toBe(15); // 0.2 weight × (1 + 0.5) / 2
+  test('drillScore reads graded, never the old self-ratings', () => {
+    expect(drillScore('x', 2, undefined)).toEqual({ rated: 0, sum: 0 });
+    expect(drillScore('x', 2, {})).toEqual({ rated: 0, sum: 0 });
+    expect(drillScore('x', 3, { 'x:0': 'solid', 'x:1': 'shaky', 'x:2': 'blank' })).toEqual({ rated: 3, sum: 1.5 });
+    // another module's grades and out-of-range indexes don't count
+    expect(drillScore('x', 1, { 'y:0': 'solid', 'x:5': 'solid' })).toEqual({ rated: 0, sum: 0 });
   });
 });

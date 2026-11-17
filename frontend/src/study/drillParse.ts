@@ -21,6 +21,20 @@ export function gradeRating(e: Entry): DrillRating | undefined {
   return e.rating ?? (e.ok ? 'solid' : 'shaky');
 }
 
+// Drill share of a module's progress: the mentor's grades only (Gorn 11-17), never the old
+// self-ratings in progress.drill. Nailed = 1, shaky = 0.5, blanked or ungraded = 0.
+// Lives here, not in bootProgress.ts, so it can be unit-tested without React (CI has no frontend deps).
+export function drillScore(moduleId: string, count: number, graded: Record<string, DrillRating> | undefined): { rated: number; sum: number } {
+  let rated = 0;
+  let sum = 0;
+  for (let i = 0; i < count; i++) {
+    const r = graded?.[`${moduleId}:${i}`];
+    if (r) rated++;
+    sum += r === 'solid' ? 1 : r === 'shaky' ? 0.5 : 0;
+  }
+  return { rated, sum };
+}
+
 // The newest grade wins: a later round replaces an earlier verdict. Entries are oldest first.
 export function latestRating(entries: Entry[]): DrillRating | null {
   for (let i = entries.length - 1; i >= 0; i--) {

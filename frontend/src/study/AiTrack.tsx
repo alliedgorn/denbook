@@ -8,7 +8,7 @@ import { useStudyProgress, type SyncState } from './useStudyProgress';
 import type { StudyModule } from './types';
 import styles from '../pages/Study.module.css';
 import { DrillRounds } from './DrillRounds';
-import { drillKeyFor, RATING_LABEL, type DrillRating, type DrillTrack } from './drillParse';
+import { drillKeyFor, drillScore, RATING_LABEL, type DrillRating, type DrillTrack } from './drillParse';
 import { effectiveBest, pinBestCount, recordBest } from './quizBest';
 
 // AI engineering interview block (T#963) — Learn / Quiz / Drill per topic.
@@ -32,13 +32,7 @@ type Tab = (typeof TABS)[number];
 function modStats(m: StudyModule, s: AiProgress) {
   const read = m.concepts.filter((_, i) => s.read[`${m.id}:${i}`]).length;
   const best = effectiveBest(s, m.id, m.quiz) || 0;
-  let dsum = 0;
-  let rated = 0;
-  m.drills.forEach((_, i) => {
-    const r = s.graded?.[`${m.id}:${i}`];
-    if (r) rated++;
-    dsum += r === 'solid' ? 1 : r === 'shaky' ? 0.5 : 0;
-  });
+  const { rated, sum: dsum } = drillScore(m.id, m.drills.length, s.graded); // mentor's grades only
   const pct = Math.round(100 * (0.3 * read / m.concepts.length + 0.35 * best + 0.35 * dsum / m.drills.length));
   return { read, best, rated, pct };
 }
