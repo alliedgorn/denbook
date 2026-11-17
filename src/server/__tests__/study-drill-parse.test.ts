@@ -1,7 +1,8 @@
 // Drill rounds parser (frontend/src/study/drillParse.ts, Gorn 11-16). Pure functions, run here
 // because the frontend has no unit runner (its `test` is Playwright).
 import { describe, expect, test } from 'bun:test';
-import { drillEntries, drillKeyFor, mergeEntries, pruneDeleted, toRounds } from '../../../frontend/src/study/drillParse';
+import { drillEntries, drillKeyFor, gradeRating, latestRating, mergeEntries, pruneDeleted, ratingOfWord, toRounds } from '../../../frontend/src/study/drillParse';
+import { BOOT_EMPTY, modStats } from '../../../frontend/src/study/bootProgress';
 
 const msg = (id: number, sender: string, message: string) => ({ id, sender, message, created_at: '2026-11-16T04:00:00Z' });
 
@@ -130,5 +131,62 @@ describe('drill grades by peer', () => {
     expect(g.markReadUrl).toBeNull();
     expect(g.pins).toBe(false);
     expect(g.storePrefix).not.toBe(OWNER_CHANNEL.storePrefix);
+  });
+});
+
+// Gorn 11-17: the mentor rates the drill (nailed / shaky / blanked), not the learner.
+describe('mentor ratings', () => {
+  test('the three grade words parse to ratings, and old pass/fix map to nailed/shaky', () => {
+    const msgs = [
+      msg(1, 'karo', '[Drill a:0 nailed]\nall there'),
+      msg(2, 'karo', '[Drill a:0 shaky]\ngaps'),
+      msg(3, 'karo', '[Drill a:0 blanked]\nmissed the core'),
+      msg(4, 'karo', '[Drill a:0 pass]\nold pass'),
+      msg(5, 'karo', '[Drill a:0 fix]\nold fix'),
+    ];
+    expect(drillEntries(msgs, 'a:0').map(e => [e.id, e.rating, e.ok])).toEqual([
+      [1, 'solid', true], [2, 'shaky', false], [3, 'blank', false], [4, 'solid', true], [5, 'shaky', false],
+    ]);
+  });
+
+  test('an unknown grade word is not a grade', () => {
+    expect(drillEntries([msg(1, 'karo', '[Drill a:0 great]\nnope'), msg(2, 'karo', '[Drill a:0 constructor]\nnope')], 'a:0')).toEqual([]);
+    expect(ratingOfWord('constructor')).toBeUndefined();
+    expect(ratingOfWord('toString')).toBeUndefined();
+  });
+
+  test('the newest grade wins, across rounds', () => {
+    const e = drillEntries([
+      msg(1, 'gorn', '[Drill a:0]\nround 1'),
+      msg(2, 'karo', '[Drill a:0 blanked]\nno'),
+      msg(3, 'gorn', '[Drill a:0]\nround 2'),
+      msg(4, 'karo', '[Drill a:0 nailed]\nyes'),
+    ], 'a:0');
+    expect(latestRating(e)).toBe('solid');
+    expect(latestRating(e.slice(0, 3))).toBe('blank');
+    expect(latestRating(e.slice(0, 1))).toBeNull();
+  });
+
+  test('a round cached before ratings existed (ok only) still reads', () => {
+    const old = [{ id: 1, kind: 'grade' as const, ok: true, text: '', at: '' }, { id: 2, kind: 'grade' as const, ok: false, text: '', at: '' }];
+    expect(old.map(gradeRating)).toEqual(['solid', 'shaky']);
+    expect(gradeRating({ id: 3, kind: 'answer', text: '', at: '' })).toBeUndefined();
+  });
+
+  test('a grade from the learner is still not a grade', () => {
+    expect(drillEntries([msg(1, 'gorn', '[Drill a:0 nailed]\nself-graded')], 'a:0')).toEqual([]);
+  });
+});
+
+describe('progress counts the mentor grade only', () => {
+  test('modStats reads graded, not the old self-ratings', () => {
+    const m = { id: 'x', concepts: [{}], labs: [{}], quiz: [], drills: [{}, {}] } as unknown as Parameters<typeof modStats>[0];
+    const base = { ...BOOT_EMPTY() };
+    const selfRated = { ...base, drill: { 'x:0': 'solid' as const, 'x:1': 'solid' as const } };
+    expect(modStats(m, selfRated).rated).toBe(0);
+    expect(modStats(m, selfRated).pct).toBe(0);
+    const graded = { ...base, graded: { 'x:0': 'solid' as const, 'x:1': 'shaky' as const } };
+    expect(modStats(m, graded).rated).toBe(2);
+    expect(modStats(m, graded).pct).toBe(15); // 0.2 weight × (1 + 0.5) / 2
   });
 });

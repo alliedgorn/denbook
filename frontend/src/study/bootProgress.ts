@@ -27,7 +27,7 @@ export function modStats(m: BootModule, s: BootProgress) {
   let dsum = 0;
   let rated = 0;
   m.drills.forEach((_, i) => {
-    const r = s.drill[`${m.id}:${i}`];
+    const r = s.graded?.[`${m.id}:${i}`]; // the mentor's grade, not a self-rating (Gorn 11-17)
     if (r) rated++;
     dsum += r === 'solid' ? 1 : r === 'shaky' ? 0.5 : 0;
   });

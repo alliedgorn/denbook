@@ -8,20 +8,19 @@ import { useStudyProgress, type SyncState } from './useStudyProgress';
 import type { StudyModule } from './types';
 import styles from '../pages/Study.module.css';
 import { DrillRounds } from './DrillRounds';
-import { drillKeyFor, type DrillTrack } from './drillParse';
+import { drillKeyFor, RATING_LABEL, type DrillRating, type DrillTrack } from './drillParse';
 import { effectiveBest, pinBestCount, recordBest } from './quizBest';
 
 // AI engineering interview block (T#963) — Learn / Quiz / Drill per topic.
 // Progress shape is unchanged from the original app so it stays importable.
-
-type DrillRating = 'solid' | 'shaky' | 'blank';
 
 export interface AiProgress {
   read: Record<string, true>;
   quiz: Record<string, Record<number, number>>;
   best: Record<string, number>;
   bestN?: Record<string, number>; // question count each best was earned on (quizBest.ts)
-  drill: Record<string, DrillRating>;
+  drill: Record<string, DrillRating>; // old self-ratings: kept, no longer counted
+  graded?: Record<string, DrillRating>; // the mentor's newest grade per drill (Gorn 11-17), counted
   notes: Record<string, string>;
   updatedAt: number;
 }
@@ -36,7 +35,7 @@ function modStats(m: StudyModule, s: AiProgress) {
   let dsum = 0;
   let rated = 0;
   m.drills.forEach((_, i) => {
-    const r = s.drill[`${m.id}:${i}`];
+    const r = s.graded?.[`${m.id}:${i}`];
     if (r) rated++;
     dsum += r === 'solid' ? 1 : r === 'shaky' ? 0.5 : 0;
   });
@@ -388,6 +387,7 @@ export function Drills({ m, state, touch, open, setOpen, where }: PartProps & { 
       {m.drills.map((d, i) => {
         const key = `${m.id}:${i}`;
         const isOpen = !!open[key];
+        const graded = state.graded?.[key];
         return (
           <div key={key} className={styles.d}>
             <span className={styles.qn}>Drill {i + 1}</span>
@@ -404,16 +404,20 @@ export function Drills({ m, state, touch, open, setOpen, where }: PartProps & { 
               </button>
             </div>
             {isOpen && <div className={styles.model}><b>A strong answer covers:</b><RichText blocks={d.m} /></div>}
+            {/* Gorn 11-17: the mentor rates the drill, not the learner. The newest grade sets it. */}
             <div className={styles.rate}>
-              <span>How did you do?</span>
-              {([['solid', 'Nailed it'], ['shaky', 'Shaky'], ['blank', 'Blanked']] as [DrillRating, string][]).map(([v, lab]) => (
-                <button
-                  key={v} className={styles.chip} data-v={v} aria-pressed={state.drill[key] === v}
-                  onClick={() => touch(s => { if (s.drill[key] === v) delete s.drill[key]; else s.drill[key] = v; })}
-                >{lab}</button>
-              ))}
+              <span>Grade:</span>
+              {graded
+                ? <span className={styles.chip} data-v={graded} aria-pressed="true">{RATING_LABEL[graded]}</span>
+                : <span className={styles.muted}>not graded yet. Send your answer below.</span>}
             </div>
-            {where && <DrillRounds drillKey={drillKeyFor(where.track, m.id, i)} context={`${where.label} › Drill ${i + 1}`} />}
+            {where && (
+              <DrillRounds
+                drillKey={drillKeyFor(where.track, m.id, i)}
+                context={`${where.label} › Drill ${i + 1}`}
+                onRating={r => { if (state.graded?.[key] !== r) touch(s => { s.graded = { ...(s.graded || {}), [key]: r }; }); }}
+              />
+            )}
           </div>
         );
       })}

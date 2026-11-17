@@ -6,6 +6,7 @@ import { DRILL_TAG_RE, DRILL_VERDICT_RE, LAB_TAG_RE, VERDICT_RE } from './labTag
 import { MD_COMPONENTS, REFRESH_EVENT, chatBreaks, publishThread } from './studyChat';
 import { type Msg, type StudyChannel } from './studyPeer';
 import { useStudyChannel } from './studyChannel';
+import { ratingOfWord, RATING_ICON, RATING_LABEL } from './drillParse';
 import { FileUpload } from '../components/FileUpload';
 import { ASK_OPEN_EVENT, IMAGE_VIEW_EVENT, type ImageView, pictureLabel, viewingImage } from './imageView';
 
@@ -222,7 +223,8 @@ function AskPanel({ ch, context: pageContext }: { ch: StudyChannel; context: str
               const dtag = mine && !tag ? DRILL_TAG_RE.exec(bodyText) : null;
               if (dtag) { bodyText = bodyText.slice(dtag[0].length); label = `${label ?? 'Drill'} · answer`; }
               const dverdict = mine || verdict ? null : DRILL_VERDICT_RE.exec(m.message);
-              if (dverdict) { bodyText = m.message.slice(dverdict[0].length); label = dverdict[2] === 'pass' ? 'Drill grade · ✅ pass' : 'Drill grade · ❌ fix'; }
+              const drate = dverdict ? ratingOfWord(dverdict[2]) : undefined;
+              if (dverdict && drate) { bodyText = m.message.slice(dverdict[0].length); label = `Drill grade · ${RATING_ICON[drate]} ${RATING_LABEL[drate]}`; }
               return (
                 <div key={m.id} className={mine ? `${styles.askMsg} ${styles.askMine}` : styles.askMsg}>
                   {label && <span className={styles.askCtx}>{label}</span>}
