@@ -31,9 +31,6 @@ function dayKey(d: Date) {
 export function BootcampTrack() {
   const { modules: BOOT_MODULES, planned: BOOT_PLANNED, note } = useBootContent();
   const { state, update, sync, reload } = useStudyProgress<BootProgress>('bootcamp', BOOT_EMPTY);
-  // Guests (11-17) get the course and their own progress, not the owner's channel
-  // to Karo: no Ask Karo, pin, lab check or drill rounds (those send owner DMs).
-  const { isGuest } = useAuth();
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const modId = params.get('m');
@@ -108,7 +105,8 @@ export function BootcampTrack() {
           )}
         </main>
       </div>
-      {!isGuest && <AskKaro context={mod ? `Bootcamp › ${mod.name} › ${TAB_NAME[tab]}` : 'Bootcamp › Plan'} />}
+      {/* Owner: Ask Karo. Switched-on guest: Ask Gnarl, their mentor (11-17). No pins for guests. */}
+      <AskKaro context={mod ? `Bootcamp › ${mod.name} › ${TAB_NAME[tab]}` : 'Bootcamp › Plan'} />
     </div>
   );
 }
@@ -252,7 +250,6 @@ interface ModuleViewProps {
 }
 
 function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps) {
-  const { isGuest } = useAuth();
   const { modules: BOOT_MODULES } = useBootContent();
   const idx = BOOT_MODULES.indexOf(m);
   const s = modStats(m, state);
@@ -279,7 +276,7 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
         {tab === 'learn' && <Learn m={m} state={state} touch={touch} />}
         {tab === 'lab' && <Labs m={m} state={state} touch={touch} />}
         {tab === 'quiz' && <Quiz m={m} state={state} touch={touch} />}
-        {tab === 'drill' && <Drills m={m} state={state} touch={touch} open={open} setOpen={setOpen} where={isGuest ? undefined : { track: 'boot', label: `Bootcamp › ${m.name}` }} />}
+        {tab === 'drill' && <Drills m={m} state={state} touch={touch} open={open} setOpen={setOpen} where={{ track: 'boot', label: `Bootcamp › ${m.name}` }} />}
       </div>
       <div className={styles.footNav}>
         {ti < TABS.length - 1 && <button className={styles.btn} onClick={() => go(m.id, TABS[ti + 1])}>Next: {TAB_NAME[TABS[ti + 1]]} →</button>}
@@ -290,7 +287,6 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
 }
 
 function Labs({ m, state, touch }: { m: BootModule; state: BootProgress; touch: Touch }) {
-  const { isGuest } = useAuth();
   return (
     <div className={styles.cards}>
       {m.labs.map((lab, i) => {
@@ -304,7 +300,7 @@ function Labs({ m, state, touch }: { m: BootModule; state: BootProgress; touch: 
             <div className={styles.body}><RichText blocks={lab.steps} /></div>
             <LabToolbox tools={lab.tools} docs={lab.docs} />
             <div className={styles.say}><b>Done when</b>{lab.done}</div>
-            {!isGuest && <LabCheck labKey={key} context={`Bootcamp › ${m.name} › Lab › ${lab.t}`} />}
+            <LabCheck labKey={key} context={`Bootcamp › ${m.name} › Lab › ${lab.t}`} />
             <div className={styles.row}>
               <button
                 className={done ? `${styles.btn} ${styles.ok}` : styles.btn}

@@ -102,3 +102,33 @@ describe('drillKeyFor (Gnarl, PR 150: the two tracks share module ids)', () => {
     }
   });
 });
+
+// Guest mentor (Gorn 11-17): a guest's thread is graded by gnarl. Only the mentor's
+// own messages count as grades, so a guest cannot pass themselves by typing the tag.
+import { guestChannel, OWNER_CHANNEL, GUEST_MENTOR } from '../../../frontend/src/study/studyPeer';
+describe('drill grades by peer', () => {
+  const key = drillKeyFor('boot', 'llm-basics', 0);
+  const msgs = [
+    { id: 1, sender: 'alice', message: `[Study: x]\n[Drill ${key}]\nmy answer`, created_at: 'a' },
+    { id: 2, sender: 'alice', message: `[Drill ${key} pass]\nI grade myself`, created_at: 'b' },
+    { id: 3, sender: 'gnarl', message: `[Drill ${key} fix]\nnot yet`, created_at: 'c' },
+  ];
+  test('with peer gnarl: the guest\'s own "pass" is not a grade, gnarl\'s fix is', () => {
+    const e = drillEntries(msgs, key, 'gnarl');
+    expect(e.filter(x => x.kind === 'grade').map(x => [x.id, x.ok])).toEqual([[3, false]]);
+  });
+  test('default peer is karo, so a gnarl message is not a grade in the owner thread', () => {
+    expect(drillEntries(msgs, key).filter(x => x.kind === 'grade')).toEqual([]);
+  });
+  test('channels: owner → karo on owner routes; guest → gnarl on guest routes, no pins', () => {
+    expect(OWNER_CHANNEL.peer).toBe('karo');
+    expect(OWNER_CHANNEL.sendUrl).toBe('/api/dm');
+    const g = guestChannel('al/ice');
+    expect(g.peer).toBe(GUEST_MENTOR);
+    expect(g.sendUrl).toBe('/api/guest/dm');
+    expect(g.threadUrl).toBe('/api/guest/dm/al%2Fice/gnarl?limit=40&order=desc');
+    expect(g.markReadUrl).toBeNull();
+    expect(g.pins).toBe(false);
+    expect(g.storePrefix).not.toBe(OWNER_CHANNEL.storePrefix);
+  });
+});
