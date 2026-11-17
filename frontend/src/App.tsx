@@ -1,3 +1,4 @@
+import { GuestTermsBanner } from './components/GuestTermsBanner';
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Header } from './components/Header';
@@ -106,6 +107,7 @@ function AppContent() {
   return (
     <>
       {!isLoginPage && <Header onRemoteToggle={() => setRemoteMobileOpen(prev => !prev)} />}
+      {!isLoginPage && !authLoading && isGuest && <GuestTermsBanner />}
       <div className={!isLoginPage ? 'app-layout' : undefined}>
       <div className={!isLoginPage ? 'app-main' : undefined}>
       <Routes>

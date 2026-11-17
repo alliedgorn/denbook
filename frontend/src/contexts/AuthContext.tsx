@@ -15,6 +15,8 @@ interface AuthContextType {
   guestUsername: string | null;
   // Guest only. A nav hint: the study API re-checks the switch on every request.
   studyEnabled: boolean;
+  // Guest only; true for everyone else. The send routes check the real flag.
+  termsAccepted: boolean;
   login: (password: string, username?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -81,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       guestName: authState.guestName || authState.guestUsername || null,
       guestUsername: authState.guestUsername || null,
       studyEnabled: role === 'guest' && authState.studyEnabled === true,
+      termsAccepted: role !== 'guest' || authState.termsAccepted === true,
       login,
       logout,
       checkAuth

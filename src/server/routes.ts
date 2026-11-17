@@ -14,6 +14,7 @@ import {
   isGuestActive, recordFailedAttempt, recordSuccessfulLogin,
   resetGuestPassword,
   checkGuestName,
+  guestTermsAccepted,
 } from './guest-accounts.ts';
 import { logSecurityEvent } from './security-logger.ts';
 import {
@@ -73,6 +74,7 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
       let guestDisplayName = guestUsername;
       let guestActive = true;
       let studyEnabled = false;
+      let termsAccepted = false;
       if (guestUsername) {
         const guest = getGuestByUsername(sqlite, guestUsername);
         if (guest) {
@@ -80,6 +82,7 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
           const status = isGuestActive(guest);
           guestActive = status.active;
           studyEnabled = guest.study_enabled === 1;
+          termsAccepted = guestTermsAccepted(guest);
         } else {
           guestActive = false;
         }
@@ -93,6 +96,8 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
         ...(guestActive && guestUsername ? { guestUsername } : {}),
         // Nav hint only: the study API checks study_enabled itself on every request.
         ...(guestActive && studyEnabled ? { studyEnabled: true } : {}),
+        // Drives the accept banner; the send routes check the flag themselves.
+        ...(guestActive ? { termsAccepted } : {}),
       }, 200);
     }
 
