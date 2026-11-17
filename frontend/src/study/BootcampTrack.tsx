@@ -6,6 +6,7 @@ import { LabCheck } from './LabCheck';
 import { LabToolbox } from './LabToolbox';
 import { RichText } from './RichText';
 import { useStudyProgress } from './useStudyProgress';
+import { useAuth } from '../contexts/AuthContext';
 import { Drills, Learn, Plates, Quiz, SyncBadge } from './AiTrack';
 import { BOOT_EMPTY, bootTrackPct, modStats, type BootProgress, type LogEntry } from './bootProgress';
 import type { BootModule } from './types';
@@ -30,6 +31,9 @@ function dayKey(d: Date) {
 export function BootcampTrack() {
   const { modules: BOOT_MODULES, planned: BOOT_PLANNED, note } = useBootContent();
   const { state, update, sync, reload } = useStudyProgress<BootProgress>('bootcamp', BOOT_EMPTY);
+  // Guests (11-17) get the course and their own progress, not the owner's channel
+  // to Karo: no Ask Karo, pin, lab check or drill rounds (those send owner DMs).
+  const { isGuest } = useAuth();
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const modId = params.get('m');
@@ -104,7 +108,7 @@ export function BootcampTrack() {
           )}
         </main>
       </div>
-      <AskKaro context={mod ? `Bootcamp › ${mod.name} › ${TAB_NAME[tab]}` : 'Bootcamp › Plan'} />
+      {!isGuest && <AskKaro context={mod ? `Bootcamp › ${mod.name} › ${TAB_NAME[tab]}` : 'Bootcamp › Plan'} />}
     </div>
   );
 }
@@ -113,6 +117,7 @@ type Touch = (fn: (s: BootProgress) => void) => void;
 
 function Plan({ state, touch, go }: { state: BootProgress; touch: Touch; go: (id: string | null, t?: Tab) => void }) {
   const { modules: BOOT_MODULES, planned: BOOT_PLANNED } = useBootContent();
+  const { isGuest } = useAuth();
   const today = dayKey(new Date());
   const entry = state.log[today];
   const next = BOOT_MODULES.map(m => ({ m, s: modStats(m, state) })).find(x => x.s.labs < x.m.labs.length);
@@ -173,8 +178,10 @@ function Plan({ state, touch, go }: { state: BootProgress; touch: Touch; go: (id
           return <span key={k} className={styles.logDay} data-v={v} title={`${k}${e?.shipped ? `: ${e.shipped}` : ''}`}>{d.getDate()}</span>;
         })}
       </div>
-      <p className={styles.muted}>Green: code ran. Amber: logged, nothing ran. Grey: weekend. An empty weekday is a skip, and Karo will ask about it.</p>
+      <p className={styles.muted}>Green: code ran. Amber: logged, nothing ran. Grey: weekend.{isGuest ? '' : ' An empty weekday is a skip, and Karo will ask about it.'}</p>
 
+      {/* The owner's own schedule and job hunt: not shown to guests (11-17). */}
+      {!isGuest && <>
       <h3 className={styles.sectionH}>The working day</h3>
       <div className={styles.tbl}>
         <table className={styles.log}>
@@ -187,6 +194,7 @@ function Plan({ state, touch, go }: { state: BootProgress; touch: Touch; go: (id
         </table>
       </div>
       <p className={styles.muted}>Ramp: week 1 is about 4 hours a day (build + learn), week 2 about 6, week 3 the full day. Evenings are for training.</p>
+      </>}
 
       <h3 className={styles.sectionH}>Rules</h3>
       <div className={styles.how}>
@@ -196,6 +204,7 @@ function Plan({ state, touch, go }: { state: BootProgress; touch: Touch; go: (id
         <div><b>Honest ratings</b>Mid is mid. Skips get named, then we plan tomorrow.</div>
       </div>
 
+      {!isGuest && <>
       <h3 className={styles.sectionH}>Job hunt runs alongside</h3>
       <div className={styles.body}>
         <ul>
@@ -205,6 +214,7 @@ function Plan({ state, touch, go }: { state: BootProgress; touch: Touch; go: (id
           <li>Aim wide: AI engineer, applied AI, and solutions or sales engineer at AI companies.</li>
         </ul>
       </div>
+      </>}
 
       <h3 className={styles.sectionH}>Modules</h3>
       <div className={styles.tbl}>
@@ -242,6 +252,7 @@ interface ModuleViewProps {
 }
 
 function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps) {
+  const { isGuest } = useAuth();
   const { modules: BOOT_MODULES } = useBootContent();
   const idx = BOOT_MODULES.indexOf(m);
   const s = modStats(m, state);
@@ -268,7 +279,7 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
         {tab === 'learn' && <Learn m={m} state={state} touch={touch} />}
         {tab === 'lab' && <Labs m={m} state={state} touch={touch} />}
         {tab === 'quiz' && <Quiz m={m} state={state} touch={touch} />}
-        {tab === 'drill' && <Drills m={m} state={state} touch={touch} open={open} setOpen={setOpen} where={{ track: 'boot', label: `Bootcamp › ${m.name}` }} />}
+        {tab === 'drill' && <Drills m={m} state={state} touch={touch} open={open} setOpen={setOpen} where={isGuest ? undefined : { track: 'boot', label: `Bootcamp › ${m.name}` }} />}
       </div>
       <div className={styles.footNav}>
         {ti < TABS.length - 1 && <button className={styles.btn} onClick={() => go(m.id, TABS[ti + 1])}>Next: {TAB_NAME[TABS[ti + 1]]} →</button>}
@@ -279,6 +290,7 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
 }
 
 function Labs({ m, state, touch }: { m: BootModule; state: BootProgress; touch: Touch }) {
+  const { isGuest } = useAuth();
   return (
     <div className={styles.cards}>
       {m.labs.map((lab, i) => {
@@ -292,7 +304,7 @@ function Labs({ m, state, touch }: { m: BootModule; state: BootProgress; touch: 
             <div className={styles.body}><RichText blocks={lab.steps} /></div>
             <LabToolbox tools={lab.tools} docs={lab.docs} />
             <div className={styles.say}><b>Done when</b>{lab.done}</div>
-            <LabCheck labKey={key} context={`Bootcamp › ${m.name} › Lab › ${lab.t}`} />
+            {!isGuest && <LabCheck labKey={key} context={`Bootcamp › ${m.name} › Lab › ${lab.t}`} />}
             <div className={styles.row}>
               <button
                 className={done ? `${styles.btn} ${styles.ok}` : styles.btn}

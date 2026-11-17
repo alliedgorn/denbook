@@ -205,6 +205,7 @@ export interface AuthStatus {
   role?: 'owner' | 'guest';
   guestName?: string;
   guestUsername?: string;
+  studyEnabled?: boolean; // guest only: the owner switched Study on for them
 }
 
 export interface Settings {

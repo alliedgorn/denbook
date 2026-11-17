@@ -113,8 +113,10 @@ interface HeaderProps {
 export function Header({ onRemoteToggle }: HeaderProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, authEnabled, isGuest, isLoading: authLoading, guestName, logout } = useAuth();
-  const activeTopNav = isGuest ? guestTopNavItems : topNavItems;
+  const { isAuthenticated, authEnabled, isGuest, isLoading: authLoading, guestName, logout, studyEnabled } = useAuth();
+  const activeTopNav = isGuest
+    ? (studyEnabled ? [...guestTopNavItems, { path: '/study', label: 'Study' }] : guestTopNavItems)
+    : topNavItems;
   const activeNavGroups = isGuest ? guestNavGroups : navGroups;
   const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
   const [openGroup, setOpenGroup] = useState<string | null>(null);

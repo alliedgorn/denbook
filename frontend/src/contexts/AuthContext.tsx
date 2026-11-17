@@ -13,6 +13,8 @@ interface AuthContextType {
   isGuest: boolean;
   guestName: string | null;
   guestUsername: string | null;
+  // Guest only. A nav hint: the study API re-checks the switch on every request.
+  studyEnabled: boolean;
   login: (password: string, username?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -78,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isGuest: role === 'guest',
       guestName: authState.guestName || authState.guestUsername || null,
       guestUsername: authState.guestUsername || null,
+      studyEnabled: role === 'guest' && authState.studyEnabled === true,
       login,
       logout,
       checkAuth
