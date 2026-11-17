@@ -71,12 +71,14 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
       // Look up display name and check account status
       let guestDisplayName = guestUsername;
       let guestActive = true;
+      let studyEnabled = false;
       if (guestUsername) {
         const guest = getGuestByUsername(sqlite, guestUsername);
         if (guest) {
           if (guest.display_name) guestDisplayName = guest.display_name;
           const status = isGuestActive(guest);
           guestActive = status.active;
+          studyEnabled = guest.study_enabled === 1;
         } else {
           guestActive = false;
         }
@@ -88,6 +90,8 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
         ...(guestActive && role ? { role } : {}),
         ...(guestActive && guestDisplayName ? { guestName: guestDisplayName } : {}),
         ...(guestActive && guestUsername ? { guestUsername } : {}),
+        // Nav hint only: the study API checks study_enabled itself on every request.
+        ...(guestActive && studyEnabled ? { studyEnabled: true } : {}),
       }, 200);
     }
 
@@ -351,10 +355,16 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
   
     const id = parseInt(c.req.param('id'), 10);
     return c.req.json().then(body => {
+      // Study access is a strict boolean: anything else would turn on by accident
+      // ("false" is a truthy string).
+      if (body.study_enabled !== undefined && typeof body.study_enabled !== 'boolean') {
+        return c.json({ error: 'study_enabled must be true or false' }, 400);
+      }
       const updated = updateGuest(sqlite, id, {
         display_name: body.display_name,
         expires_at: body.expires_at,
         disabled_at: body.disabled_at,
+        study_enabled: body.study_enabled,
       });
       if (!updated) return c.json({ error: 'Guest not found' }, 404);
   
@@ -396,6 +406,13 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
   
     const deleted = deleteGuest(sqlite, id);
     if (!deleted) return c.json({ error: 'Failed to delete guest' }, 500);
+
+    // Study progress is keyed guest:<id>, and an INTEGER PRIMARY KEY id can be
+    // handed out again after a delete. Drop the rows so a future guest never
+    // inherits someone else's progress.
+    try {
+      sqlite.prepare('DELETE FROM study_progress WHERE user = ?').run(`guest:${id}`);
+    } catch { /* table not created yet: nothing to drop */ }
   
     // Broadcast session invalidation — connected clients will see this and redirect to login
     // Note: HMAC-signed cookies cannot be server-side revoked, but guest login check

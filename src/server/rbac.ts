@@ -52,6 +52,12 @@ const GUEST_ALLOWLIST: AllowlistEntry[] = [
   { method: 'GET', pattern: /^\/api\/library\/search$/ },
   { method: 'GET', pattern: /^\/api\/library\/types$/ },
   { method: 'GET', pattern: /^\/api\/library\/\d+$/ },
+
+  // Study — the AI bootcamp track only, for guests the owner switched on (11-17).
+  // The routes check study_enabled and the track themselves; this is the outer gate.
+  { method: 'GET', pattern: /^\/api\/study\/content\/bootcamp$/ },
+  { method: 'GET', pattern: /^\/api\/study\/progress\/bootcamp$/ },
+  { method: 'PUT', pattern: /^\/api\/study\/progress\/bootcamp$/ },
 ];
 
 /**

@@ -26,6 +26,7 @@ export interface GuestAccount {
   created_at: string;
   last_login_at: string | null;
   last_active_at: string | null;
+  study_enabled: number; // 0/1 — owner turns on the Study page per guest (11-17)
 }
 
 export interface GuestAuditEntry {
@@ -100,6 +101,8 @@ export function initGuestTables(sqlite: Database): void {
   try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN banned_at TEXT"); } catch { /* exists */ }
   try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN banned_by TEXT"); } catch { /* exists */ }
   try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN ban_reason TEXT"); } catch { /* exists */ }
+  // Study access, per guest, off by default (Gorn 11-17)
+  try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN study_enabled INTEGER NOT NULL DEFAULT 0"); } catch { /* exists */ }
 }
 
 /**
@@ -172,7 +175,7 @@ export function getGuestByDisplayName(sqlite: Database, displayName: string): Gu
 export function updateGuest(
   sqlite: Database,
   id: number,
-  updates: { display_name?: string; expires_at?: string | null; disabled_at?: string | null },
+  updates: { display_name?: string; expires_at?: string | null; disabled_at?: string | null; study_enabled?: boolean },
 ): GuestAccount | null {
   const fields: string[] = [];
   const values: any[] = [];
@@ -180,6 +183,10 @@ export function updateGuest(
   if (updates.display_name !== undefined) {
     fields.push('display_name = ?');
     values.push(updates.display_name);
+  }
+  if (updates.study_enabled !== undefined) {
+    fields.push('study_enabled = ?');
+    values.push(updates.study_enabled ? 1 : 0);
   }
   if (updates.expires_at !== undefined) {
     fields.push('expires_at = ?');

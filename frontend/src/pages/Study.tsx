@@ -3,10 +3,12 @@ import { AI_EMPTY, AiTrack, Plates, aiTrackPct } from '../study/AiTrack';
 import { BootcampTrack } from '../study/BootcampTrack';
 import { BOOT_EMPTY, bootTrackPct } from '../study/bootProgress';
 import { useStudyProgress } from '../study/useStudyProgress';
+import { useAuth } from '../contexts/AuthContext';
 import styles from './Study.module.css';
 
-// Study area (T#963) — owner-only. The route sits behind RequireAuth and is not
-// in GUEST_ROUTES; the API independently rejects anything but an owner session.
+// Study area (T#963). Owner: every track. Guest the owner switched on (11-17):
+// the bootcamp track only, so /study goes straight there. RequireAuth lets such
+// a guest reach /study and /study/bootcamp; the API independently enforces it.
 
 function StudyHome() {
   const ai = useStudyProgress('ai', AI_EMPTY);
@@ -43,6 +45,8 @@ function StudyHome() {
 
 export function Study() {
   const { track } = useParams();
+  const { isGuest } = useAuth();
+  if (isGuest) return track === 'bootcamp' ? <BootcampTrack /> : <Navigate to="/study/bootcamp" replace />;
   if (!track) return <StudyHome />;
   if (track === 'ai') return <AiTrack />;
   if (track === 'bootcamp') return <BootcampTrack />;
