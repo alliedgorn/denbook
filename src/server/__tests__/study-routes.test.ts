@@ -214,6 +214,7 @@ describe('study for guests', () => {
     const dir = fsMod.mkdtempSync(pathMod.join(osMod.tmpdir(), 'study-guest-'));
     fsMod.writeFileSync(pathMod.join(dir, 'bootcamp.json'), JSON.stringify({ modules: [{ id: 'llm' }] }));
     fsMod.writeFileSync(pathMod.join(dir, 'ai.json'), JSON.stringify({ secret: 'owner only' }));
+    fsMod.writeFileSync(pathMod.join(dir, 'bootcamp-plan.json'), JSON.stringify({ ramp: 'owner schedule' }));
     sqlite = new Database(':memory:');
     ensureStudyTables(sqlite);
     initGuestTables(sqlite);
@@ -267,6 +268,11 @@ describe('study for guests', () => {
     const c = await greq('alice', 'GET', '/api/study/content/ai');
     expect(c.status).toBe(403);
     expect(JSON.stringify(await c.json())).not.toContain('owner only');
+    // The owner's plan file (off the public bundle, 11-17) is owner-only too.
+    const plan = await greq('alice', 'GET', '/api/study/content/bootcamp-plan');
+    expect(plan.status).toBe(403);
+    expect(JSON.stringify(await plan.json())).not.toContain('owner schedule');
+    expect((await req('owner', 'GET', '/api/study/content/bootcamp-plan')).status).toBe(200);
     expect((await greq('alice', 'GET', '/api/study/progress/ai')).status).toBe(403);
     expect((await greq('alice', 'PUT', '/api/study/progress/ai', JSON.stringify({ data: { x: 1 } }))).status).toBe(403);
     expect(rows()).toEqual([]);
