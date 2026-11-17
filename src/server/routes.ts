@@ -13,6 +13,7 @@ import {
   updateGuest, deleteGuest, banGuest, unbanGuest,
   isGuestActive, recordFailedAttempt, recordSuccessfulLogin,
   resetGuestPassword,
+  checkGuestName,
 } from './guest-accounts.ts';
 import { logSecurityEvent } from './security-logger.ts';
 import {
@@ -285,6 +286,9 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
       if (err.message?.includes('UNIQUE constraint')) {
         return c.json({ error: 'Username already exists' }, 409);
       }
+      if (err.message?.includes('already used by another guest')) {
+        return c.json({ error: err.message }, 409);
+      }
       return c.json({ error: err.message || 'Failed to create guest' }, 400);
     }
   });
@@ -359,6 +363,15 @@ export function registerServerRoutes(app: OpenAPIHono, sqliteDb: Database, helpe
       // ("false" is a truthy string).
       if (body.study_enabled !== undefined && typeof body.study_enabled !== 'boolean') {
         return c.json({ error: 'study_enabled must be true or false' }, 400);
+      }
+      if (body.display_name !== undefined) {
+        if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 50) {
+          return c.json({ error: 'Display name must be 1-50 characters' }, 400);
+        }
+        body.display_name = body.display_name.trim();
+        const check = checkGuestName(sqlite, body.display_name, id);
+        if (check === 'reserved') return c.json({ error: 'That display name is reserved' }, 400);
+        if (check === 'taken') return c.json({ error: 'That name is already used by another guest' }, 409);
       }
       const updated = updateGuest(sqlite, id, {
         display_name: body.display_name,
