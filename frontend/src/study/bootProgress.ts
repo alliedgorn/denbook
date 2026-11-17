@@ -23,7 +23,7 @@ export const BOOT_EMPTY = (): BootProgress => ({
 export function modStats(m: BootModule, s: BootProgress) {
   const read = m.concepts.filter((_, i) => s.read[`${m.id}:${i}`]).length;
   const labs = m.labs.filter((_, i) => s.labs[`${m.id}:${i}`]).length;
-  const best = effectiveBest(s, m.id, m.quiz.length) || 0;
+  const best = effectiveBest(s, m.id, m.quiz) || 0;
   let dsum = 0;
   let rated = 0;
   m.drills.forEach((_, i) => {

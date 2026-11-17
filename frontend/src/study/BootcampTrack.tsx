@@ -11,6 +11,7 @@ import { useOwnerPlan } from './ownerPlan';
 import { Drills, Learn, Plates, Quiz, SyncBadge } from './AiTrack';
 import { BOOT_EMPTY, bootTrackPct, modStats, type BootProgress, type LogEntry } from './bootProgress';
 import type { BootModule } from './types';
+import { effectiveBest } from './quizBest';
 import styles from '../pages/Study.module.css';
 
 // AI engineer bootcamp (T#967) — schedule, daily log, then Learn / Lab / Quiz /
@@ -253,7 +254,7 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
   const counts: Record<Tab, string> = {
     learn: `${s.read}/${m.concepts.length}`,
     lab: `${s.labs}/${m.labs.length}`,
-    quiz: state.best[m.id] != null ? `best ${Math.round(s.best * 100)}%` : `${m.quiz.length} Qs`,
+    quiz: effectiveBest(state, m.id, m.quiz) != null ? `best ${Math.round(s.best * 100)}%` : `${m.quiz.length} Qs`,
     drill: `${s.rated}/${m.drills.length}`,
   };
   const ti = TABS.indexOf(tab);
