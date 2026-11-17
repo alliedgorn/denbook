@@ -206,6 +206,7 @@ export interface AuthStatus {
   guestName?: string;
   guestUsername?: string;
   studyEnabled?: boolean; // guest only: the owner switched Study on for them
+  termsAccepted?: boolean; // guest only: accepted the current message terms (11-17)
 }
 
 export interface Settings {

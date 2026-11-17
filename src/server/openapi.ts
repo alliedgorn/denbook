@@ -32,6 +32,7 @@ export const authStatusRoute = createRoute({
             guestName: z.string().optional(),
             guestUsername: z.string().optional(),
             studyEnabled: z.boolean().optional(),
+            termsAccepted: z.boolean().optional(),
           }),
         },
       },

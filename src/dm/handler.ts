@@ -6,7 +6,8 @@
  */
 
 import { eq, and, desc, sql, isNull } from 'drizzle-orm';
-import { db, dmConversations, dmMessages } from '../db/index.ts';
+import { db, sqlite, dmConversations, dmMessages } from '../db/index.ts';
+import { guestTermsNote } from '../server/guest-accounts.ts';
 import { getOracleRegistry } from '../forum/mentions.ts';
 import { enqueueNotification } from '../notify.ts';
 import type { DmConversation, DmMessage } from './types.ts';
@@ -137,7 +138,10 @@ function notifyDmRecipient(from: string, to: string, content: string): boolean {
   const preview = sanitizeForTmux(content, 120);
   const isGuestDm = from.startsWith('[Guest] ');
   const guestUsername = isGuestDm ? from.slice(8) : null;
-  const dmLabel = isGuestDm ? `[DM [Guest] from ${guestUsername}]` : `[DM from ${from}]`;
+  // Gorn 11-17: every Beast sees whether this guest accepted the message terms, so
+  // nobody has to remember who already told them, or tell them again.
+  const termsNote = isGuestDm ? guestTermsNote(sqlite, guestUsername || '') : null;
+  const dmLabel = isGuestDm ? `[DM [Guest] from ${guestUsername}${termsNote ? ` (${termsNote})` : ''}]` : `[DM from ${from}]`;
   const replyHint = isGuestDm ? `Use /dm to read. use /dm ${guestUsername} <message> to reply.` : `Use /dm to read and /dm ${from} <message> to reply.`;
   const message = `${dmLabel}: ${preview}...\n\n${replyHint}`;
 

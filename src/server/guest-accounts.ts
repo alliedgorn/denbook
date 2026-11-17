@@ -27,6 +27,8 @@ export interface GuestAccount {
   last_login_at: string | null;
   last_active_at: string | null;
   study_enabled: number; // 0/1 — owner turns on the Study page per guest (11-17)
+  terms_accepted_at: string | null; // when the guest clicked "I understand" (11-17)
+  terms_version: number | null;     // which GUEST_TERMS_VERSION they accepted
 }
 
 export interface GuestAuditEntry {
@@ -103,6 +105,9 @@ export function initGuestTables(sqlite: Database): void {
   try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN ban_reason TEXT"); } catch { /* exists */ }
   // Study access, per guest, off by default (Gorn 11-17)
   try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN study_enabled INTEGER NOT NULL DEFAULT 0"); } catch { /* exists */ }
+  // Terms acceptance (Gorn 11-17: "a flag saying whether notified ... and user accepted")
+  try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN terms_accepted_at TEXT"); } catch { /* exists */ }
+  try { sqlite.exec("ALTER TABLE guest_accounts ADD COLUMN terms_version INTEGER"); } catch { /* exists */ }
 }
 
 /**
@@ -194,11 +199,49 @@ export function checkGuestName(sqlite: Database, name: string, selfId?: number):
 }
 
 /**
+ * Guest terms (Gorn 11-17). Rule #55 as decided 11-15: notice up front, never deny.
+ * Gorn then asked for a flag that records that a guest was told AND accepted, so
+ * every Beast can see it instead of each one telling the guest again. Until a
+ * guest accepts the current version they can read but not send. Bump the version
+ * when the text changes, and everyone is asked again.
+ */
+export const GUEST_TERMS_VERSION = 1;
+export const GUEST_TERMS_TEXT =
+  'Messages here are stored on the server and can be read by the owner and the Den Beasts.';
+
+export function guestTermsAccepted(g: Pick<GuestAccount, 'terms_accepted_at' | 'terms_version'> | null | undefined): boolean {
+  return !!g && !!g.terms_accepted_at && (g.terms_version ?? 0) >= GUEST_TERMS_VERSION;
+}
+
+export function acceptGuestTerms(sqlite: Database, id: number): GuestAccount | null {
+  sqlite.prepare('UPDATE guest_accounts SET terms_accepted_at = ?, terms_version = ? WHERE id = ?')
+    .run(new Date().toISOString(), GUEST_TERMS_VERSION, id);
+  return getGuest(sqlite, id);
+}
+
+/**
+ * For a Beast's DM notification: has the guest behind this "[Guest] <name>" tag
+ * accepted the terms? Matched the way the DM key is built (JS fold of display name
+ * or username). null = no such guest account (e.g. a deleted one).
+ */
+export function guestTermsNote(sqlite: Database, name: string): string | null {
+  const n = (name ?? '').trim().toLowerCase();
+  if (!n) return null;
+  let rows: GuestAccount[];
+  try { rows = sqlite.prepare('SELECT * FROM guest_accounts').all() as GuestAccount[]; } catch { return null; }
+  const g = rows.find(r => (r.display_name || r.username).trim().toLowerCase() === n || r.username.trim().toLowerCase() === n);
+  if (!g) return null;
+  return guestTermsAccepted(g) ? `terms accepted ${g.terms_accepted_at!.slice(0, 10)}` : 'terms NOT accepted';
+}
+
+/**
  * List all guest accounts (no password hashes returned).
  */
-export function listGuests(sqlite: Database): Omit<GuestAccount, 'password_hash'>[] {
+export function listGuests(sqlite: Database): (Omit<GuestAccount, 'password_hash'> & { terms_current: boolean })[] {
   const guests = sqlite.prepare('SELECT * FROM guest_accounts ORDER BY created_at DESC').all() as GuestAccount[];
-  return guests.map(({ password_hash, ...rest }) => rest);
+  // terms_current: accepted the CURRENT version, so the owner's page never shows an
+  // acceptance of older wording as if it covered today's (Bertus, PR 177 review).
+  return guests.map(({ password_hash, ...rest }) => ({ ...rest, terms_current: guestTermsAccepted(rest) }));
 }
 
 /**
