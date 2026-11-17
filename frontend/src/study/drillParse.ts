@@ -7,10 +7,11 @@ const CTX_RE = /^\[Study: [^\]\n]{1,200}\]\n?/;
 export interface Entry { id: number; kind: 'answer' | 'grade'; ok?: boolean; text: string; at: string }
 
 // The entries in this thread that belong to this drill.
-export function drillEntries(msgs: Msg[], key: string): Entry[] {
+// peer: who grades in this thread (Karo for the owner, Gnarl for a guest).
+export function drillEntries(msgs: Msg[], key: string, peer: string = PEER): Entry[] {
   const out: Entry[] = [];
   for (const m of msgs) {
-    if (m.sender === PEER) {
+    if (m.sender === peer) {
       const v = DRILL_VERDICT_RE.exec(m.message);
       if (v && v[1] === key) out.push({ id: m.id, kind: 'grade', ok: v[2] === 'pass', text: m.message.slice(v[0].length).trim(), at: m.created_at });
     } else {
