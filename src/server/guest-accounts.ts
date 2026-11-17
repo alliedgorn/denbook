@@ -165,29 +165,30 @@ export async function createGuest(
  */
 export type GuestNameCheck = 'ok' | 'reserved' | 'taken';
 
+// JS folding on purpose: SQLite lower() folds ASCII only, while the DM key is built with
+// JS toLowerCase (dm/handler.ts sortPair), so "Élise" and "élise" would pass a SQL
+// compare and still share one thread (Bertus, PR 175 review).
+const fold = (x: string | null | undefined) => (x ?? '').trim().toLowerCase();
+
 export function checkGuestName(sqlite: Database, name: string, selfId?: number): GuestNameCheck {
-  const n = name.trim().toLowerCase();
+  const n = fold(name);
   if (!n) return 'ok';
   if (RESERVED_NAMES.has(n)) return 'reserved';
   try {
-    if (sqlite.prepare('SELECT 1 FROM beast_profiles WHERE lower(trim(name)) = ? OR lower(trim(display_name)) = ? LIMIT 1').get(n, n)) return 'reserved';
+    const beasts = sqlite.prepare('SELECT name, display_name FROM beast_profiles').all() as { name: string; display_name: string | null }[];
+    if (beasts.some(b => fold(b.name) === n || fold(b.display_name) === n)) return 'reserved';
   } catch { /* no roster table (tests): the hand list above still applies */ }
 
-  if (selfId != null) {
-    const me = getGuest(sqlite, selfId);
-    if (me && (me.username.trim().toLowerCase() === n || (me.display_name || me.username).trim().toLowerCase() === n)) return 'ok';
-  }
-  const other = sqlite.prepare(`
-    SELECT 1 FROM guest_accounts
-    WHERE id != ?
-      AND (lower(trim(username)) = ? OR lower(trim(coalesce(display_name, username))) = ?)
-    LIMIT 1
-  `).get(selfId ?? -1, n, n);
-  if (other) return 'taken';
+  const guests = sqlite.prepare('SELECT id, username, display_name FROM guest_accounts').all() as { id: number; username: string; display_name: string | null }[];
+  const me = selfId != null ? guests.find(g => g.id === selfId) : undefined;
+  if (me && (fold(me.username) === n || fold(me.display_name || me.username) === n)) return 'ok';
+  if (guests.some(g => g.id !== selfId && (fold(g.username) === n || fold(g.display_name || g.username) === n))) return 'taken';
 
   const tag = `[guest] ${n}`;
   try {
-    if (sqlite.prepare('SELECT 1 FROM dm_conversations WHERE lower(trim(participant1)) = ? OR lower(trim(participant2)) = ? LIMIT 1').get(tag, tag)) return 'taken';
+    // Participants are stored JS-lowercased; the LIKE only narrows to guest tags.
+    const rows = sqlite.prepare("SELECT participant1 AS a, participant2 AS b FROM dm_conversations WHERE participant1 LIKE '[guest]%' OR participant2 LIKE '[guest]%'").all() as { a: string; b: string }[];
+    if (rows.some(r => fold(r.a) === tag || fold(r.b) === tag)) return 'taken';
   } catch { /* no DM table (tests) */ }
   return 'ok';
 }
