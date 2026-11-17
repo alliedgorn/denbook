@@ -180,7 +180,7 @@ function Plan({ state, touch, go }: { state: BootProgress; touch: Touch; go: (id
           return <span key={k} className={styles.logDay} data-v={v} title={`${k}${e?.shipped ? `: ${e.shipped}` : ''}`}>{d.getDate()}</span>;
         })}
       </div>
-      <p className={styles.muted}>Green: code ran. Amber: logged, nothing ran. Grey: weekend.{isGuest ? '' : ' An empty weekday is a skip, and Karo will ask about it.'}</p>
+      <p className={styles.muted}>Green: code ran. Amber: logged, nothing ran. Grey: weekend.{plan !== 'loading' && plan !== 'none' ? ` ${plan.logNote}` : ''}</p>
 
       {/* The owner's own schedule: runtime file, owner session only (ownerPlan.ts). */}
       {plan !== 'loading' && plan !== 'none' && <>

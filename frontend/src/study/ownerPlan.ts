@@ -12,6 +12,7 @@ export interface OwnerPlan {
   sideTitle: string;
   workingDay: [string, string, string][]; // time, block, what
   ramp: string;
+  logNote: string;      // the line after the log colours (owner's coaching note)
   jobHunt: { b?: string; t: string }[];
 }
 
@@ -27,7 +28,7 @@ export function checkOwnerPlan(x: unknown): OwnerPlan | null {
   const wd = o.workingDay, jh = o.jobHunt;
   if (!Array.isArray(wd) || wd.length > 20) return null;
   if (!wd.every(r => Array.isArray(r) && r.length === 3 && r.every(str))) return null;
-  if (!str(o.ramp) || !str(o.dayTitle) || !str(o.sideTitle)) return null;
+  if (!str(o.ramp) || !str(o.dayTitle) || !str(o.sideTitle) || !str(o.logNote)) return null;
   if (!Array.isArray(jh) || jh.length > 20) return null;
   const item = (i: unknown) => {
     if (!i || typeof i !== 'object' || Array.isArray(i)) return false;
@@ -40,6 +41,7 @@ export function checkOwnerPlan(x: unknown): OwnerPlan | null {
     sideTitle: o.sideTitle as string,
     workingDay: wd as [string, string, string][],
     ramp: o.ramp as string,
+    logNote: o.logNote as string,
     jobHunt: (jh as { b?: string; t: string }[]).map(i => (i.b === undefined ? { t: i.t } : { b: i.b, t: i.t })),
   };
 }
