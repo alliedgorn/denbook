@@ -130,14 +130,66 @@ export async function createGuest(
     throw new Error('Password must be at least 8 characters');
   }
 
+  const shownName = displayName?.trim() || '';
+  for (const nm of [lower, shownName]) {
+    const check = checkGuestName(sqlite, nm);
+    if (check === 'reserved') throw new Error(`Username "${nm}" is reserved`);
+    if (check === 'taken') throw new Error('That name is already used by another guest');
+  }
+
   const hash = await Bun.password.hash(password, { algorithm: 'bcrypt', cost: 12 });
 
   const result = sqlite.prepare(`
     INSERT INTO guest_accounts (username, password_hash, display_name, expires_at)
     VALUES (?, ?, ?, ?)
-  `).run(lower, hash, displayName || lower, expiresAt || null);
+  `).run(lower, hash, shownName || lower, expiresAt || null);
 
   return sqlite.prepare('SELECT * FROM guest_accounts WHERE id = ?').get(result.lastInsertRowid) as GuestAccount;
+}
+
+/**
+ * Can a guest use this name? (Gorn 11-17, option b of Bertus's PR 174 note.)
+ *
+ * Guest DM conversations are keyed by the lowercased "[guest] <display_name || username>"
+ * (dm/handler.ts sortPair). So a guest who takes another guest's name, or a name that
+ * already has DM history, reads and writes those threads. Bertus counted 7 orphaned
+ * guest tags with 134 messages on 11-17: a deleted guest's tag does not die with the
+ * account. Every writer of a guest username or display name calls this: owner create,
+ * owner PATCH, and the guest's own profile PATCH.
+ *
+ *   'reserved' → a Beast (live roster, not a hand list: the old list missed boro) or a
+ *                system name
+ *   'taken'    → another guest's username or display name, or any tag with DM history
+ *   'ok'       → free, or it is this guest's own current name (selfId)
+ * Compared trimmed and lowercased; callers store the trimmed value.
+ */
+export type GuestNameCheck = 'ok' | 'reserved' | 'taken';
+
+export function checkGuestName(sqlite: Database, name: string, selfId?: number): GuestNameCheck {
+  const n = name.trim().toLowerCase();
+  if (!n) return 'ok';
+  if (RESERVED_NAMES.has(n)) return 'reserved';
+  try {
+    if (sqlite.prepare('SELECT 1 FROM beast_profiles WHERE lower(trim(name)) = ? OR lower(trim(display_name)) = ? LIMIT 1').get(n, n)) return 'reserved';
+  } catch { /* no roster table (tests): the hand list above still applies */ }
+
+  if (selfId != null) {
+    const me = getGuest(sqlite, selfId);
+    if (me && (me.username.trim().toLowerCase() === n || (me.display_name || me.username).trim().toLowerCase() === n)) return 'ok';
+  }
+  const other = sqlite.prepare(`
+    SELECT 1 FROM guest_accounts
+    WHERE id != ?
+      AND (lower(trim(username)) = ? OR lower(trim(coalesce(display_name, username))) = ?)
+    LIMIT 1
+  `).get(selfId ?? -1, n, n);
+  if (other) return 'taken';
+
+  const tag = `[guest] ${n}`;
+  try {
+    if (sqlite.prepare('SELECT 1 FROM dm_conversations WHERE lower(trim(participant1)) = ? OR lower(trim(participant2)) = ? LIMIT 1').get(tag, tag)) return 'taken';
+  } catch { /* no DM table (tests) */ }
+  return 'ok';
 }
 
 /**

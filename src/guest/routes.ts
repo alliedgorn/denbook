@@ -5,7 +5,7 @@ import * as path from 'path';
 import { getFullThread, handleThreadMessage } from '../forum/handler.ts';
 import { sendDm, getMessages as getDmMessages } from '../dm/handler.ts';
 import { getBeastProfile } from '../db/index.ts';
-import { getGuestByUsername, changeGuestPassword, updateGuestProfile } from '../server/guest-accounts.ts';
+import { getGuestByUsername, changeGuestPassword, updateGuestProfile, checkGuestName } from '../server/guest-accounts.ts';
 import { checkGuestPostRate, checkGuestDmRate, checkGuestContentLength, scanForInjection } from '../server/guest-safety.ts';
 import { logSecurityEvent } from '../server/security-logger.ts';
 
@@ -510,17 +510,18 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
     const body = await c.req.json();
 
-    if (body.display_name !== undefined && (!body.display_name || body.display_name.length > 50)) {
-      return c.json({ error: 'Display name must be 1-50 characters' }, 400);
-    }
     if (body.display_name !== undefined) {
-      const RESERVED_NAMES = new Set([
-        'karo','rax','mara','leonard','bertus','gnarl','zaghnal','pip','nyx','dex',
-        'flint','quill','snap','vigil','talon','sable','gorn','admin','administrator','system',
-      ]);
-      if (RESERVED_NAMES.has(body.display_name.toLowerCase().trim())) {
-        return c.json({ error: 'That display name is reserved' }, 400);
+      // Trimmed before every check AND before storing: the old reserved check trimmed
+      // but the store did not (Bertus, 11-17).
+      if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 50) {
+        return c.json({ error: 'Display name must be 1-50 characters' }, 400);
       }
+      body.display_name = body.display_name.trim();
+      // Beasts (live roster), system names, other guests' names, and any name that
+      // already has DM history: taking one would put this guest in those threads.
+      const check = checkGuestName(sqlite, body.display_name, guest.id);
+      if (check === 'reserved') return c.json({ error: 'That display name is reserved' }, 400);
+      if (check === 'taken') return c.json({ error: 'That display name is already taken' }, 409);
     }
     if (body.bio !== undefined && body.bio.length > 500) {
       return c.json({ error: 'Bio must be under 500 characters' }, 400);
