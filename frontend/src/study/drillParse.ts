@@ -4,7 +4,45 @@ import { DRILL_TAG_RE, DRILL_VERDICT_RE } from './labTags';
 
 const CTX_RE = /^\[Study: [^\]\n]{1,200}\]\n?/;
 
-export interface Entry { id: number; kind: 'answer' | 'grade'; ok?: boolean; text: string; at: string }
+// A drill's rating. The mentor sets it with the grade word (Gorn 11-17); the learner no longer does.
+export type DrillRating = 'solid' | 'shaky' | 'blank';
+const RATING_OF: Record<string, DrillRating> = { nailed: 'solid', pass: 'solid', shaky: 'shaky', fix: 'shaky', blanked: 'blank' };
+export const RATING_LABEL: Record<DrillRating, string> = { solid: 'Nailed it', shaky: 'Shaky', blank: 'Blanked' };
+export const RATING_ICON: Record<DrillRating, string> = { solid: '✅', shaky: '⚠️', blank: '❌' };
+export function ratingOfWord(word: string): DrillRating | undefined {
+  return Object.prototype.hasOwnProperty.call(RATING_OF, word) ? RATING_OF[word] : undefined;
+}
+
+// ok is kept for rounds cached before ratings existed (they carry ok and no rating).
+export interface Entry { id: number; kind: 'answer' | 'grade'; ok?: boolean; rating?: DrillRating; text: string; at: string }
+
+export function gradeRating(e: Entry): DrillRating | undefined {
+  if (e.kind !== 'grade') return undefined;
+  return e.rating ?? (e.ok ? 'solid' : 'shaky');
+}
+
+// Drill share of a module's progress: the mentor's grades only (Gorn 11-17), never the old
+// self-ratings in progress.drill. Nailed = 1, shaky = 0.5, blanked or ungraded = 0.
+// Lives here, not in bootProgress.ts, so it can be unit-tested without React (CI has no frontend deps).
+export function drillScore(moduleId: string, count: number, graded: Record<string, DrillRating> | undefined): { rated: number; sum: number } {
+  let rated = 0;
+  let sum = 0;
+  for (let i = 0; i < count; i++) {
+    const r = graded?.[`${moduleId}:${i}`];
+    if (r) rated++;
+    sum += r === 'solid' ? 1 : r === 'shaky' ? 0.5 : 0;
+  }
+  return { rated, sum };
+}
+
+// The newest grade wins: a later round replaces an earlier verdict. Entries are oldest first.
+export function latestRating(entries: Entry[]): DrillRating | null {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const r = gradeRating(entries[i]);
+    if (r) return r;
+  }
+  return null;
+}
 
 // The entries in this thread that belong to this drill.
 // peer: who grades in this thread (Karo for the owner, Gnarl for a guest).
@@ -13,7 +51,8 @@ export function drillEntries(msgs: Msg[], key: string, peer: string = PEER): Ent
   for (const m of msgs) {
     if (m.sender === peer) {
       const v = DRILL_VERDICT_RE.exec(m.message);
-      if (v && v[1] === key) out.push({ id: m.id, kind: 'grade', ok: v[2] === 'pass', text: m.message.slice(v[0].length).trim(), at: m.created_at });
+      const rating = v ? ratingOfWord(v[2]) : undefined;
+      if (v && rating && v[1] === key) out.push({ id: m.id, kind: 'grade', ok: rating === 'solid', rating, text: m.message.slice(v[0].length).trim(), at: m.created_at });
     } else {
       const ctx = CTX_RE.exec(m.message);
       const body = ctx ? m.message.slice(ctx[0].length) : m.message;

@@ -301,6 +301,7 @@ td .linkBtn { margin-left: 0; }
 .verdict > b { display: block; margin-bottom: 2px; }
 .verdictOk { border-color: var(--success); background: var(--st-good-soft); }
 .verdictFix { border-color: var(--st-bad); background: var(--st-bad-soft); }
+.verdictShaky { border-color: var(--st-warn); background: var(--st-warn-soft); }
 
 /* Lab toolbox (Gorn 11-14): what you'll need, closed by default */
 .toolbox { margin: 12px 0; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; max-width: 68ch; }

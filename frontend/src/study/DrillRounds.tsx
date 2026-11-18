@@ -5,7 +5,7 @@ import styles from '../pages/Study.module.css';
 import { MD_COMPONENTS, chatBreaks, latestThread, refreshThread, THREAD_EVENT } from './studyChat';
 import { type Msg, type StudyChannel } from './studyPeer';
 import { useStudyChannel } from './studyChannel';
-import { drillEntries, mergeEntries, pruneDeleted, toRounds, type Entry } from './drillParse';
+import { drillEntries, gradeRating, latestRating, mergeEntries, pruneDeleted, RATING_ICON, RATING_LABEL, toRounds, type DrillRating, type Entry } from './drillParse';
 
 // Drill rounds (Gorn 11-16). Each drill card keeps every answer Gorn sends and every grade
 // Karo gives, in order, so he can watch an answer get sharper round by round. Same wiring as
@@ -32,12 +32,14 @@ function when(at: string): string {
   return isNaN(d.getTime()) ? '' : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export function DrillRounds({ drillKey, context }: { drillKey: string; context: string }) {
+type Props = { drillKey: string; context: string; onRating?: (r: DrillRating) => void };
+
+export function DrillRounds(p: Props) {
   const ch = useStudyChannel();
-  return ch ? <DrillRoundsFor key={ch.storePrefix} ch={ch} drillKey={drillKey} context={context} /> : null;
+  return ch ? <DrillRoundsFor key={ch.storePrefix} ch={ch} {...p} /> : null;
 }
 
-function DrillRoundsFor({ ch, drillKey, context }: { ch: StudyChannel; drillKey: string; context: string }) {
+function DrillRoundsFor({ ch, drillKey, context, onRating }: Props & { ch: StudyChannel }) {
   const ROUNDS = ch.storePrefix + ROUNDS_KEY, DRAFTS = ch.storePrefix + DRAFTS_KEY;
   const [entries, setEntries] = useState<Entry[]>(() => readMap<Entry[]>(ROUNDS)[drillKey] || []);
   const [draft, setDraft] = useState(() => readMap<string>(DRAFTS)[drillKey] || '');
@@ -68,6 +70,12 @@ function DrillRoundsFor({ ch, drillKey, context }: { ch: StudyChannel; drillKey:
     if (v) all[drillKey] = v; else delete all[drillKey];
     writeMap(DRAFTS, all);
   };
+
+  // The mentor's newest grade goes into progress (Gorn 11-17). Only ever set, never cleared on
+  // absence: a fresh device has no cached rounds and the fetch window may not reach old grades,
+  // so "no grade seen here" does not mean "no grade".
+  const rating = latestRating(entries);
+  useEffect(() => { if (rating) onRating?.(rating); }, [rating]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rounds = toRounds(entries);
   const last = rounds[rounds.length - 1];
@@ -101,16 +109,20 @@ function DrillRoundsFor({ ch, drillKey, context }: { ch: StudyChannel; drillKey:
           <div className={styles.askText}>
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{chatBreaks(r.answer.text)}</ReactMarkdown>
           </div>
-          {r.grades.map(g => (
-            <div key={g.id} className={g.ok ? `${styles.verdict} ${styles.verdictOk}` : `${styles.verdict} ${styles.verdictFix}`}>
-              <b>{g.ok ? '✅ Pass' : '❌ Fix this'}</b>
+          {r.grades.map(g => {
+            const gr = gradeRating(g) ?? 'shaky';
+            const cls = gr === 'solid' ? styles.verdictOk : gr === 'shaky' ? styles.verdictShaky : styles.verdictFix;
+            return (
+            <div key={g.id} className={`${styles.verdict} ${cls}`}>
+              <b>{RATING_ICON[gr]} {RATING_LABEL[gr]}</b>
               {g.text && (
                 <div className={styles.askText}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{chatBreaks(g.text)}</ReactMarkdown>
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       ))}
       {waiting && <p className={styles.muted}>Sent. {ch.name}'s grade will show under this round.</p>}

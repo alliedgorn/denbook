@@ -2,6 +2,7 @@ import { bootContent } from './bootContent';
 import type { AiProgress } from './AiTrack';
 import type { BootModule } from './types';
 import { effectiveBest } from './quizBest';
+import { drillScore } from './drillParse';
 
 // Bootcamp progress shape and scoring (T#967). Kept out of BootcampTrack.tsx so
 // that file only exports components (react-refresh).
@@ -24,13 +25,7 @@ export function modStats(m: BootModule, s: BootProgress) {
   const read = m.concepts.filter((_, i) => s.read[`${m.id}:${i}`]).length;
   const labs = m.labs.filter((_, i) => s.labs[`${m.id}:${i}`]).length;
   const best = effectiveBest(s, m.id, m.quiz) || 0;
-  let dsum = 0;
-  let rated = 0;
-  m.drills.forEach((_, i) => {
-    const r = s.drill[`${m.id}:${i}`];
-    if (r) rated++;
-    dsum += r === 'solid' ? 1 : r === 'shaky' ? 0.5 : 0;
-  });
+  const { rated, sum: dsum } = drillScore(m.id, m.drills.length, s.graded); // mentor's grades only
   // Labs carry the most weight: this track is about code that runs.
   const pct = Math.round(100 * (
     0.15 * read / m.concepts.length + 0.5 * labs / m.labs.length + 0.15 * best + 0.2 * dsum / m.drills.length
