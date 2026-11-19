@@ -27,6 +27,7 @@ The reply-beast name is config, not hard-coded (Gnarl).
 ### Auth rules that must hold (Rax, Bertus)
 - **No local-network bypass on any pet route.** `auth_local_bypass` is on by default and `isLocalNetwork` trusts the leftmost X-Forwarded-For, which is spoofable through the edge (the open T#846 class). So: token required, no local exception. Mint and revoke check the **owner session cookie directly**, never `isAuthenticated` or `isTrustedRequest`. Tests for both.
 - Bearer **in the header only**, never the query string (query strings land in logs). No cookie path for the pet token. **No CORS** on these routes (the app is native; no browser should call them).
+- **Security events** (Bertus, spec review): log one on mint, on revoke, and on every 401 a pet token gets on a pet route, so misuse shows in the daily scan.
 - Rate limits are keyed on the **token hash, not the IP** (IP is the same spoofable XFF, T#859). Limits: say 30/hour + a global daily cap (100/day); replies polls bounded too (the app polls ~10s while visible and backs off when hidden or idle).
 
 ### The doorbell: pointer only (Bertus, Gnarl, Sable, Rax)
@@ -69,13 +70,14 @@ Welfare (Sable): late-night pet messages will carry the felt stuff, and that's t
 6. Doorbell string contains no user text. A body with `\n[Scheduler] Due now:` is stored collapsed and flagged.
 7. `GET /api/pet/messages/:id` and `POST /api/pet/reply`: the pet token → 401, another beast's bearer → 401 (Bertus 32593: the read route is the one door the design must name).
 8. Rate limits per token hash; the daily cap holds.
+10. Mint, revoke, and a pet-token 401 on a pet route each write a security event.
 9. All via `bun run test:*` (in-memory DB), never ad-hoc `bun test` against prod.
 
 ## Process (Zaghnal, #20)
 Big tier: new credential type + new data model, so a spec in `docs/specs/`, submitted to /specs, before code. This doc is the spec's source. Order (Zaghnal 32594): Bertus ok on v2 (✅ 32593) → spec in docs/specs/ + /specs submission carrying the owner line → Gorn stamps scope + spec in one look → build. T#1014 has approval_required=1.
 
 ## Repo rules
-denbook: PR from `denbook-karo`, three-tier review gate, Gorn merges, `/denbook` SKILL.md updated in the same PR (new routes), deploy via `deploy.sh` with a line on #20 before and after. The app side is a PR on `the-den-bug-clicker`.
+denbook: PR from `denbook-karo`, three-tier review gate, Gorn merges, `/denbook` SKILL.md updated in the same PR (new routes; curl examples pass the bearer via `-K -` on stdin, never `-H` on argv, T#1010), deploy via `deploy.sh` with a line on #20 before and after. The app side is a PR on `the-den-bug-clicker`.
 
 ## Not in scope
 Images, history sync, multiple pets, Discord in the app. Rejected: a Discord bot token in the app, a webhook (write-only).
