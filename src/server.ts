@@ -321,33 +321,10 @@ export const GUEST_SESSION_DURATION_MS = 4 * 60 * 60 * 1000; // 4 hours (guest)
 
 // Check if request is from local network
 export function isLocalNetwork(c: Context): boolean {
-  // Check actual client IP — do NOT trust Via header (spoofable).
-  // Caddy should be configured to set X-Real-IP to the actual client IP.
-  const forwarded = c.req.header('x-forwarded-for');
-  const realIp = c.req.header('x-real-ip');
-  const ip = forwarded?.split(',')[0]?.trim() || realIp || '127.0.0.1';
-
-  return ip === '127.0.0.1'
-      || ip === '::1'
-      || ip === 'localhost'
-      || ip.startsWith('192.168.')
-      || ip.startsWith('10.')
-      || ip.startsWith('172.16.')
-      || ip.startsWith('172.17.')
-      || ip.startsWith('172.18.')
-      || ip.startsWith('172.19.')
-      || ip.startsWith('172.20.')
-      || ip.startsWith('172.21.')
-      || ip.startsWith('172.22.')
-      || ip.startsWith('172.23.')
-      || ip.startsWith('172.24.')
-      || ip.startsWith('172.25.')
-      || ip.startsWith('172.26.')
-      || ip.startsWith('172.27.')
-      || ip.startsWith('172.28.')
-      || ip.startsWith('172.29.')
-      || ip.startsWith('172.30.')
-      || ip.startsWith('172.31.');
+  // T#846: socket peer is loopback AND no forwarding header. A request that came
+  // through Caddy is remote, whatever address its headers claim. The old version
+  // trusted the leftmost X-Forwarded-For and private ranges (see client-ip.ts).
+  return isLocalRequest(c);
 }
 
 // Generate session token using HMAC-SHA256
@@ -533,7 +510,7 @@ app.use('/api/*', async (c, next) => {
       return next();
     } else {
       // Invalid/expired token — log and reject
-      const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+      const ip = clientIp(c, 'local');
       logSecurityEvent({
         eventType: 'auth_failure',
         severity: 'warning',
@@ -621,7 +598,7 @@ app.use('/api/*', async (c, next) => {
 
   // Log after handler completes
   try {
-    const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+    const ip = clientIp(c, 'local');
     // Actor extraction chain (T#718 — closes Bertus/Flint #10002 audit-attribution spoof gap):
     // 1. Bearer token identity (set by auth middleware — trusted)
     // 2. Session cookie → "gorn" (browser requests — trusted)
@@ -826,6 +803,7 @@ app.get('/api/session/stats', (c) => {
 // ============================================================================
 
 import { execSync } from 'child_process';
+import { clientIp, clientIpFrom, isLocalFrom, isLocalRequest } from './server/client-ip.ts';
 
 // Load all Beast spinner verbs from their settings.local.json configs
 // Returns a Set of all configured spinner verbs across all Beasts
@@ -1775,17 +1753,11 @@ function validateWsUpgrade(req: Request, server: any): { allowed: boolean; reaso
   }
 
   // 2. Auth check — same as REST: local network OR valid session
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || req.headers.get('x-real-ip')
-    || server.requestIP(req)?.address
-    || '127.0.0.1';
-
-  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === 'localhost'
-    || ip.startsWith('192.168.') || ip.startsWith('10.')
-    || (ip.startsWith('172.') && (() => {
-      const second = parseInt(ip.split('.')[1], 10);
-      return second >= 16 && second <= 31;
-    })());
+  // T#857: same rule as isLocalNetwork (client-ip.ts): the socket peer is
+  // loopback AND no forwarding header. The old inline read trusted the leftmost
+  // X-Forwarded-For, then X-Real-IP, and private ranges.
+  const wsHeader = (n: string) => req.headers.get(n);
+  const isLocal = isLocalFrom(wsHeader, server.requestIP(req)?.address);
 
   // Check session cookie from Cookie header
   const cookies = req.headers.get('cookie') || '';
@@ -1872,9 +1844,7 @@ export default {
       const validation = validateWsUpgrade(req, server);
       if (!validation.allowed) {
         // Audit log rejected WebSocket upgrade attempts
-        const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-          || req.headers.get('x-real-ip')
-          || server.requestIP(req)?.address || 'unknown';
+        const ip = clientIpFrom(n => req.headers.get(n), server.requestIP(req)?.address, 'unknown');
         try {
           sqlite.prepare(
             `INSERT INTO audit_log (actor, actor_type, action, resource_type, resource_id, ip_source, request_method, request_path, status_code)

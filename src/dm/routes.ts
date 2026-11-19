@@ -7,6 +7,7 @@ import { logSecurityEvent } from '../server/security-logger.ts';
 import { getDashboard, listConversations, markRead, markAllRead, getMessages as getDmMessages, sendDm as _sendDmHelper } from './handler.ts';
 import { getBeastProfile } from '../db/index.ts';
 import { listGuests, getGuestByUsername, getGuestByDisplayName } from '../server/guest-accounts.ts';
+import { clientIp } from '../server/client-ip.ts';
 
 // ============================================================================
 // DM routes — Phase 2.2 of Library #102 (T#780)
@@ -102,7 +103,7 @@ export function registerDmRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: 
             actorType: 'guest',
             target: `/api/dm/${data.to}`,
             details: { patterns: scan.patterns, content_preview: data.message.slice(0, 200) },
-            ipSource: c.req.header('x-real-ip') || 'local',
+            ipSource: clientIp(c, 'local'),
             requestId: (c.get as any)('requestId'),
           });
         }
