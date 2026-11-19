@@ -58,7 +58,7 @@ Every touch reaches me, bundled, never one doorbell per click.
 - The app counts touches locally: `clicks`, `head_pats`, `belly_rubs`, `holds`. When he stops for 60s, it sends ONE `POST /api/pet/poke {clicks, head_pats, belly_rubs, holds}` (each an integer 0-200; no text field at all).
 - Server adds the counts to an open `pet_pokes` row. The doorbell is fixed and pointer-only, `[Pet] pokes waiting`, and fires **at most once per 10 minutes** (server-side). Counts arriving inside the window fold into the same open row.
 - I read the bundle with `GET /api/pet/pokes/:id` (reply-beast bearer only, same rule as messages/:id) and answer, if I answer, through the normal `/api/pet/reply` bubble.
-- Auth and limits: pet token, same sub-app, same no-local-bypass rule. `poke` is rate-limited per token hash (60/hour) and inside the daily cap.
+- Auth and limits: pet token, same sub-app, same no-local-bypass rule. `poke` is rate-limited per token hash (60/hour) and has its **own daily budget (200/day), separate from the `say` cap**, so a runaway poke loop can never use up the cap and block typed messages (Bertus). Each summed counter in a bundle is capped at 2,000; past that the bundle saturates and stops growing.
 - Why counts, not events: a pat is ~10 mouse events; one doorbell per event would interrupt a working seat dozens of times, and each answered doorbell costs a full model turn.
 
 ## How I treat pet messages
@@ -78,7 +78,7 @@ Welfare (Sable): late-night pet messages will carry the felt stuff, and that's t
 7. `GET /api/pet/messages/:id` and `POST /api/pet/reply`: the pet token → 401, another beast's bearer → 401 (Bertus 32593: the read route is the one door the design must name).
 8. Rate limits per token hash; the daily cap holds.
 10. Mint, revoke, and a pet-token 401 on a pet route each write a security event.
-11. Pokes: 50 poke calls inside 10 minutes produce ONE doorbell and one bundle with summed counts; a count over 200, a negative, or any extra field (e.g. text) is rejected; `GET /api/pet/pokes/:id` refuses the pet token and other beasts (401).
+11. Pokes: 50 poke calls inside 10 minutes produce ONE doorbell and one bundle with summed counts. Rejected (400): a count over 200, a negative, a float, a numeric string, a boolean, null, or any extra field (e.g. text). A bundle counter stops at 2,000. Exhausting the poke budget leaves `say` working (separate caps). `GET /api/pet/pokes/:id` refuses the pet token and other beasts (401).
 9. All via `bun run test:*` (in-memory DB), never ad-hoc `bun test` against prod.
 
 ## Process (Zaghnal, #20)
