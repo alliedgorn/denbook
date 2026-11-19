@@ -25,10 +25,10 @@ Gorn types a short line into the desktop hyena (macOS app, `alliedgorn/the-den-b
 The reply-beast name is config, not hard-coded (Gnarl).
 
 ### Auth rules that must hold (Rax, Bertus)
-- **No local-network bypass on any pet route.** `auth_local_bypass` is on by default and `isLocalNetwork` trusts the leftmost X-Forwarded-For, which is spoofable through the edge (the open T#846 class). So: token required, no local exception. Mint and revoke check the **owner session cookie directly**, never `isAuthenticated` or `isTrustedRequest`. Tests for both.
+- **No local-network bypass on any pet route.** The general auth honours a local-network exception that, in code, reads forwarding headers. The edge neutralises that today (Caddy overwrites the forwarding headers; measured by Bertus on #20 32598), and PR 161 fixes the code side. The pet routes must not depend on either: token required, no local exception at all. Mint and revoke check the **owner session cookie directly**, never `isAuthenticated` or `isTrustedRequest`. Tests for both.
 - Bearer **in the header only**, never the query string (query strings land in logs). No cookie path for the pet token. **No CORS** on these routes (the app is native; no browser should call them).
 - **Security events** (Bertus, spec review): log one on mint, on revoke, and on every 401 a pet token gets on a pet route, so misuse shows in the daily scan.
-- Rate limits are keyed on the **token hash, not the IP** (IP is the same spoofable XFF, T#859). Limits: say 30/hour + a global daily cap (100/day); replies polls bounded too (the app polls ~10s while visible and backs off when hidden or idle).
+- Rate limits are keyed on the **token hash, not the IP** (the client IP is header-derived; keying on the token avoids depending on it). Limits: say 30/hour + a global daily cap (100/day); replies polls bounded too (the app polls ~10s while visible and backs off when hidden or idle).
 
 ### The doorbell: pointer only (Bertus, Gnarl, Sable, Rax)
 The notification queue is the same channel that carries our system markers, and the pane can't tell a server-written tag from typed text. So the doorbell carries **no user text**: `[Pet] message <id> waiting`. I fetch the body with `GET /api/pet/messages/:id` and read it as DATA. The doorbell string is fixed and server-built.
