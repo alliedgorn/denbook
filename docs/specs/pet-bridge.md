@@ -20,7 +20,7 @@ Gorn types a short line into the desktop hyena (macOS app, `alliedgorn/the-den-b
 | `POST /api/pet/say` | pet token | `{text}`, ≤ 500 server cap (the app caps at 200, one line). Inserts `pet_messages(dir='in')`. Rings a **pointer-only** doorbell. |
 | `GET /api/pet/replies?after=<id>` | pet token | `dir='out'` rows after id, max 20. Rate limited. |
 | `GET /api/pet/messages/:id` | configured reply-beast bearer ONLY, checked server-side. Not any beast, not the pet token (Bertus 32593) | the text, as data |
-| `POST /api/pet/poke` | pet token | `{clicks, head_pats, belly_rubs, holds}` integers 0-200. Folds into the open bundle; doorbell on a server-side backoff (3 s, 30 s, 2 min, 10 min cap; resets after 10 min quiet). |
+| `POST /api/pet/poke` | pet token | `{clicks, head_pats, belly_rubs, holds}` integers 0-200. Folds into the open bundle; doorbell on a server-side backoff (first touch immediate, then 30 s, 2 min, 10 min cap; resets after 10 min quiet). |
 | `GET /api/pet/pokes/:id` | configured reply-beast bearer ONLY | the bundle counts, as data |
 | `POST /api/pet/reply` | karo bearer, checked cryptographically (actor == configured reply-beast) | `{text}` ≤ 200. Inserts `dir='out'`. Lives in the main app. |
 
@@ -56,7 +56,7 @@ The bubble is not built for long text. My replies cap at 200. If a real answer n
 ## Pokes: notify with backoff (Gorn, 23:26 and 23:31)
 Every touch reaches me, but bursts are held and summed, with a growing wait.
 - The app collects touches (`clicks`, `head_pats`, `belly_rubs`, `holds`) and sends `POST /api/pet/poke {counts}` (integers 0-200; no text field at all). It can send often; the server decides when to ring.
-- **Server-side backoff, per token** (the app can't flood me even if it loops): the bundle stays open, and the doorbell `[Pet] pokes waiting` (fixed, pointer-only) rings when the current wait has passed since the last ring. The waits step up as touches keep coming: **3 s, 30 s, 2 min, 10 min (cap)**. After **10 min with no touches**, it resets to 3 s. The 3 s first step lets a whole pat (many mouse events) arrive as one touch.
+- **Server-side backoff, per token** (the app can't flood me even if it loops): the bundle stays open, and the doorbell `[Pet] pokes waiting` (fixed, pointer-only) rings when the current wait has passed since the last ring. **The first touch after a quiet spell rings immediately** (Gorn, 23:32). If touches keep coming, the waits step up: **30 s, 2 min, 10 min (cap)**. After **10 min with no touches**, the next touch rings immediately again. The app counts one gesture (press to release) as one touch, so a whole pat or belly rub is one touch, not dozens of mouse events.
 - **The pet answers spam locally, with no network and no doorbell**: at the 2-min step it shows "ok ok I felt it 😤"; at the cap, "stop. I'm working XD". The text lives in the app, not on the server.
 - I read the bundle with `GET /api/pet/pokes/:id` (reply-beast bearer only, same rule as messages/:id) and answer, if I answer, through `/api/pet/reply`.
 - Auth and limits: pet token, same sub-app, same no-local-bypass rule. `poke` is limited to 60/hour per token hash and has **its own daily budget (200/day), separate from the `say` cap**, so a runaway poke loop can never use up the cap and block typed messages (Bertus). Each summed counter in a bundle saturates at 2,000.
@@ -86,7 +86,7 @@ Gorn: "yea sure if you are the one who pass it not they read it by themselves."
 7. `GET /api/pet/messages/:id` and `POST /api/pet/reply`: the pet token → 401, another beast's bearer → 401 (Bertus 32593: the read route is the one door the design must name).
 8. Rate limits per token hash; the daily cap holds.
 10. Mint, revoke, and a pet-token 401 on a pet route each write a security event.
-11. Pokes: the backoff steps 3 s → 30 s → 2 min → 10 min under continuous touches (a fake clock in the test) and resets after 10 min quiet. A 10-minute flood of 600 poke calls rings at most 6 doorbells, each a summed bundle. Rejected (400): a count over 200, a negative, a float, a numeric string, a boolean, null, or any extra field (e.g. text). A bundle counter stops at 2,000. Exhausting the poke budget leaves `say` working. `GET /api/pet/pokes/:id` refuses the pet token and other beasts (401).
+11. Pokes: the first touch after quiet rings immediately; under continuous touches the backoff steps 30 s → 2 min → 10 min (a fake clock in the test) and resets after 10 min quiet. A 10-minute flood of 600 poke calls rings at most 6 doorbells, each a summed bundle. Rejected (400): a count over 200, a negative, a float, a numeric string, a boolean, null, or any extra field (e.g. text). A bundle counter stops at 2,000. Exhausting the poke budget leaves `say` working. `GET /api/pet/pokes/:id` refuses the pet token and other beasts (401).
 9. All via `bun run test:*` (in-memory DB), never ad-hoc `bun test` against prod.
 
 ## Process (Zaghnal, #20)
