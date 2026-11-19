@@ -5,6 +5,7 @@
  * Same handlers, same DB, just cleaner HTTP layer.
  */
 
+import { deriveAuditActor } from './server/audit-actor.ts';
 import { type Context, type Next } from 'hono';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
@@ -604,35 +605,21 @@ app.use('/api/*', async (c, next) => {
     // 2. Session cookie → "gorn" (browser requests — trusted)
     // 3. Guest session → "[Guest] <username>" (server-set via session — trusted)
     // 4. ?as= query param — logged as legacy signal but NOT used as actor (spoofable)
-    // 5. Path patterns for path-identity routes (e.g. /api/dm/<beast>/...)
-    // 6. Fallback: "unknown"
+    // 5. Path-identity routes (/api/dm/<name>/...) and the x-beast header are CLAIMS:
+    //    logged as "path:<name>" / "header:<name>", never as a bare actor (T#1016)
+    // 6. Fallback: "unknown"  (see src/server/audit-actor.ts)
     // REMOVED (T#718): body.author / body.beast / body.from as actor fallback — client-asserted,
     // spoofable, no cryptographic binding to the calling process. Audit trail now records
     // true-caller only; forensic integrity preserved per Bertus #10002 + Principle 1.
-    const tokenActor = (c.get as any)('actor') as string | undefined;
-    const tokenActorType = (c.get as any)('actorType') as string | undefined;
-    let actor = tokenActor || '';
-    let actorType = tokenActorType || '';
-
-    if (!actor) {
-      if (hasSessionAuth(c)) {
-        actor = 'gorn';
-        actorType = 'human';
-      }
-    }
-    if (!actor) {
-      const role = (c.get as any)('role');
-      const guestUsername = (c.get as any)('guestUsername');
-      if (role === 'guest' && guestUsername) {
-        actor = `[Guest] ${guestUsername}`;
-        actorType = 'guest';
-      }
-    }
-    if (!actor) {
-      // Path-identity routes — /api/dm/<beast>/... has the beast in the path itself
-      const pathMatch = path.match(/\/api\/(?:dm|schedules)\/(?!messages|dashboard|due|pending)([a-z][\w-]*)/i);
-      if (pathMatch) actor = pathMatch[1];
-    }
+    const { actor, actorType } = deriveAuditActor({
+      tokenActor: (c.get as any)('actor') as string | undefined,
+      tokenActorType: (c.get as any)('actorType') as string | undefined,
+      hasSession: hasSessionAuth(c),
+      isGuest: (c.get as any)('role') === 'guest',
+      guestUsername: (c.get as any)('guestUsername'),
+      path,
+      xBeast: c.req.header('x-beast'),
+    });
 
     // ?as= logged as legacy-usage tracking (not used as actor — spoofable)
     const asParam = c.req.query('as') || '';
@@ -649,12 +636,6 @@ app.use('/api/*', async (c, next) => {
       });
     }
 
-    if (!actor) {
-      actor = c.req.header('x-beast') || 'unknown';
-    }
-    if (!actorType) {
-      actorType = 'unknown';
-    }
 
     // bodyData kept in scope (null-tolerated) for potential future per-route use;
     // deliberately not consulted here — see REMOVED note above.
