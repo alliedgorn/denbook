@@ -394,10 +394,10 @@ describe('pokes', () => {
     const t = await mint();
     const cap = PET_LIMITS.pokeBellsPerDay;
     expect(cap).toBe(150);
-    // one touch every 61 s: past the 30 s reset, so each touch is a fresh spree with one immediate ring
+    // one touch every 62 s: past the 30 s reset, so each touch is a fresh spree with one immediate ring
     for (let i = 0; i < cap; i++) {
       await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } });
-      advance(61_000);
+      advance(62_000);
     }
     // under 60 calls per clock hour and well under the daily call budget, so the bell cap is what stops it
     expect(pokeBells().length).toBe(cap);
