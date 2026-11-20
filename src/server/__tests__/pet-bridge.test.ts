@@ -321,14 +321,28 @@ describe('pokes', () => {
     expect(pokeBells().length).toBe(6);               // exactly one
   });
 
-  it('after 10 min quiet the next touch rings immediately again', async () => {
+  it('after 30 s quiet the next touch rings immediately again', async () => {
     const t = await mint();
-    for (let i = 0; i < 6; i++) { await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } }); advance(100); }
+    for (let i = 0; i < 30; i++) { await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } }); advance(1_000); }
     const n = pokeBells().length;
-    advance(10 * 60_000);
+    expect(n).toBe(5);                                // schedule spent: 0, +3, +5, +8, +13
+    advance(29_000);                                  // 30 s since the last touch: reset reached, 60 s summary not yet
     const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } })).json() as any;
     expect(r.muted).toBe(false);
-    expect(pokeBells().length).toBe(n + 2);           // the 60 s summary, then the fresh immediate ring
+    expect(pokeBells().length).toBe(n + 1);           // the fresh immediate ring carries the held counts
+    advance(120_000);
+    expect(pokeBells().length).toBe(n + 1);           // nothing held after it: the summary stays quiet
+  });
+
+  it('under 30 s quiet the schedule does not reset', async () => {
+    const t = await mint();
+    for (let i = 0; i < 30; i++) { await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } }); advance(1_000); }
+    const n = pokeBells().length;
+    expect(n).toBe(5);                                // schedule spent: 0, +3, +5, +8, +13
+    advance(28_000);                                  // 29 s since the last touch
+    const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } })).json() as any;
+    expect(r.muted).toBe(true);
+    expect(pokeBells().length).toBe(n);
   });
 
   it('a 10-minute flood rings at most 6 doorbells', async () => {
@@ -376,20 +390,21 @@ describe('pokes', () => {
   });
 
   // spec test 12
-  it('after 50 poke doorbells in a day a spree rings nothing, counts are kept, say still rings', async () => {
+  it('after the daily cap of poke doorbells a spree rings nothing, counts are kept, say still rings', async () => {
     const t = await mint();
-    // 50 sprees, each 11 min apart, one touch each: one immediate ring per spree
-    for (let i = 0; i < 50; i++) {
+    const cap = PET_LIMITS.pokeBellsPerDay;
+    expect(cap).toBe(150);
+    // one touch every 62 s: past the 30 s reset, so each touch is a fresh spree with one immediate ring
+    for (let i = 0; i < cap; i++) {
       await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } });
-      advance(11 * 60_000);
-      if (i % 4 === 3) advance(0);
+      advance(62_000);
     }
-    // hourly poke budget is 60, so 50 calls across ~9 h never hit it
-    expect(pokeBells().length).toBe(50);
+    // under 60 calls per clock hour and well under the daily call budget, so the bell cap is what stops it
+    expect(pokeBells().length).toBe(cap);
     const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 7 } })).json() as any;
     expect(r.muted).toBe(true);
     advance(120_000);
-    expect(pokeBells().length).toBe(50);
+    expect(pokeBells().length).toBe(cap);
     const open = db.query('SELECT clicks FROM pet_pokes WHERE rung_at IS NULL').get() as any;
     expect(open.clicks).toBe(7);
     await req('POST', '/api/pet/say', { auth: t, body: { text: 'hi' } });

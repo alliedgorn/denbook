@@ -40,11 +40,11 @@ export const PET_LIMITS = {
   pokePerDay: 200,                           // separate from say (Bertus)
   repliesPerHour: 720,                       // the app polls ~10 s while visible
   repliesMax: 20,
-  pokeBellsPerDay: 50,                       // hard cap on poke doorbells (Bertus)
+  pokeBellsPerDay: 150,                      // hard cap on poke doorbells (Bertus; 50 -> 150 with the 30 s reset, Gorn 11-20)
   pokeCountMax: 200,                         // per field, per call
   pokeCounterCap: 2000,                      // per field, per bundle
   pokeQuietSummaryMs: 60_000,                // 60 s quiet: one summary
-  pokeResetMs: 10 * 60_000,                  // 10 min quiet: schedule resets
+  pokeResetMs: 30_000,                       // 30 s quiet: schedule resets (Gorn 11-20, was 10 min)
   pokeSchedule: [0, 3_000, 5_000, 8_000, 13_000], // Gorn 11-19: immediate, +3, +5, +8, +13, then silent
 } as const;
 
@@ -432,7 +432,7 @@ export function createPetApp(deps: PetDeps): Hono {
     let st = db.query('SELECT step, last_ring_at, last_touch_at FROM pet_poke_state WHERE token_id = ?')
       .get(auth.id) as { step: number; last_ring_at: number | null; last_touch_at: number | null } | null;
     if (!st || st.last_touch_at == null || t - st.last_touch_at >= PET_LIMITS.pokeResetMs) {
-      st = { step: 0, last_ring_at: null, last_touch_at: null };     // quiet for 10 min: start over
+      st = { step: 0, last_ring_at: null, last_touch_at: null };     // quiet for 30 s: start over
     }
     const schedule = PET_LIMITS.pokeSchedule;
     let rang = false;
