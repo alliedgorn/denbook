@@ -508,6 +508,101 @@ export function Settings() {
       </div>
 
       <TokenManagement />
+      <PetBridgePanel />
+    </div>
+  );
+}
+
+// ============================================================================
+// Desktop pet bridge (T#1014): the pet's own token. Mint shows it ONCE; Revoke kills it.
+// ============================================================================
+
+interface PetTokenStatus {
+  live: boolean;
+  minted_at: string | null;
+  expires_at: string | null;
+  last_used_at: string | null;
+}
+
+function PetBridgePanel() {
+  const [status, setStatus] = useState<PetTokenStatus | null>(null);
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const res = await fetch('/api/pet/token', { credentials: 'same-origin' });
+      if (!res.ok) { setError('Owner login needed'); return; }
+      setStatus(await res.json());
+      setError(null);
+    } catch {
+      setError('Could not load pet token status');
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const mint = async () => {
+    if (status?.live && !confirm('This replaces the current pet token. The pet will need the new one. Continue?')) return;
+    const res = await fetch('/api/pet/token', { method: 'POST', credentials: 'same-origin' });
+    if (!res.ok) { setError('Mint failed'); return; }
+    const j = await res.json();
+    setFresh(j.token);
+    setCopied(false);
+    load();
+  };
+
+  const revoke = async () => {
+    if (!confirm('Revoke the pet token? The pet stops talking to Karo until you mint a new one.')) return;
+    const res = await fetch('/api/pet/token', { method: 'DELETE', credentials: 'same-origin' });
+    if (!res.ok) { setError('Revoke failed'); return; }
+    setFresh(null);
+    load();
+  };
+
+  const copy = async () => {
+    if (!fresh) return;
+    try { await navigator.clipboard.writeText(fresh); setCopied(true); } catch { setCopied(false); }
+  };
+
+  const when = (v: string | null) => (v ? new Date(v).toLocaleString() : 'never');
+
+  return (
+    <div className={styles.section}>
+      <h2 className={styles.sectionTitle}>Desktop pet</h2>
+      <p className={styles.sectionDesc}>
+        The pet's key: it can send short text and touch counts to Karo and read Karo's replies to the pet. Nothing else.
+        It lasts 30 days. Paste it into the pet's "Connect to Karo…" once; it lives in your Mac's Keychain.
+      </p>
+      {error && <div className={styles.info}><span className={`${styles.infoBadge} ${styles.remote}`}>{error}</span></div>}
+      {status && (
+        <div className={styles.info} style={{ flexWrap: 'wrap', gap: '8px' }}>
+          <span className={`${styles.infoBadge} ${status.live ? styles.local : styles.remote}`}>
+            {status.live ? 'Live' : 'No live token'}
+          </span>
+          {status.live && (
+            <>
+              <span className={styles.infoBadge}>minted {when(status.minted_at)}</span>
+              <span className={styles.infoBadge}>expires {when(status.expires_at)}</span>
+              <span className={styles.infoBadge}>last used {when(status.last_used_at)}</span>
+            </>
+          )}
+        </div>
+      )}
+      {fresh && (
+        <div className={styles.info} style={{ flexWrap: 'wrap', gap: '8px' }}>
+          <span className={styles.infoLabel}>New token (shown once):</span>
+          <code style={{ wordBreak: 'break-all', userSelect: 'all' }}>{fresh}</code>
+          <button onClick={copy} className={styles.button} style={{ padding: '6px 12px', fontSize: 12 }}>
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+      )}
+      <div className={styles.actions}>
+        <button onClick={mint} className={styles.button}>{status?.live ? 'Mint a new token' : 'Mint'}</button>
+        {status?.live && <button onClick={revoke} className={styles.dangerButton}>Revoke</button>}
+      </div>
     </div>
   );
 }
