@@ -329,6 +329,7 @@ describe('pokes', () => {
     advance(29_000);                                  // 30 s since the last touch: reset reached, 60 s summary not yet
     const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } })).json() as any;
     expect(r.muted).toBe(false);
+    expect(r.rang).toBe(true);
     expect(pokeBells().length).toBe(n + 1);           // the fresh immediate ring carries the held counts
     advance(120_000);
     expect(pokeBells().length).toBe(n + 1);           // nothing held after it: the summary stays quiet
@@ -342,7 +343,20 @@ describe('pokes', () => {
     advance(28_000);                                  // 29 s since the last touch
     const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } })).json() as any;
     expect(r.muted).toBe(true);
+    expect(r.rang).toBe(false);
     expect(pokeBells().length).toBe(n);
+  });
+
+  it('rang is true only on the call that rang: a touch inside a gap is neither rang nor muted', async () => {
+    const t = await mint();
+    const first = await (await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } })).json() as any;
+    expect(first).toEqual({ muted: false, rang: true });
+    advance(1_000);                                   // inside the +3 s gap
+    const gap = await (await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } })).json() as any;
+    expect(gap).toEqual({ muted: false, rang: false });
+    advance(2_000);                                   // +3 s since the ring: the next one is due
+    const due = await (await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } })).json() as any;
+    expect(due).toEqual({ muted: false, rang: true });
   });
 
   it('a 10-minute flood rings at most 6 doorbells', async () => {

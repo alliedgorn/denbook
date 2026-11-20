@@ -20,7 +20,7 @@ Gorn types a short line into the desktop hyena (macOS app, `alliedgorn/the-den-b
 | `POST /api/pet/say` | pet token | `{text}`, ≤ 500 server cap (the app caps at 200, one line). Inserts `pet_messages(dir='in')`. Rings a **pointer-only** doorbell. |
 | `GET /api/pet/replies?after=<id>` | pet token | `dir='out'` rows after id, max 20. Rate limited. |
 | `GET /api/pet/messages/:id` | configured reply-beast bearer ONLY, checked server-side. Not any beast, not the pet token (Bertus 32593) | the text, as data |
-| `POST /api/pet/poke` | pet token | `{clicks, head_pats, belly_rubs, holds}` integers 0-200. Folds into the open bundle; doorbell schedule: immediate, then 3 s, 5 s, 8 s, 13 s, then silent; one summary after 60 s quiet; reset after 30 s quiet (Gorn 11-20, was 10 min). Response carries `muted`. |
+| `POST /api/pet/poke` | pet token | `{clicks, head_pats, belly_rubs, holds}` integers 0-200. Folds into the open bundle; doorbell schedule: immediate, then 3 s, 5 s, 8 s, 13 s, then silent; one summary after 60 s quiet; reset after 30 s quiet (Gorn 11-20, was 10 min). Response carries `muted` and `rang` (true when this call rang the doorbell, so an answer is coming; the app shows thinking dots on it). |
 | `GET /api/pet/pokes/:id` | configured reply-beast bearer ONLY | the bundle counts, as data |
 | `POST /api/pet/reply` | karo bearer, checked cryptographically (actor == configured reply-beast) | `{text}` ≤ 200. Inserts `dir='out'`. Lives in the main app. |
 
