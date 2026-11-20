@@ -79,6 +79,9 @@ export interface PetDeps {
   replyBeast?: string;
   now?: () => number;
   timers?: PetTimers;
+  /** Writes one audit_log row for a pet-door request (Gnarl A1: the separate door separates
+   *  auth, not observability). Never the body. */
+  audit?: (row: { actor: string; actorType: string; method: string; path: string; status: number }) => void;
 }
 
 const realTimers: PetTimers = {
@@ -149,9 +152,13 @@ function iso(ms: number | null | undefined): string | null {
 function dayKey(ms: number): string { return new Date(ms).toISOString().slice(0, 10); }
 function hourKey(ms: number): string { return new Date(ms).toISOString().slice(0, 13); }
 
-/** Collapse newlines and control characters to single spaces (spec: defence in depth). */
+/** Collapse newlines and control characters to single spaces (spec: defence in depth), and drop
+ *  bidi and zero-width characters so the text can't display reordered in the pane (Gnarl N3). */
 export function cleanPetText(raw: string): string {
-  return raw.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').replace(/ {2,}/g, ' ').trim();
+  return raw
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g, '')
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ')
+    .replace(/ {2,}/g, ' ').trim();
 }
 
 function markerFlags(text: string): string[] {
@@ -189,6 +196,28 @@ export function createPetApp(deps: PetDeps): Hono {
   const summaryTimers = new Map<number, unknown>();
 
   const app = new Hono();
+
+  // Audit (Gnarl A1): the general audit middleware never sees this door, so it writes its own
+  // rows, for the routes it answers. Mutations always; GET /token (owner-sensitive) too; the
+  // /replies poll is skipped like other GETs. The main-app pet routes are audited by the main
+  // middleware, so they are skipped here.
+  const OWN_PATHS = new Set(['/api/pet/token', '/api/pet/say', '/api/pet/replies', '/api/pet/poke']);
+  app.use('*', async (c, next) => {
+    await next();
+    if (!deps.audit) return;
+    const path = c.req.path, method = c.req.method;
+    if (!OWN_PATHS.has(path)) return;
+    if (method === 'GET' && path !== '/api/pet/token') return;
+    const cookieRoute = path === '/api/pet/token';
+    const owner = cookieRoute && deps.isOwnerCookie(c);
+    try {
+      deps.audit({
+        actor: cookieRoute ? (owner ? 'gorn' : 'unknown') : 'pet',
+        actorType: owner ? 'human' : 'unknown',
+        method, path, status: c.res.status,
+      });
+    } catch { /* an audit write must never break the request; the security events still stand */ }
+  });
 
   function security(c: Context, eventType: SecurityEvent['eventType'], severity: SecurityEvent['severity'],
                     details: Record<string, unknown>) {
@@ -273,7 +302,8 @@ export function createPetApp(deps: PetDeps): Hono {
   /** The pet token behind this request, or a 401 response (with a security event). */
   function petAuth(c: Context): { id: number; hash: string } | Response {
     const fail = (reason: string) => {
-      security(c, 'pet_token_rejected', 'warning', { reason });
+      // no token at all is scanner noise: info, so it can't flood the warnings (Gnarl N2)
+      security(c, 'pet_token_rejected', reason === 'missing' ? 'info' : 'warning', { reason });
       return c.json({ error: 'Invalid or missing pet token' }, 401) as unknown as Response;
     };
     if (tokenInQuery(c)) return fail('token_in_query');
@@ -328,8 +358,11 @@ export function createPetApp(deps: PetDeps): Hono {
     if (!take(auth.hash, `replies:h:${hourKey(t)}`, PET_LIMITS.repliesPerHour)) {
       return c.json({ error: 'rate_limited' }, 429);
     }
+    // only replies since this token was minted: a new or stolen token can't read the history (Gnarl N1)
+    const minted = db.query('SELECT created_at FROM pet_tokens WHERE id = ?').get(auth.id) as { created_at: number };
     const rows = db.query(`SELECT id, text, created_at FROM pet_messages WHERE dir = 'out' AND id > ?
-                           ORDER BY id ASC LIMIT ?`).all(Number(afterRaw), PET_LIMITS.repliesMax) as
+                           AND created_at >= ? ORDER BY id ASC LIMIT ?`)
+      .all(Number(afterRaw), minted.created_at, PET_LIMITS.repliesMax) as
       { id: number; text: string; created_at: number }[];
     return c.json({ replies: rows.map(r => ({ id: r.id, text: r.text, created_at: iso(r.created_at) })) });
   });

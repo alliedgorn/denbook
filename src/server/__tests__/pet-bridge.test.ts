@@ -21,6 +21,7 @@ let events: SecurityEvent[];
 let bells: string[];
 let timers: { at: number; fn: () => void; live: boolean }[];
 let app: Hono;
+let audits: { actor: string; actorType: string; method: string; path: string; status: number }[];
 
 const OWNER = 'oracle_session=owner-cookie';
 const GUEST = 'oracle_session=guest-cookie';
@@ -38,6 +39,7 @@ function build() {
   events = [];
   bells = [];
   timers = [];
+  audits = [];
   const log = (e: SecurityEvent) => { events.push(e); };
   app = new Hono();
   app.route('/api/pet', createPetApp({
@@ -49,6 +51,7 @@ function build() {
     scan: (text) => (/ignore previous instructions/i.test(text) ? { flagged: true, patterns: ['ignore'] } : { flagged: false, patterns: [] }),
     replyBeast: 'karo',
     now: () => clock,
+    audit: (row) => { audits.push(row); },
     timers: {
       set: (fn, ms) => { const t = { at: clock + ms, fn, live: true }; timers.push(t); return t; },
       clear: (h) => { (h as any).live = false; },
@@ -457,5 +460,55 @@ describe('the pet token works nowhere else', () => {
         }
       }
     }
+  });
+});
+
+// Review follow-ups on fd62ed7 (Gnarl #20 32769: A1, N1, N2, N3)
+describe('review follow-ups', () => {
+  it('A1: mint, revoke, say and poke write audit rows; the replies poll does not; no body is kept', async () => {
+    const tok = await mint();
+    await req('POST', '/api/pet/say', { auth: tok, body: { text: 'secret words' } });
+    await req('POST', '/api/pet/poke', { auth: tok, body: { clicks: 1 } });
+    await req('GET', '/api/pet/replies', { auth: tok });
+    await req('DELETE', '/api/pet/token', { cookie: OWNER });
+    await req('POST', '/api/pet/token', { cookie: GUEST });
+    const seen = audits.map(a => `${a.actor} ${a.method} ${a.path} ${a.status}`);
+    expect(seen).toEqual([
+      'gorn POST /api/pet/token 200',
+      'pet POST /api/pet/say 200',
+      'pet POST /api/pet/poke 200',
+      'gorn DELETE /api/pet/token 200',
+      'unknown POST /api/pet/token 401',
+    ]);
+    expect(JSON.stringify(audits)).not.toContain('secret words');
+  });
+
+  it('A1: the main-app pet routes are not audited by the pet door (the main middleware does it)', async () => {
+    await req('POST', '/api/pet/reply', { auth: KARO, body: { text: 'hi' } });
+    expect(audits).toEqual([]);
+  });
+
+  it('N1: replies are only those since this token was minted', async () => {
+    await req('POST', '/api/pet/reply', { auth: KARO, body: { text: 'old one' } });
+    clock += 1000;
+    const tok = await mint();
+    await req('POST', '/api/pet/reply', { auth: KARO, body: { text: 'new one' } });
+    const j = await (await req('GET', '/api/pet/replies?after=0', { auth: tok })).json() as any;
+    expect(j.replies.map((r: any) => r.text)).toEqual(['new one']);
+  });
+
+  it('N2: no token at all is logged as info, a bad pet_ token as warning', async () => {
+    await req('POST', '/api/pet/say', { body: { text: 'x' } });
+    await req('POST', '/api/pet/say', { auth: 'Bearer pet_' + 'a'.repeat(48), body: { text: 'x' } });
+    const rej = events.filter(e => e.eventType === 'pet_token_rejected');
+    expect(rej.map(e => `${(e.details as any).reason} ${e.severity}`)).toEqual(['missing info', 'unknown warning']);
+  });
+
+  it('N3: bidi and zero-width characters are stripped from stored text', async () => {
+    const tok = await mint();
+    const res = await req('POST', '/api/pet/say', { auth: tok, body: { text: 'a\u202eb\u200bc\u2066d\ufeffe' } });
+    const { id } = await res.json() as any;
+    const row = db.query('SELECT text FROM pet_messages WHERE id = ?').get(id) as { text: string };
+    expect(row.text).toBe('abcde');
   });
 });

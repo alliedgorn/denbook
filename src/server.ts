@@ -465,6 +465,12 @@ app.route('/api/pet', createPetApp({
   logSecurity: logSecurityEvent,
   scan: scanForInjection,
   replyBeast: process.env.PET_REPLY_BEAST || 'karo',
+  audit: ({ actor, actorType, method, path, status }) => {
+    sqlite.prepare(
+      `INSERT INTO audit_log (actor, actor_type, action, resource_type, resource_id, ip_source, request_method, request_path, status_code, request_id)
+       VALUES (?, ?, ?, 'pet', ?, NULL, ?, ?, ?, ?)`
+    ).run(actor, actorType, `${method} ${path}`, path.split('/')[3] || null, method, path, status, generateRequestId());
+  },
 }));
 
 // ============================================================================
