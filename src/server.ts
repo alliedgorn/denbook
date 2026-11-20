@@ -163,7 +163,9 @@ import {
   listTokens,
   pruneBeastTokens,
   getTokenInfo,
+  hmacTokenHash,
 } from './server/beast-tokens.ts';
+import { createPetApp, registerPetBeastRoutes, petTokenTripwire, ownerCookieCheck } from './pet/routes.ts';
 
 import {
   listTraces,
@@ -284,10 +286,15 @@ app.notFound((c) => {
 });
 
 // CORS middleware — restricted to known origins (T#502)
-app.use('*', cors({
+// Not on the pet bridge (T#1014): the pet is a native app and no browser should call it.
+const corsMiddleware = cors({
   origin: ['http://localhost:47778', 'http://127.0.0.1:47778', 'https://denbook.online'],
   credentials: true,
-}));
+});
+app.use('*', async (c, next) => {
+  if (c.req.path === '/api/pet' || c.req.path.startsWith('/api/pet/')) return next();
+  return corsMiddleware(c, next);
+});
 
 // Security headers middleware (T#502 — Talon audit finding, T#503 — CSP)
 app.use('*', async (c, next) => {
@@ -444,11 +451,38 @@ initGuestTables(sqlite);
 initGuestSafetyMigrations(sqlite);
 
 // ============================================================================
+// Pet bridge (T#1014, Spec #61): its own door, mounted on the static /api/pet prefix BEFORE the
+// general auth middleware below. It knows only the owner session cookie (checked as a cookie,
+// owner role only) and the pet_ token; no den_ bearer, no local-network exception. The
+// reply-beast's routes (messages/:id, pokes/:id, reply) are registered later in the main app.
+// ============================================================================
+
+app.route('/api/pet', createPetApp({
+  db: sqlite,
+  hash: hmacTokenHash,
+  isOwnerCookie: ownerCookieCheck(parseSessionToken, SESSION_COOKIE_NAME),
+  notify: (beast, message) => { enqueueNotification(beast, message, { from: 'pet' }); },
+  logSecurity: logSecurityEvent,
+  scan: scanForInjection,
+  replyBeast: process.env.PET_REPLY_BEAST || 'karo',
+  audit: ({ actor, actorType, method, path, status }) => {
+    sqlite.prepare(
+      `INSERT INTO audit_log (actor, actor_type, action, resource_type, resource_id, ip_source, request_method, request_path, status_code, request_id)
+       VALUES (?, ?, ?, 'pet', ?, NULL, ?, ?, ?, ?)`
+    ).run(actor, actorType, `${method} ${path}`, path.split('/')[3] || null, method, path, status, generateRequestId());
+  },
+}));
+
+// ============================================================================
 // Auth Middleware (protects /api/* except auth routes)
 // ============================================================================
 
 app.use('/api/*', async (c, next) => {
   const path = c.req.path;
+
+  // T#1014 tripwire: a pet_ token is refused everywhere the general middleware runs
+  const petRefusal = petTokenTripwire(c, logSecurityEvent);
+  if (petRefusal) return petRefusal;
 
   // Skip auth for certain endpoints
   const publicPaths = [
@@ -1624,6 +1658,9 @@ try { sqlite.prepare(`
     updated_at TEXT NOT NULL
   )
 `).run(); } catch { /* exists */ }
+
+// Pet bridge, the reply-beast's side (T#1014): read a message / poke bundle, post a reply
+registerPetBeastRoutes(app, { db: sqlite, replyBeast: process.env.PET_REPLY_BEAST || 'karo' });
 
 // Prowl routes extracted to src/prowl/routes.ts (T#767)
 registerProwlRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, requireBeastIdentity, wsBroadcast, enqueueNotification });

@@ -36,7 +36,10 @@ export type SecurityEventType =
   | 'token_rotation_grace_used'       // Spec #52 — stale-in-flight grace window absorbed
   | 'token_chain_compromised'         // Spec #52 — rotation-detection trip; chain revoked
   | 'token_chain_revoked'             // Spec #52 — owner-revoke walked the chain
-  | 'token_rotation_attempted_invalid'; // Spec #52 — rotate attempted with invalid/expired/locked token
+  | 'token_rotation_attempted_invalid' // Spec #52 — rotate attempted with invalid/expired/locked token
+  | 'pet_token_minted'                // T#1014 — owner minted a pet_ token
+  | 'pet_token_revoked'               // T#1014 — owner revoked the pet_ token
+  | 'pet_token_rejected';             // T#1014 — a pet_ token refused (bad/expired/revoked, or used outside the pet routes)
 
 export type SecuritySeverity = 'info' | 'warning' | 'critical';
 

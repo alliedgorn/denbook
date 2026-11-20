@@ -171,6 +171,11 @@ function hmacHash(token: string): string {
   return createHmac('sha256', TOKEN_HMAC_SECRET).update(token).digest('hex');
 }
 
+/** The same HMAC scheme, for other token types stored by hash (pet_ tokens, T#1014). */
+export function hmacTokenHash(token: string): string {
+  return hmacHash(token);
+}
+
 // ============================================================================
 // Token generation
 // ============================================================================
