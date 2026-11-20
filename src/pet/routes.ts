@@ -451,7 +451,8 @@ export function createPetApp(deps: PetDeps): Hono {
 
     const bellsLeft = used(auth.hash, `pokebell:d:${dayKey(t)}`) < PET_LIMITS.pokeBellsPerDay;
     const muted = !rang && (st.step >= schedule.length || !bellsLeft);
-    return c.json({ muted });
+    // rang: this call rang Karo (so an answer is coming); the app shows thinking dots on it (Gorn 11-20)
+    return c.json({ muted, rang });
   });
 
   return app;
