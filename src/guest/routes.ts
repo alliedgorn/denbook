@@ -9,6 +9,7 @@ import { getGuestByUsername, changeGuestPassword, updateGuestProfile, checkGuest
 import { checkGuestPostRate, checkGuestDmRate, checkGuestContentLength, scanForInjection } from '../server/guest-safety.ts';
 import { logSecurityEvent } from '../server/security-logger.ts';
 import { clientIp } from '../server/client-ip.ts';
+import { processImageForStorage, ImageProcessingError } from '../server/image-processing.ts';
 
 interface GuestHelpers {
   wsBroadcast: (event: string, data: any) => void;
@@ -625,10 +626,23 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       return c.json({ error: 'File content does not match an allowed image type' }, 400);
     }
 
-    const ext = file.type.split('/')[1] === 'jpeg' ? 'jpg' : file.type.split('/')[1];
-    const filename = `guest-${guestUsername}-avatar.${ext}`;
+    // Strip EXIF/XMP/IPTC (GPS, device) before storing, and fail CLOSED like every other
+    // upload path (T#809, sister to T#937/T#881): the avatar is served publicly, and the raw
+    // bytes are never written. The type comes from the magic bytes, not the client's claim.
+    const inExt = isJpeg ? '.jpg' : isPng ? '.png' : '.webp';
+    const inMime = isJpeg ? 'image/jpeg' : isPng ? 'image/png' : 'image/webp';
+    let out;
+    try {
+      out = await processImageForStorage(Buffer.from(buffer), { ext: inExt, mime: inMime });
+    } catch (e) {
+      const unavailable = e instanceof ImageProcessingError && e.sharpUnavailable;
+      console.error(`[Guest avatar] image refused (T#809): ${(e as Error).message}`);
+      return c.json({ error: unavailable ? 'Image processing unavailable. Try again later.' : 'Could not process image.' },
+        unavailable ? 503 : 400);
+    }
+    const filename = `guest-${guestUsername}-avatar${out.ext}`;
     const filePath = path.join(UPLOADS_DIR, filename);
-    await Bun.write(filePath, buffer);
+    await Bun.write(filePath, out.buffer);
 
     const avatarUrl = `/api/f/${filename}`;
     updateGuestProfile(sqlite, guest.id, { avatar_url: avatarUrl });
