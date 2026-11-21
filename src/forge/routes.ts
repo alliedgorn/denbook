@@ -5,6 +5,7 @@ import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { Database } from 'bun:sqlite';
 import { ORACLE_DATA_DIR } from '../config.ts';
+import { processImageForStorage, ImageProcessingError } from '../server/image-processing.ts';
 
 // Minimal magic-byte image detector (moved from server.ts duplicate)
 function detectImageType(buffer: Buffer): { ext: string; mime: string } | null {
@@ -1132,32 +1133,19 @@ export function registerForgeRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       const imageType = detectImageType(buffer);
       if (!imageType) return c.json({ error: 'Invalid image. Only JPG, PNG, GIF, WebP allowed.' }, 400);
 
-      // Process with sharp: EXIF rotation + keep date + strip GPS + resize
-      let processedBuffer = buffer;
-      let ext = imageType.ext;
-      let captureDate: string | null = null;
+      // Resize + EXIF strip, fail CLOSED (T#937, T#881). The capture date is
+      // read before the strip; nothing else from EXIF is kept.
+      let processedBuffer: Buffer;
+      let ext: string;
+      let captureDate: string | null;
       try {
-        const sharp = require('sharp');
-        // Extract EXIF date before processing
-        const metadata = await sharp(buffer).metadata();
-        if (metadata.exif) {
-          try {
-            // Parse EXIF for DateTimeOriginal (tag 0x9003)
-            const exifStr = metadata.exif.toString('binary');
-            const dateMatch = exifStr.match(/(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
-            if (dateMatch) {
-              captureDate = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T${dateMatch[4]}:${dateMatch[5]}:${dateMatch[6]}.000Z`;
-            }
-          } catch { /* date extraction failed */ }
-        }
-        processedBuffer = await sharp(buffer)
-          .rotate()
-          .resize(1920, null, { withoutEnlargement: true })
-          .jpeg({ quality: 95 })
-          .withMetadata({ orientation: undefined })
-          .toBuffer();
-        ext = '.jpg';
-      } catch { /* sharp not available */ }
+        const out = await processImageForStorage(buffer, { ext: imageType.ext, mime: imageType.mime, forceJpeg: true });
+        processedBuffer = out.buffer; ext = out.ext; captureDate = out.captureDate;
+      } catch (e) {
+        const unavailable = e instanceof ImageProcessingError && e.sharpUnavailable;
+        console.error(`[Routine] photo refused (T#937): ${(e as Error).message}`);
+        return c.json({ error: unavailable ? 'Image processing unavailable. Try again later.' : 'Could not process image.' }, unavailable ? 503 : 400);
+      }
 
       const filename = `${crypto.randomUUID()}${ext}`;
       fs.writeFileSync(path.join(ROUTINE_UPLOADS, filename), processedBuffer);
