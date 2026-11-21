@@ -49,8 +49,11 @@ export const PET_LIMITS = {
   // `special` touches (Gorn 11-21) have their own rhythm and budget, so they never spend the pat/rub
   // schedule: a ring every 8 s at most while they keep coming, with no stop after the fifth
   pokeSpecialGapMs: 8_000,
-  pokeSpecialPerHour: 240,
-  pokeSpecialPerDay: 600,
+  // raised 240/600 -> 1200/4000 (Gorn 11-21, "more feeds cap please"): treats ride this lane and the
+  // pet sends about one call a second while feeding, so 240 was four minutes. A call only adds to
+  // counters; what reaches Karo is the bell cap below, which does NOT move.
+  pokeSpecialPerHour: 1200,
+  pokeSpecialPerDay: 4000,
   pokeSpecialBellsPerDay: 120,
 } as const;
 
@@ -61,6 +64,17 @@ export const PET_LIMITS = {
 const POKE_FIELDS = ['clicks', 'head_pats', 'belly_rubs', 'holds', 'special', 'treats'] as const;
 type PokeField = typeof POKE_FIELDS[number];
 const SPECIAL_LANE: readonly PokeField[] = ['special', 'treats'];
+
+// Which food was fed (Gorn 11-21: "you should see what I'm feeding, can I choose food?"). A poke
+// still carries no text: `foods` is {id: count} with ids ONLY from this fixed list, so nothing
+// free-typed ever reaches Karo. The pet maps each emoji / drawn food to one of these ids.
+export const PET_FOODS = [
+  'pizza', 'burger', 'fries', 'hotdog', 'fried_chicken', 'chicken', 'steak', 'pork', 'ribs', 'sushi',
+  'onigiri', 'rice', 'khao_man_gai', 'pad_thai', 'ramen', 'noodles', 'dumplings', 'bread', 'croissant',
+  'pancakes', 'waffles', 'donut', 'cake', 'cupcake', 'cookie', 'chocolate', 'candy', 'icecream',
+  'milk', 'milkshake', 'bubble_tea',
+] as const;
+const FOOD_SET = new Set<string>(PET_FOODS);
 const isSpecialLane = (f: PokeField) => SPECIAL_LANE.includes(f);
 
 /** Marker shapes that must never look like a system line when the text is read (spec). */
@@ -141,6 +155,8 @@ export function ensurePetTables(db: Database): void {
   )`);
   try { db.exec('ALTER TABLE pet_pokes ADD COLUMN special INTEGER NOT NULL DEFAULT 0'); } catch { /* exists */ }
   try { db.exec('ALTER TABLE pet_pokes ADD COLUMN treats INTEGER NOT NULL DEFAULT 0'); } catch { /* exists */ }
+  // {food id: count} for the treats in this bundle, ids from PET_FOODS only
+  try { db.exec('ALTER TABLE pet_pokes ADD COLUMN foods TEXT'); } catch { /* exists */ }
   // per-token poke schedule state (survives a restart; the 60 s summary timer does not)
   db.exec(`CREATE TABLE IF NOT EXISTS pet_poke_state (
     token_id INTEGER PRIMARY KEY,
@@ -159,6 +175,21 @@ export function ensurePetTables(db: Database): void {
     count INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (token_hash, bucket)
   )`);
+}
+
+/** A stored foods column back to {id: count}, keeping only known ids and sane counts. */
+function parseFoods(raw: string | null | undefined): Record<string, number> {
+  if (!raw) return {};
+  try {
+    const obj = JSON.parse(raw);
+    const out: Record<string, number> = {};
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      for (const [id, n] of Object.entries(obj)) {
+        if (FOOD_SET.has(id) && typeof n === 'number' && Number.isInteger(n) && n > 0) out[id] = n;
+      }
+    }
+    return out;
+  } catch { return {}; }
 }
 
 // ============================================================================
@@ -438,13 +469,30 @@ export function createPetApp(deps: PetDeps): Hono {
       return c.json({ error: 'Body must be an object of counts' }, 400);
     }
     const counts: Record<PokeField, number> = { clicks: 0, head_pats: 0, belly_rubs: 0, holds: 0, special: 0, treats: 0 };
+    const foods: Record<string, number> = {};
     for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
+      if (k === 'foods') {
+        if (!v || typeof v !== 'object' || Array.isArray(v)) return c.json({ error: 'foods must be an object of counts' }, 400);
+        const entries = Object.entries(v as Record<string, unknown>);
+        if (entries.length > PET_FOODS.length) return c.json({ error: 'Too many foods' }, 400);
+        for (const [id, n] of entries) {
+          if (!FOOD_SET.has(id)) return c.json({ error: 'Unknown food' }, 400);   // never echo the key
+          if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > PET_LIMITS.pokeCountMax) {
+            return c.json({ error: `food counts must be integers 1-${PET_LIMITS.pokeCountMax}` }, 400);
+          }
+          foods[id] = n;
+        }
+        continue;
+      }
       if (!(POKE_FIELDS as readonly string[]).includes(k)) return c.json({ error: `Unknown field ${k}` }, 400);
       if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > PET_LIMITS.pokeCountMax) {
         return c.json({ error: `${k} must be an integer 0-${PET_LIMITS.pokeCountMax}` }, 400);
       }
       counts[k as PokeField] = v;
     }
+    // the foods say which treats these were, so they can't add up to more than the treats
+    const foodTotal = Object.values(foods).reduce((a, n) => a + n, 0);
+    if (foodTotal > counts.treats) return c.json({ error: 'foods add up to more than treats' }, 400);
     const hasSpecial = SPECIAL_LANE.some(f => counts[f] > 0);
     const hasRegular = POKE_FIELDS.some(f => !isSpecialLane(f) && counts[f] > 0);
     // each kind is charged to its own budget, and a mixed call to both (Gnarl N1): a long run of special
@@ -466,6 +514,12 @@ export function createPetApp(deps: PetDeps): Hono {
               treats = MIN(?, treats + ?) WHERE id = ?`)
       .run(cap, counts.clicks, cap, counts.head_pats, cap, counts.belly_rubs, cap, counts.holds,
            cap, counts.special, cap, counts.treats, b.id);
+    if (foodTotal > 0) {
+      const row = db.query('SELECT foods FROM pet_pokes WHERE id = ?').get(b.id) as { foods: string | null } | null;
+      const held = parseFoods(row?.foods);
+      for (const [id, n] of Object.entries(foods)) held[id] = Math.min(cap, (held[id] ?? 0) + n);
+      db.query('UPDATE pet_pokes SET foods = ? WHERE id = ?').run(JSON.stringify(held), b.id);
+    }
 
     const saved = db.query('SELECT step, last_ring_at, last_touch_at, special_ring_at FROM pet_poke_state WHERE token_id = ?')
       .get(auth.id) as { step: number; last_ring_at: number | null; last_touch_at: number | null;
@@ -557,7 +611,7 @@ export function registerPetBeastRoutes(app: { get: Function; post: Function }, d
     if (!r) return c.json({ error: 'Not found' }, 404);
     return c.json({
       id: r.id, clicks: r.clicks, head_pats: r.head_pats, belly_rubs: r.belly_rubs, holds: r.holds,
-      special: r.special ?? 0, treats: r.treats ?? 0,
+      special: r.special ?? 0, treats: r.treats ?? 0, foods: parseFoods(r.foods),
       opened_at: iso(r.opened_at), rung_at: iso(r.rung_at),
     });
   });
