@@ -485,6 +485,23 @@ describe('special touches (Gorn 11-21)', () => {
     expect(open.special).toBe(5);
   });
 
+  it('a mixed call is charged to both budgets (Gnarl N1)', async () => {
+    const t = await mint();
+    for (let i = 0; i < PET_LIMITS.pokePerHour; i++) await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } });
+    expect((await req('POST', '/api/pet/poke', { auth: t, body: { special: 1, clicks: 1 } })).status).toBe(429);
+    expect((await req('POST', '/api/pet/poke', { auth: t, body: { special: 1 } })).status).toBe(200);
+  });
+
+  it('special touches keep their own clock: they do not hold off the pat schedule reset (Gnarl N2)', async () => {
+    const t = await mint();
+    for (let i = 0; i < 30; i++) { await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } }); advance(1_000); }
+    expect((await (await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } })).json() as any).muted).toBe(true);
+    for (let i = 0; i < 31; i++) { await special(t); advance(1_000); }     // 31 s of only special touches
+    const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { head_pats: 1 } })).json() as any;
+    expect(r.muted).toBe(false);
+    expect(r.rang).toBe(true);
+  });
+
   it('treats ride the normal schedule and reach the reply beast', async () => {
     const t = await mint();
     const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { treats: 3 } })).json() as any;

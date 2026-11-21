@@ -435,11 +435,16 @@ export function createPetApp(deps: PetDeps): Hono {
     }
     const hasSpecial = counts.special > 0;
     const hasRegular = POKE_FIELDS.some(f => f !== 'special' && counts[f] > 0);
-    // a call with special touches is counted on its own budget, so a long run of them can't block pats
-    const budget = hasSpecial
-      ? takeBoth(auth.hash, 'pokespecial', PET_LIMITS.pokeSpecialPerHour, PET_LIMITS.pokeSpecialPerDay)
-      : takeBoth(auth.hash, 'poke', PET_LIMITS.pokePerHour, PET_LIMITS.pokePerDay);
-    if (!budget) return c.json({ error: 'rate_limited' }, 429);
+    // each kind is charged to its own budget, and a mixed call to both (Gnarl N1): a long run of special
+    // touches can't block pats, and a bug that tacks `special` onto every call still meets the pat budget
+    const t0 = now();
+    const room = (kind: string, perHour: number, perDay: number) =>
+      used(auth.hash, `${kind}:h:${hourKey(t0)}`) < perHour && used(auth.hash, `${kind}:d:${dayKey(t0)}`) < perDay;
+    const regularOk = !hasRegular || room('poke', PET_LIMITS.pokePerHour, PET_LIMITS.pokePerDay);
+    const specialOk = !hasSpecial || room('pokespecial', PET_LIMITS.pokeSpecialPerHour, PET_LIMITS.pokeSpecialPerDay);
+    if (!regularOk || !specialOk) return c.json({ error: 'rate_limited' }, 429);
+    if (hasRegular || !hasSpecial) takeBoth(auth.hash, 'poke', PET_LIMITS.pokePerHour, PET_LIMITS.pokePerDay);
+    if (hasSpecial) takeBoth(auth.hash, 'pokespecial', PET_LIMITS.pokeSpecialPerHour, PET_LIMITS.pokeSpecialPerDay);
 
     const t = now();
     const b = openBundle(auth.id);
@@ -479,7 +484,8 @@ export function createPetApp(deps: PetDeps): Hono {
               VALUES (?, ?, ?, ?, ?)
               ON CONFLICT(token_id) DO UPDATE SET step = excluded.step, last_ring_at = excluded.last_ring_at,
               last_touch_at = excluded.last_touch_at, special_ring_at = excluded.special_ring_at`)
-      .run(auth.id, st.step, st.last_ring_at, t, st.special_ring_at);
+      .run(auth.id, st.step, st.last_ring_at, hasRegular || !hasSpecial ? t : (saved?.last_touch_at ?? null),
+           st.special_ring_at);
     armSummary(auth.id, auth.hash);
 
     const bellsLeft = used(auth.hash, `pokebell:d:${dayKey(t)}`) < PET_LIMITS.pokeBellsPerDay;
