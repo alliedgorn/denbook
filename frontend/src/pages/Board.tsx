@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import { useWebSocket } from '../hooks/useWebSocket';
 import styles from './Board.module.css';
 import ReactMarkdown from 'react-markdown';
@@ -97,6 +98,15 @@ export function Board() {
   const [showNewTask, setShowNewTask] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  // T#1023: the open task lives in the URL (/board?task=<id>), so a task link can be copied
+  // and shared, and Back closes it. /board/<id> works too and is turned into the ?task= form.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { taskId: pathTaskId } = useParams();
+  const navigate = useNavigate();
+  const urlTask = searchParams.get('task');
+  const openTaskId = useRef<string | null>(null);   // what is open now, read inside the URL effect
+  openTaskId.current = selectedTask ? String(selectedTask.id) : null;
   const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
   const [beasts, setBeasts] = useState<{ name: string; displayName: string }[]>([]);
 
@@ -123,19 +133,7 @@ export function Board() {
   const [newComment, setNewComment] = useState('');
 
   useEffect(() => {
-    loadBoard().then(() => {
-      // Auto-open task from URL: /board?task=xxx
-      const params = new URLSearchParams(window.location.search);
-      const taskId = params.get('task');
-      if (taskId) {
-        fetch(`${API_BASE}/tasks/${taskId}`).then(r => r.json()).then(data => {
-          if (data && data.id) {
-            setSelectedTask(data);
-            setTaskComments(data.comments || []);
-          }
-        }).catch(() => {});
-      }
-    });
+    loadBoard();
     loadDoneTasks(0);
     fetch(`${API_BASE}/beasts`).then(r => r.json()).then(d => setBeasts(d.beasts || [])).catch(() => {});
   }, []);
@@ -145,6 +143,42 @@ export function Board() {
     setAllDoneForActive([]);
     loadDoneTasks(0);
   }, [projectFilter, assigneeFilter]);
+
+  // /board/<id> -> /board?task=<id>, the one shareable form
+  useEffect(() => {
+    if (pathTaskId && /^\d+$/.test(pathTaskId)) navigate(`/board?task=${pathTaskId}`, { replace: true });
+    else if (pathTaskId) navigate('/board', { replace: true });
+  }, [pathTaskId, navigate]);
+
+  // The URL changed (a pasted link, Back/Forward): open that task, or close the modal
+  useEffect(() => {
+    if (urlTask === openTaskId.current) return;
+    if (!urlTask) { setSelectedTask(null); return; }
+    if (!/^\d+$/.test(urlTask)) return;
+    fetch(`${API_BASE}/tasks/${urlTask}`).then(r => r.json()).then(data => {
+      if (data && data.id) {
+        setSelectedTask(data);
+        setTaskComments(data.comments || []);
+      }
+    }).catch(() => {});
+  }, [urlTask]);
+
+  // A task was opened or closed in the page: put it in the URL. Opening adds a history entry
+  // (so Back closes it); closing replaces it (so Forward doesn't reopen a task you just shut).
+  const prevOpen = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const id = selectedTask ? String(selectedTask.id) : null;
+    // the first run is the page load: the URL is the source then, don't rewrite it
+    if (prevOpen.current === undefined) { prevOpen.current = id; return; }
+    if (prevOpen.current === id) return;
+    prevOpen.current = id;
+    if (id === searchParams.get('task')) return;
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (id) next.set('task', id); else next.delete('task');
+      return next;
+    }, { replace: !id });
+  }, [selectedTask?.id]);
 
   // ESC key closes modal
   useEffect(() => {
