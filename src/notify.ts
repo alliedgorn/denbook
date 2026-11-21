@@ -83,7 +83,9 @@ export const DELIVERY_PANE_COMMAND = 'claude';
  * seat (2026-11-16 14:31, #20 31944). Tests read this array to assert on
  * notifications; the preload tripwire catches anything that bypasses it.
  */
-export const notifySink: Array<{ via: 'enqueue' | 'pane'; target: string; text: string }> = [];
+// fromOwner is recorded (only when true) on enqueue, so a test can pin WHO gets through a rest
+// hold (T#1025, Bertus). Absent otherwise, so older exact-match sink assertions still hold.
+export const notifySink: Array<{ via: 'enqueue' | 'pane'; target: string; text: string; fromOwner?: boolean }> = [];
 // Both are required: `bun test` sets NODE_ENV=test, and a plain server run does
 // not. So a stray DEN_NOTIFY_SINK line in a prod .env cannot silently swallow
 // every notification (Gnarl, PR 156).
@@ -183,7 +185,7 @@ export function enqueueNotification(beast: string, message: string, opts?: Enque
     return false;
   }
 
-  if (sinkOn()) { notifySink.push({ via: 'enqueue', target: beastLower, text: message }); return true; }
+  if (sinkOn()) { notifySink.push({ via: 'enqueue', target: beastLower, text: message, ...(opts?.fromOwner ? { fromOwner: true } : {}) }); return true; }
 
   const targetScript = path.join(WORKSPACE_ROOT, beastLower, 'scripts', 'notify.sh');
   const sender = opts?.from ?? 'server';
