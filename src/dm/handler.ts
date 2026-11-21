@@ -116,7 +116,9 @@ export function sendDm(
     .run();
 
   // Notify recipient via tmux (use notifyAs for display if provided)
-  const notified = notifyDmRecipient(notifyAs || fromLower, toLower, content);
+  // T#1025: an owner DM gets through a rest hold. Decided on the stored sender (auth-derived),
+  // never on notifyAs, which is only a display label.
+  const notified = notifyDmRecipient(notifyAs || fromLower, toLower, content, fromLower === 'gorn');
 
   return {
     conversationId: conversation.id,
@@ -130,7 +132,7 @@ export function sendDm(
  * Sends a short notification with preview + read/reply instructions.
  * The beast reads the full message via the API, not from the tmux injection.
  */
-function notifyDmRecipient(from: string, to: string, content: string): boolean {
+function notifyDmRecipient(from: string, to: string, content: string, fromOwner = false): boolean {
   const registry = getOracleRegistry();
   const entry = registry[to];
   if (!entry) return false;
@@ -146,7 +148,7 @@ function notifyDmRecipient(from: string, to: string, content: string): boolean {
   const message = `${dmLabel}: ${preview}...\n\n${replyHint}`;
 
   try {
-    return enqueueNotification(to, message);
+    return enqueueNotification(to, message, { fromOwner });
   } catch {
     return false;
   }

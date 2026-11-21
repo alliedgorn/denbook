@@ -132,6 +132,12 @@ try {
   db.run("UPDATE beast_profiles SET rest_status = 'rest', rest_since = ? WHERE name = 'pgclaude'", [Date.now()]);
   out.tier2RestResult = enqueueNotification('pgclaude', 'T1025 tier2 at rest');
   out.tier2RestTyped = waitFor(() => gotHas('T1025 tier2 at rest'), 1000);
+  // 7. Owner bypass (Gorn 11-21, "3 yes"): at rest, an owner line is typed straight in; the
+  // same line without fromOwner is held (Tier-2 refuses).
+  out.ownerRestResult = enqueueNotification('pgclaude', 'T1025 owner at rest', { fromOwner: true });
+  out.ownerRestTyped = waitFor(() => gotHas('T1025 owner at rest'));
+  db.run("INSERT INTO beast_profiles VALUES ('pgnosuchsession', 'rest', ?)", [Date.now()]);
+  out.ownerNoSessionResult = enqueueNotification('pgnosuchsession', 'T1025 owner no session', { fromOwner: true });
   db.run("UPDATE beast_profiles SET rest_status = 'active', rest_since = NULL WHERE name = 'pgclaude'");
   out.tier2AwakeResult = enqueueNotification('pgclaude', 'T1025 tier2 awake');
   out.tier2AwakeTyped = waitFor(() => gotHas('T1025 tier2 awake'));

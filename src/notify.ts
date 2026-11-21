@@ -41,6 +41,13 @@ export interface EnqueueOpts {
    * sent-time into the message body itself. Reserved for future.
    */
   sentAt?: Date;
+  /**
+   * T#1025 (Gorn 11-21, "3 yes"): this line is from the owner, so it gets through a rest hold.
+   * Set only where the server KNOWS the sender is Gorn (an authenticated owner DM, the owner's
+   * Telegram bot). At rest it is typed straight into the pane; if that can't happen it is queued
+   * like any other line and drains after /wake.
+   */
+  fromOwner?: boolean;
 }
 
 /**
@@ -180,6 +187,14 @@ export function enqueueNotification(beast: string, message: string, opts?: Enque
 
   const targetScript = path.join(WORKSPACE_ROOT, beastLower, 'scripts', 'notify.sh');
   const sender = opts?.from ?? 'server';
+
+  // T#1025: the owner skips the rest hold. Same stamp shape notify.sh writes. No session or no
+  // claude in the pane: fall through and queue it, so it is held, never lost.
+  if (opts?.fromOwner && isBeastAtRest(restDb, beastLower)) {
+    const sessionName = beastLower.charAt(0).toUpperCase() + beastLower.slice(1);
+    const stamped = `${formatUtc7Timestamp(opts?.sentAt ?? new Date())} [from ${sender}] ${message}`;
+    if (deliverToPane(sessionName, stamped) === 'sent') return true;
+  }
 
   // Tier 1: per-Beast notify.sh (Spec #54 v4 sovereignty path)
   try {

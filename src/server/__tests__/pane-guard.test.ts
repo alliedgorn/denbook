@@ -78,6 +78,13 @@ describe('rest hold at its call sites (T#1025)', () => {
     expect(r.tier2RestResult).toBe(false);
     expect(r.tier2RestTyped).toBe(false);
   });
+  test('the owner gets through a rest hold (fromOwner)', () => {
+    expect(r.ownerRestResult).toBe(true);
+    expect(r.ownerRestTyped).toBe(true);
+  });
+  test('an owner line with no session is not typed anywhere (falls through, refused at rest)', () => {
+    expect(r.ownerNoSessionResult).toBe(false);
+  });
   test('Tier-2 delivers when awake (control)', () => {
     expect(r.tier2AwakeResult).toBe(true);
     expect(r.tier2AwakeTyped).toBe(true);

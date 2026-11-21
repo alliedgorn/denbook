@@ -193,7 +193,8 @@ async function handleTelegramMessage(bot: TelegramBot, msg: any, sqlite: Databas
 
     const msgTime = msg.date ? new Date(msg.date * 1000) : new Date();
     const notification = `${notifyText}\\n\\nReply via Telegram to respond to Gorn.`;
-    enqueueNotification(bot.beast, notification, { sentAt: msgTime });
+    // T#1025: every message on this path is from Gorn (the "[Telegram from Gorn]" lines above)
+    enqueueNotification(bot.beast, notification, { sentAt: msgTime, fromOwner: true });
 
     console.log(`[Telegram:${bot.beast}] Notified: ${notifyText.slice(0, 80)}`);
     bot.messageCount++;
