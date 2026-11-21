@@ -232,6 +232,7 @@ export const HELP_ENDPOINTS = [
     { method: 'POST', path: '/api/auth/tokens/rotate', desc: 'Rotate API token (owner-driven)', params: null },
     { method: 'POST', path: '/api/auth/rotate', desc: 'Beast-self chain-aware rotation (Spec #52)', params: 'header: Authorization: Bearer <current_token>' },
     { method: 'GET', path: '/api/auth/me', desc: 'Beast-self token info — expires_at, refresh_window, self_rotate_door, rotated_at (Spec #51 Phase 3)', params: 'header: Authorization: Bearer <current_token>' },
+    { method: 'GET', path: '/api/auth/chain', desc: 'Beast-self token chain, root -> head: ids, dates, links, created_by, plus root_issued_by and truncated. No hashes or values. Use this instead of presenting an old token, which revokes the live chain (T#935)', params: 'header: Authorization: Bearer <current_token>' },
     // Guests
     { method: 'GET', path: '/api/guests', desc: 'List guests', params: null },
     { method: 'GET', path: '/api/guests/:id', desc: 'Get guest by ID', params: null },
