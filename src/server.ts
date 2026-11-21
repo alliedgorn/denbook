@@ -659,7 +659,7 @@ app.use('/api/*', async (c, next) => {
     const asParam = c.req.query('as') || '';
     if (asParam) {
       logSecurityEvent({
-        eventType: 'settings_changed', // Reuse existing type for legacy tracking
+        eventType: 'legacy_auth_used', // T#719 — dedicated type so legacy ?as= tracking no longer camouflages real settings_changed events
         severity: 'info',
         actor: actor || 'unknown',
         actorType: (actorType as any) || 'unknown',
