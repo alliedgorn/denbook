@@ -6,7 +6,7 @@ import type { Database } from 'bun:sqlite';
 import { SECURITY_RETENTION_DAYS, pruneSecurityEvents } from '../server/security-logger.ts';
 import { pruneBeastTokens } from '../server/beast-tokens.ts';
 import { ORACLE_DATA_DIR } from '../config.ts';
-import { deliverToPane, notifySinkOn } from '../notify.ts';
+import { deliverToPane, notifySinkOn, isBeastAtRest, setRestDb } from '../notify.ts';
 
 // T#981 (Bertus, PR 156): the drain pops REAL /tmp/den-notify queue lines with
 // flock + sed and then calls deliverToPane. Under the test sink that delivery
@@ -46,6 +46,10 @@ const drainLastSent: Map<string, number> = new Map(); // beast → last send tim
 // say so in the log, at most once per Beast per REFUSE_WARN_INTERVAL.
 const REFUSE_WARN_INTERVAL = 5 * 60 * 1000;
 const drainLastRefuseWarn: Map<string, number> = new Map();
+// T#1025: one log line per held Beast per HOLD_LOG_INTERVAL, so a seat left
+// at rest by an aborted /rest shows up in the server log.
+const HOLD_LOG_INTERVAL = 10 * 60 * 1000;
+const drainLastHoldLog: Map<string, number> = new Map();
 
 /**
  * Spec #54 v2 §1 — Per-Beast drain coexistence check.
@@ -98,6 +102,20 @@ function runDrainCycle() {
       // Phase 2 to Phase 1 baseline). Closes the implicit-fallback-drift class
       // that defeats the offline-resilience guarantee.
       if (perBeastDrainAlive(pidPath)) continue;
+
+      // T#1025: a Beast at rest keeps its queue untouched until /wake sets it
+      // active again (sleep.sh calls /wake after typing /recap). Held, never
+      // popped, so nothing is dropped. /tmp is cleared on reboot, so lines held
+      // across a reboot are lost; their content is still in oracle.db.
+      if (isBeastAtRest(moduleSqlite, beast)) {
+        let size = 0;
+        try { size = fs.statSync(queuePath).size; } catch { /* no queue */ }
+        if (size > 0 && Date.now() - (drainLastHoldLog.get(beast) || 0) >= HOLD_LOG_INTERVAL) {
+          console.log(`[Notify] HOLD: ${beast} is at rest, ${size} bytes held until /wake (T#1025)`);
+          drainLastHoldLog.set(beast, Date.now());
+        }
+        continue;
+      }
 
       // T#738 / Spec #54 Phase 5 Window 2: log-only-warning when server-drain
       // falls back to handling a queue that should be per-Beast-drained.
@@ -303,6 +321,7 @@ function runFileArchive() {
 
 export function initDaemons(sqliteDb: Database): void {
   moduleSqlite = sqliteDb;
+  setRestDb(sqliteDb); // T#1025: Tier-2 fallback refuses at rest too
   if (daemonsStarted) return;
   daemonsStarted = true;
 
