@@ -1,30 +1,47 @@
 /**
- * T#1025: a Beast at rest gets no doorbells. The drain and the Tier-2
- * fallback both ask isBeastAtRest; these pin its answers, including the
- * fail-open cases.
+ * T#1025: a Beast at rest gets no doorbells, for a bounded time. These pin the
+ * predicate the drain and the Tier-2 fallback share, including the fail-open
+ * cases. The call sites are pinned by pane-guard.test.ts (real drain cycle and
+ * Tier-2 against a private tmux server).
  */
 import { describe, test, expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { isBeastAtRest } from '../../notify.ts';
+import { isBeastAtRest, restHoldState, REST_HOLD_MAX_MS } from '../../notify.ts';
 
-function db(rows: Array<[string, string | null]>): Database {
+const NOW = 1_800_000_000_000;
+
+function db(rows: Array<[string, string | null, number | null]>): Database {
   const d = new Database(':memory:');
-  d.run("CREATE TABLE beast_profiles (name TEXT PRIMARY KEY, rest_status TEXT DEFAULT 'active')");
-  for (const [n, s] of rows) d.prepare('INSERT INTO beast_profiles (name, rest_status) VALUES (?, ?)').run(n, s);
+  d.run("CREATE TABLE beast_profiles (name TEXT PRIMARY KEY, rest_status TEXT DEFAULT 'active', rest_since INTEGER)");
+  for (const r of rows) d.prepare('INSERT INTO beast_profiles (name, rest_status, rest_since) VALUES (?, ?, ?)').run(...r);
   return d;
 }
 
-describe('isBeastAtRest (T#1025)', () => {
-  const d = db([['karo', 'rest'], ['gnarl', 'active'], ['rax', null]]);
+describe('restHoldState (T#1025)', () => {
+  const d = db([
+    ['karo', 'rest', NOW - 60_000],
+    ['boro', 'rest', NOW - REST_HOLD_MAX_MS],
+    ['sable', 'rest', null],
+    ['gnarl', 'active', null],
+    ['rax', null, null],
+  ]);
 
-  test('rest holds', () => expect(isBeastAtRest(d, 'karo')).toBe(true));
-  test('name is matched lowercase', () => expect(isBeastAtRest(d, 'Karo')).toBe(true));
-  test('active delivers', () => expect(isBeastAtRest(d, 'gnarl')).toBe(false));
-  test('null status delivers', () => expect(isBeastAtRest(d, 'rax')).toBe(false));
-  test('unknown Beast delivers', () => expect(isBeastAtRest(d, 'nobody')).toBe(false));
-  test('no db handle delivers (fail-open)', () => expect(isBeastAtRest(null, 'karo')).toBe(false));
-  test('a broken db delivers (fail-open)', () => {
-    const broken = new Database(':memory:'); // no beast_profiles table
-    expect(isBeastAtRest(broken, 'karo')).toBe(false);
+  test('rest, started a minute ago: held', () => expect(restHoldState(d, 'karo', NOW)).toBe('held'));
+  test('name is matched lowercase', () => expect(isBeastAtRest(d, 'Karo', NOW)).toBe(true));
+  test('rest past the bound: lapsed, delivers', () => {
+    expect(restHoldState(d, 'boro', NOW)).toBe('lapsed');
+    expect(isBeastAtRest(d, 'boro', NOW)).toBe(false);
+  });
+  test('the bound is 60 min by default', () => expect(REST_HOLD_MAX_MS).toBe(60 * 60 * 1000));
+  test('rest with no rest_since: delivers (fail-open)', () => expect(restHoldState(d, 'sable', NOW)).toBe('awake'));
+  test('active delivers', () => expect(restHoldState(d, 'gnarl', NOW)).toBe('awake'));
+  test('null status delivers', () => expect(restHoldState(d, 'rax', NOW)).toBe('awake'));
+  test('unknown Beast delivers', () => expect(restHoldState(d, 'nobody', NOW)).toBe('awake'));
+  test('no db handle delivers (fail-open)', () => expect(restHoldState(null, 'karo', NOW)).toBe('awake'));
+  test('a db without the column delivers (fail-open)', () => {
+    const old = new Database(':memory:');
+    old.run("CREATE TABLE beast_profiles (name TEXT PRIMARY KEY, rest_status TEXT)");
+    old.run("INSERT INTO beast_profiles VALUES ('karo', 'rest')");
+    expect(restHoldState(old, 'karo', NOW)).toBe('awake');
   });
 });

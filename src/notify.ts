@@ -90,18 +90,35 @@ const sinkOn = notifySinkOn;
  * handoff. Now the drain leaves a resting Beast's queue alone (held, never
  * dropped) and it drains after /wake.
  *
- * Fail-open: if the row can't be read, treat the Beast as awake. A wrongly held
- * queue is silent; a wrongly delivered doorbell is only noisy.
+ * The hold is bounded (Gnarl A1). A /rest that dies before sleep.sh relaunches
+ * the seat leaves it at rest while it is awake, and without a bound nothing
+ * would ever poke it again. Past REST_HOLD_MAX_MS the hold lapses and delivery
+ * resumes, which is itself the poke. A stopped seat needs no hold: the drain
+ * already re-queues on 'no-session'.
+ *
+ * Fail-open everywhere: no db, no row, no rest_since (rested before this
+ * column existed) or a read error all count as awake. A wrongly held queue is
+ * silent; a wrongly delivered doorbell is only noisy.
  */
-export function isBeastAtRest(db: Pick<Database, 'prepare'> | null, beast: string): boolean {
-  if (!db) return false;
+export const REST_HOLD_MAX_MS = (parseInt(process.env.REST_HOLD_MAX_MIN || '60', 10) || 60) * 60 * 1000;
+
+export type RestHold = 'awake' | 'held' | 'lapsed';
+
+export function restHoldState(db: Pick<Database, 'prepare'> | null, beast: string, now: number = Date.now()): RestHold {
+  if (!db) return 'awake';
   try {
-    const row = db.prepare('SELECT rest_status FROM beast_profiles WHERE name = ?')
-      .get(beast.toLowerCase()) as { rest_status?: string | null } | null;
-    return row?.rest_status === 'rest';
+    const row = db.prepare('SELECT rest_status, rest_since FROM beast_profiles WHERE name = ?')
+      .get(beast.toLowerCase()) as { rest_status?: string | null; rest_since?: number | null } | null;
+    if (row?.rest_status !== 'rest') return 'awake';
+    if (typeof row.rest_since !== 'number') return 'awake';
+    return now - row.rest_since < REST_HOLD_MAX_MS ? 'held' : 'lapsed';
   } catch {
-    return false;
+    return 'awake';
   }
+}
+
+export function isBeastAtRest(db: Pick<Database, 'prepare'> | null, beast: string, now: number = Date.now()): boolean {
+  return restHoldState(db, beast, now) === 'held';
 }
 
 // The Tier-2 fallback below has no queue and no db handle of its own. The

@@ -8,7 +8,8 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { deliverToPane } from '../../notify.ts';
+import { Database } from 'bun:sqlite';
+import { deliverToPane, enqueueNotification, setRestDb } from '../../notify.ts';
 
 const dir = process.argv[2];
 if (!dir || !process.env.TMUX_TMPDIR || process.env.TMUX) {
@@ -85,6 +86,56 @@ try {
 
   // 4. No session at all.
   out.missingOutcome = deliverToPane('Pgnosuchsession', 'hello');
+
+  // 5. T#1025 (Bertus): the rest hold at its two call sites, on this private
+  // server. DEN_NOTIFY_DIR is pointed at a dir inside the harness dir BEFORE
+  // daemons/routes.ts is imported, since DRAIN_DIR is read at import.
+  const qdir = path.join(dir, 'notify');
+  fs.mkdirSync(qdir, { mode: 0o700 });
+  process.env.DEN_NOTIFY_DIR = qdir;
+  // Importing daemons/routes.ts opens the db module, so pin it off the real one.
+  process.env.ORACLE_DB_PATH = ':memory:';
+  process.env.ORACLE_DATA_DIR = path.join(dir, 'data');
+  const { runDrainCycle, DRAIN_DIR } = await import('../../daemons/routes.ts');
+  out.drainDirIsPrivate = DRAIN_DIR === qdir;
+  const db = new Database(':memory:');
+  db.run("CREATE TABLE beast_profiles (name TEXT PRIMARY KEY, rest_status TEXT, rest_since INTEGER)");
+  db.run("INSERT INTO beast_profiles VALUES ('pgclaude', 'rest', ?)", [Date.now()]);
+  const qfile = path.join(qdir, 'pgclaude.queue');
+  const heldLine = 'T1025 held doorbell';
+  fs.writeFileSync(qfile, Buffer.from(heldLine).toString('base64') + '\n', { mode: 0o600 });
+  const before = fs.readFileSync(qfile, 'utf-8');
+  const gotHas = (t: string) => fs.existsSync(got) && fs.readFileSync(got, 'utf-8').includes(t);
+
+  // 5a. At rest: one cycle leaves the queue byte-identical and types nothing.
+  runDrainCycle(db);
+  out.restQueueUntouched = fs.readFileSync(qfile, 'utf-8') === before;
+  out.restTyped = waitFor(() => gotHas(heldLine), 1000);
+
+  // 5b. Woken (what /wake writes): the next cycle drains it into claude.
+  db.run("UPDATE beast_profiles SET rest_status = 'active', rest_since = NULL WHERE name = 'pgclaude'");
+  runDrainCycle(db);
+  out.wakeQueueEmpty = fs.readFileSync(qfile, 'utf-8') === '';
+  out.wakeTyped = waitFor(() => gotHas(heldLine));
+
+  // 5c. Lapsed (rest started 2 h ago, an aborted /rest): delivers again.
+  db.run("UPDATE beast_profiles SET rest_status = 'rest', rest_since = ? WHERE name = 'pgclaude'", [Date.now() - 2 * 3600_000]);
+  const lapsedLine = 'T1025 lapsed doorbell';
+  fs.writeFileSync(qfile, Buffer.from(lapsedLine).toString('base64') + '\n', { mode: 0o600 });
+  Bun.sleepSync(1100); // DRAIN_SPACING is 1 s per Beast
+  runDrainCycle(db);
+  out.lapsedTyped = waitFor(() => gotHas(lapsedLine));
+
+  // 6. Tier-2: there is no /home/gorn/workspace/pgclaude/scripts/notify.sh, so
+  // Tier-1 fails and Tier-2 types straight into the pane, unless at rest.
+  setRestDb(db);
+  db.run("UPDATE beast_profiles SET rest_status = 'rest', rest_since = ? WHERE name = 'pgclaude'", [Date.now()]);
+  out.tier2RestResult = enqueueNotification('pgclaude', 'T1025 tier2 at rest');
+  out.tier2RestTyped = waitFor(() => gotHas('T1025 tier2 at rest'), 1000);
+  db.run("UPDATE beast_profiles SET rest_status = 'active', rest_since = NULL WHERE name = 'pgclaude'");
+  out.tier2AwakeResult = enqueueNotification('pgclaude', 'T1025 tier2 awake');
+  out.tier2AwakeTyped = waitFor(() => gotHas('T1025 tier2 awake'));
+  setRestDb(null);
 } finally {
   // Explicit socket, so teardown can never reach the real tmux server.
   if (fs.existsSync(socket)) Bun.spawnSync(['tmux', '-S', socket, 'kill-server']);

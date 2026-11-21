@@ -1016,6 +1016,8 @@ registerRemoteRoutes(app, { isLocalNetwork, hasSessionAuth });
 try { sqlite.prepare('ALTER TABLE beast_profiles ADD COLUMN sex TEXT DEFAULT NULL').run(); } catch { /* exists */ }
 // T#658 — Norm #65 (Nap vs Rest) — scheduler-aware rest state
 try { sqlite.prepare("ALTER TABLE beast_profiles ADD COLUMN rest_status TEXT DEFAULT 'active'").run(); } catch { /* exists */ }
+// T#1025: when rest started, so the notification hold can lapse on an aborted /rest
+try { sqlite.prepare('ALTER TABLE beast_profiles ADD COLUMN rest_since INTEGER DEFAULT NULL').run(); } catch { /* exists */ }
 
 // Get beast profile by name
 
