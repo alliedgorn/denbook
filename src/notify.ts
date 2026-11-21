@@ -20,6 +20,7 @@
  */
 
 import path from 'path';
+import type { Database } from 'bun:sqlite';
 
 const WORKSPACE_ROOT = '/home/gorn/workspace';
 
@@ -81,6 +82,32 @@ export const notifySink: Array<{ via: 'enqueue' | 'pane'; target: string; text: 
 // every notification (Gnarl, PR 156).
 export const notifySinkOn = (): boolean => process.env.DEN_NOTIFY_SINK === 'memory' && process.env.NODE_ENV === 'test';
 const sinkOn = notifySinkOn;
+
+/**
+ * T#1025 (Gorn, 2026-11-21): a Beast at rest gets no doorbells. Before this,
+ * rest_status='rest' only paused the scheduler, so forum, board, DM and pet
+ * notifications kept being typed into the pane while the Beast wrote its
+ * handoff. Now the drain leaves a resting Beast's queue alone (held, never
+ * dropped) and it drains after /wake.
+ *
+ * Fail-open: if the row can't be read, treat the Beast as awake. A wrongly held
+ * queue is silent; a wrongly delivered doorbell is only noisy.
+ */
+export function isBeastAtRest(db: Pick<Database, 'prepare'> | null, beast: string): boolean {
+  if (!db) return false;
+  try {
+    const row = db.prepare('SELECT rest_status FROM beast_profiles WHERE name = ?')
+      .get(beast.toLowerCase()) as { rest_status?: string | null } | null;
+    return row?.rest_status === 'rest';
+  } catch {
+    return false;
+  }
+}
+
+// The Tier-2 fallback below has no queue and no db handle of its own. The
+// server sets this at startup (initDaemons), so Tier-2 can refuse at rest too.
+let restDb: Pick<Database, 'prepare'> | null = null;
+export function setRestDb(db: Pick<Database, 'prepare'> | null): void { restDb = db; }
 
 export type PaneDelivery = 'sent' | 'no-session' | 'not-claude';
 
@@ -149,6 +176,13 @@ export function enqueueNotification(beast: string, message: string, opts?: Enque
   // Tier 2: direct tmux send-keys with synthesized stamp. Final fallback.
   // T#973: only into a pane running claude. There is no queue to put the line
   // back on here, so a refusal is reported as a failed notify.
+  // T#1025: never type into a resting Beast's pane. There is no queue here to
+  // hold the line, so it is reported as a failed notify; the content itself is
+  // already in oracle.db and the Beast reads forum and DMs on wake.
+  if (isBeastAtRest(restDb, beastLower)) {
+    console.error(`[notify] Tier-2 held for ${beastLower}: at rest (T#1025)`);
+    return false;
+  }
   try {
     const sessionName = beastLower.charAt(0).toUpperCase() + beastLower.slice(1);
     const stamp = formatUtc7Timestamp(opts?.sentAt ?? new Date());
