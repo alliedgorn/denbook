@@ -140,6 +140,7 @@ function AppContent() {
         <Route path="/remote" element={<RequireAuth><RemoteControl /></RequireAuth>} />
         <Route path="/library" element={<RequireAuth><Library /></RequireAuth>} />
         <Route path="/board" element={<RequireAuth><Board /></RequireAuth>} />
+        <Route path="/board/:taskId" element={<RequireAuth><Board /></RequireAuth>} />
         <Route path="/forum" element={<RequireAuth><Forum /></RequireAuth>} />
         <Route path="/dms" element={<RequireAuth><DirectMessages /></RequireAuth>} />
         <Route path="/evolution" element={<RequireAuth><Evolution /></RequireAuth>} />
