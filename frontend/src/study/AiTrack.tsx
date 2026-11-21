@@ -1,24 +1,26 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AI_MODULES } from './aiModules';
 import { AskKaro } from './AskKaro';
 import { RichText } from './RichText';
+import { leadIn, sectionId } from './leadIn';
 import { useStudyProgress, type SyncState } from './useStudyProgress';
 import type { StudyModule } from './types';
 import styles from '../pages/Study.module.css';
 import { DrillRounds } from './DrillRounds';
-import { drillKeyFor, type DrillTrack } from './drillParse';
+import { drillKeyFor, drillScore, RATING_LABEL, type DrillRating, type DrillTrack } from './drillParse';
+import { effectiveBest, pinBestCount, recordBest } from './quizBest';
 
 // AI engineering interview block (T#963) — Learn / Quiz / Drill per topic.
 // Progress shape is unchanged from the original app so it stays importable.
-
-type DrillRating = 'solid' | 'shaky' | 'blank';
 
 export interface AiProgress {
   read: Record<string, true>;
   quiz: Record<string, Record<number, number>>;
   best: Record<string, number>;
-  drill: Record<string, DrillRating>;
+  bestN?: Record<string, number>; // question count each best was earned on (quizBest.ts)
+  drill: Record<string, DrillRating>; // old self-ratings: kept, no longer counted
+  graded?: Record<string, DrillRating>; // the mentor's newest grade per drill (Gorn 11-17), counted
   notes: Record<string, string>;
   updatedAt: number;
 }
@@ -29,14 +31,8 @@ type Tab = (typeof TABS)[number];
 
 function modStats(m: StudyModule, s: AiProgress) {
   const read = m.concepts.filter((_, i) => s.read[`${m.id}:${i}`]).length;
-  const best = s.best[m.id] || 0;
-  let dsum = 0;
-  let rated = 0;
-  m.drills.forEach((_, i) => {
-    const r = s.drill[`${m.id}:${i}`];
-    if (r) rated++;
-    dsum += r === 'solid' ? 1 : r === 'shaky' ? 0.5 : 0;
-  });
+  const best = effectiveBest(s, m.id, m.quiz) || 0;
+  const { rated, sum: dsum } = drillScore(m.id, m.drills.length, s.graded); // mentor's grades only
   const pct = Math.round(100 * (0.3 * read / m.concepts.length + 0.35 * best + 0.35 * dsum / m.drills.length));
   return { read, best, rated, pct };
 }
@@ -178,7 +174,7 @@ function Overview({ state, go, onReset }: { state: AiProgress; go: (id: string |
                 <tr key={m.id}>
                   <td><button className={styles.linkBtn} onClick={() => go(m.id)}>{m.name}</button></td>
                   <td>{s.read}/{m.concepts.length}</td>
-                  <td>{state.best[m.id] != null ? `${Math.round(s.best * 100)}%` : '–'}</td>
+                  <td>{effectiveBest(state, m.id, m.quiz) != null ? `${Math.round(s.best * 100)}%` : '–'}</td>
                   <td>{s.rated}/{m.drills.length}</td>
                   <td><span className={`${styles.pill} ${cls}`}>{lab}</span></td>
                 </tr>
@@ -222,7 +218,7 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
   const s = modStats(m, state);
   const counts: Record<Tab, string> = {
     learn: `${s.read}/${m.concepts.length}`,
-    quiz: state.best[m.id] != null ? `best ${Math.round(s.best * 100)}%` : `${m.quiz.length} Qs`,
+    quiz: effectiveBest(state, m.id, m.quiz) != null ? `best ${Math.round(s.best * 100)}%` : `${m.quiz.length} Qs`,
     drill: `${s.rated}/${m.drills.length}`,
   };
   const ti = TABS.indexOf(tab);
@@ -255,16 +251,66 @@ function ModuleView({ m, tab, state, open, setOpen, go, touch }: ModuleViewProps
 
 export type PartProps = { m: StudyModule; state: AiProgress; touch: (fn: (s: AiProgress) => void) => void };
 
+// Smooth-scroll to an element on this page. Buttons, not #hash links, so the
+// router's URL is never touched.
+function jumpTo(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// "↑ Top" corner button, shown once the page has scrolled a fair way.
+function ToTop() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShow(window.scrollY > 600);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  if (!show) return null;
+  return (
+    <button type="button" className={styles.toTop} aria-label="Back to top"
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>↑ Top</button>
+  );
+}
+
 export function Learn({ m, state, touch }: PartProps) {
+  const lessonId = (i: number) => `learn-${m.id}-${i}`;
   return (
     <div className={styles.cards}>
+      {m.concepts.length > 1 && (
+        <nav className={styles.learnIndex} aria-label="Lessons in this module">
+          <b>Lessons</b>
+          <ol>
+            {m.concepts.map((c, i) => (
+              <li key={i}>
+                <button type="button" className={styles.linkBtn} onClick={() => jumpTo(lessonId(i))}>
+                  {state.read[`${m.id}:${i}`] ? '✓ ' : ''}{c.t}
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
       {m.concepts.map((c, i) => {
         const key = `${m.id}:${i}`;
         const done = !!state.read[key];
+        const secs = c.b.flatMap((blk, j) => { const label = leadIn(blk); return label ? [{ j, label }] : []; });
         return (
-          <article key={key} className={done ? `${styles.card} ${styles.done}` : styles.card}>
+          <article key={key} id={lessonId(i)} className={done ? `${styles.card} ${styles.done}` : styles.card}>
             <h3>{c.t}</h3>
-            <div className={styles.body}><RichText blocks={c.b} /></div>
+            {secs.length >= 3 && (
+              <nav className={styles.inLesson} aria-label="In this lesson">
+                <b>In this lesson</b>
+                <ul>
+                  {secs.map(s => (
+                    <li key={s.j}>
+                      <button type="button" className={styles.linkBtn} onClick={() => jumpTo(sectionId(lessonId(i), s.j))}>{s.label}</button>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            )}
+            <div className={styles.body}><RichText blocks={c.b} idPrefix={lessonId(i)} /></div>
             <div className={styles.say}><b>Say it in the interview</b>{c.say}</div>
             <div className={styles.row}>
               <button
@@ -276,6 +322,7 @@ export function Learn({ m, state, touch }: PartProps) {
           </article>
         );
       })}
+      <ToTop />
     </div>
   );
 }
@@ -284,14 +331,15 @@ export function Quiz({ m, state, touch }: PartProps) {
   const ans = state.quiz[m.id] || {};
   const answered = Object.keys(ans).length;
   const correct = m.quiz.filter((q, i) => ans[i] === q.a).length;
-  const best = state.best[m.id];
+  const best = effectiveBest(state, m.id, m.quiz);
   const answer = (qi: number, oi: number) => touch(s => {
+    pinBestCount(s, m.id, m.quiz);
     const a = (s.quiz[m.id] = { ...(s.quiz[m.id] || {}) });
     if (a[qi] != null) return;
     a[qi] = oi;
     if (Object.keys(a).length === m.quiz.length) {
       const sc = m.quiz.filter((q, i) => a[i] === q.a).length / m.quiz.length;
-      s.best[m.id] = Math.max(s.best[m.id] || 0, sc);
+      recordBest(s, m.id, m.quiz, sc);
     }
   });
   return (
@@ -300,7 +348,7 @@ export function Quiz({ m, state, touch }: PartProps) {
         {answered === m.quiz.length
           ? <div>Score <b>{correct}/{m.quiz.length}</b> · best {Math.round((best || 0) * 100)}%</div>
           : <div>{answered}/{m.quiz.length} answered{best != null && <> · best so far <b>{Math.round(best * 100)}%</b></>}</div>}
-        {answered > 0 && <button className={styles.btn} onClick={() => touch(s => { delete s.quiz[m.id]; })}>Retake quiz</button>}
+        {answered > 0 && <button className={styles.btn} onClick={() => touch(s => { pinBestCount(s, m.id, m.quiz); delete s.quiz[m.id]; })}>Retake quiz</button>}
       </div>
       {m.quiz.map((q, qi) => {
         const pick = ans[qi];
@@ -333,6 +381,7 @@ export function Drills({ m, state, touch, open, setOpen, where }: PartProps & { 
       {m.drills.map((d, i) => {
         const key = `${m.id}:${i}`;
         const isOpen = !!open[key];
+        const graded = state.graded?.[key];
         return (
           <div key={key} className={styles.d}>
             <span className={styles.qn}>Drill {i + 1}</span>
@@ -349,16 +398,20 @@ export function Drills({ m, state, touch, open, setOpen, where }: PartProps & { 
               </button>
             </div>
             {isOpen && <div className={styles.model}><b>A strong answer covers:</b><RichText blocks={d.m} /></div>}
+            {/* Gorn 11-17: the mentor rates the drill, not the learner. The newest grade sets it. */}
             <div className={styles.rate}>
-              <span>How did you do?</span>
-              {([['solid', 'Nailed it'], ['shaky', 'Shaky'], ['blank', 'Blanked']] as [DrillRating, string][]).map(([v, lab]) => (
-                <button
-                  key={v} className={styles.chip} data-v={v} aria-pressed={state.drill[key] === v}
-                  onClick={() => touch(s => { if (s.drill[key] === v) delete s.drill[key]; else s.drill[key] = v; })}
-                >{lab}</button>
-              ))}
+              <span>Grade:</span>
+              {graded
+                ? <span className={styles.chip} data-v={graded} aria-pressed="true">{RATING_LABEL[graded]}</span>
+                : <span className={styles.muted}>not graded yet. Send your answer below.</span>}
             </div>
-            {where && <DrillRounds drillKey={drillKeyFor(where.track, m.id, i)} context={`${where.label} › Drill ${i + 1}`} />}
+            {where && (
+              <DrillRounds
+                drillKey={drillKeyFor(where.track, m.id, i)}
+                context={`${where.label} › Drill ${i + 1}`}
+                onRating={r => { if (state.graded?.[key] !== r) touch(s => { s.graded = { ...(s.graded || {}), [key]: r }; }); }}
+              />
+            )}
           </div>
         );
       })}

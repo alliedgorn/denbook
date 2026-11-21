@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { settingsGetRoute, settingsUpdateRoute } from '../server/openapi.ts';
+import { clientIp } from '../server/client-ip.ts';
 
 interface SettingsHelpers {
   getSetting: (key: string) => string | null;
@@ -34,7 +35,7 @@ export function registerSettingsRoutes(app: OpenAPIHono, helpers: SettingsHelper
     // Only allow from browser sessions (Gorn) or local requests, not beast API calls
     const asParam = c.req.query('as');
     if (asParam) {
-      const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+      const ip = clientIp(c, 'local');
       logSecurityEvent({
         eventType: 'impersonation_blocked',
         severity: 'warning',
@@ -105,7 +106,7 @@ export function registerSettingsRoutes(app: OpenAPIHono, helpers: SettingsHelper
     if (typeof body.authEnabled === 'boolean') changes.push(`auth_${body.authEnabled ? 'enabled' : 'disabled'}`);
     if (typeof body.localBypass === 'boolean') changes.push(`local_bypass_${body.localBypass ? 'enabled' : 'disabled'}`);
     if (changes.length > 0) {
-      const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+      const ip = clientIp(c, 'local');
       logSecurityEvent({
         eventType: 'settings_changed',
         severity: 'warning',

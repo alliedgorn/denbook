@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { processImageForStorage, ImageProcessingError } from '../server/image-processing.ts';
+import { getGuestByUsername, guestTermsAccepted } from '../server/guest-accounts.ts';
 
 const MAX_IMAGE_SIZE = 30 * 1024 * 1024; // 30MB for images
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB for other files
@@ -65,6 +66,14 @@ export function registerFilesRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   app.post('/api/upload', async (c) => {
     if (!hasSessionAuth(c) && !isTrustedRequest(c)) return c.json({ error: 'Authentication required' }, 403);
+    // A guest who hasn't accepted the message terms can't post, and an upload is how
+    // a picture gets into a post or DM (Gorn 11-17).
+    if ((c.get as any)('role') === 'guest') {
+      const u = (c.get as any)('guestUsername');
+      if (!guestTermsAccepted(u ? getGuestByUsername(sqlite, u) : null)) {
+        return c.json({ error: 'Please read and accept the message terms first.', code: 'terms_required' }, 403);
+      }
+    }
     try {
       const formData = await c.req.formData();
       const file = formData.get('file') as File;

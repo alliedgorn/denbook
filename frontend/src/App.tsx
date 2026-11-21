@@ -1,3 +1,4 @@
+import { GuestTermsBanner } from './components/GuestTermsBanner';
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Header } from './components/Header';
@@ -50,15 +51,17 @@ import { setVaultRepo } from './utils/docDisplay';
 // Guest-accessible routes (no redirect for guests)
 const GUEST_ROUTES = new Set(['/', '/pack', '/forum', '/dms', '/beast', '/welcome', '/terminal', '/settings', '/library', '/village']);
 
-function isGuestRoute(pathname: string): boolean {
+function isGuestRoute(pathname: string, studyEnabled: boolean): boolean {
   if (GUEST_ROUTES.has(pathname)) return true;
   if (pathname.startsWith('/beast/')) return true;
+  // Study, bootcamp only, for guests the owner switched on (11-17).
+  if (studyEnabled && (pathname === '/study' || pathname === '/study/bootcamp')) return true;
   return false;
 }
 
 // Protected route wrapper with guest role awareness
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, authEnabled, isLoading, isGuest } = useAuth();
+  const { isAuthenticated, authEnabled, isLoading, isGuest, studyEnabled } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -70,7 +73,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   }
 
   // Guests can only access whitelisted routes — redirect others to /
-  if (isGuest && !isGuestRoute(location.pathname)) {
+  if (isGuest && !isGuestRoute(location.pathname, studyEnabled)) {
     return <Navigate to="/" replace />;
   }
 
@@ -104,6 +107,7 @@ function AppContent() {
   return (
     <>
       {!isLoginPage && <Header onRemoteToggle={() => setRemoteMobileOpen(prev => !prev)} />}
+      {!isLoginPage && !authLoading && isGuest && <GuestTermsBanner />}
       <div className={!isLoginPage ? 'app-layout' : undefined}>
       <div className={!isLoginPage ? 'app-main' : undefined}>
       <Routes>

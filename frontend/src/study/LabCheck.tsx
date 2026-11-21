@@ -3,7 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import styles from '../pages/Study.module.css';
 import { MD_COMPONENTS, chatBreaks, latestThread, refreshThread, THREAD_EVENT } from './studyChat';
-import { PEER, type Msg } from './studyPeer';
+import { type Msg, type StudyChannel } from './studyPeer';
+import { useStudyChannel } from './studyChannel';
 import { VERDICT_RE, fence } from './labTags';
 
 // Lab check (Gorn 11-13: "put answer for you to check in the lab itself").
@@ -31,10 +32,12 @@ function writeMap<T>(key: string, map: Record<string, T>) {
   try { localStorage.setItem(key, JSON.stringify(map)); } catch { /* private mode: lasts while loaded */ }
 }
 
-function newestVerdict(msgs: Msg[], key: string): Verdict | null {
+// Only the mentor's own messages can carry a verdict: the learner writes in the same
+// thread and must not be able to grade themselves by typing a tag (Gnarl, 11-17).
+function newestVerdict(msgs: Msg[], key: string, peer: string): Verdict | null {
   let best: Verdict | null = null;
   for (const m of msgs) {
-    if (m.sender !== PEER) continue;
+    if (m.sender !== peer) continue;
     const v = VERDICT_RE.exec(m.message);
     if (!v || v[1] !== key) continue;
     if (!best || m.id > best.id) {
@@ -45,20 +48,26 @@ function newestVerdict(msgs: Msg[], key: string): Verdict | null {
 }
 
 export function LabCheck({ labKey, context }: { labKey: string; context: string }) {
-  const [draft, setDraft] = useState(() => readMap<string>(DRAFTS_KEY)[labKey] || '');
-  const [sentId, setSentId] = useState<number>(() => readMap<number>(SENT_KEY)[labKey] || 0);
-  const [verdict, setVerdict] = useState<Verdict | null>(() => readMap<Verdict>(VERDICTS_KEY)[labKey] || null);
+  const ch = useStudyChannel();
+  return ch ? <LabCheckFor key={ch.storePrefix} ch={ch} labKey={labKey} context={context} /> : null;
+}
+
+function LabCheckFor({ ch, labKey, context }: { ch: StudyChannel; labKey: string; context: string }) {
+  const VERDICTS = ch.storePrefix + VERDICTS_KEY, SENT = ch.storePrefix + SENT_KEY, DRAFTS = ch.storePrefix + DRAFTS_KEY;
+  const [draft, setDraft] = useState(() => readMap<string>(DRAFTS)[labKey] || '');
+  const [sentId, setSentId] = useState<number>(() => readMap<number>(SENT)[labKey] || 0);
+  const [verdict, setVerdict] = useState<Verdict | null>(() => readMap<Verdict>(VERDICTS)[labKey] || null);
   const [state, setState] = useState<'idle' | 'sending' | 'error'>('idle');
 
   useEffect(() => {
     const apply = (msgs: Msg[]) => {
-      const v = newestVerdict(msgs, labKey);
+      const v = newestVerdict(msgs, labKey, ch.peer);
       if (!v) return;
       setVerdict(cur => {
         if (cur && cur.id >= v.id) return cur;
-        const all = readMap<Verdict>(VERDICTS_KEY);
+        const all = readMap<Verdict>(VERDICTS);
         all[labKey] = v;
-        writeMap(VERDICTS_KEY, all);
+        writeMap(VERDICTS, all);
         return v;
       });
     };
@@ -66,13 +75,13 @@ export function LabCheck({ labKey, context }: { labKey: string; context: string 
     const onThread = (e: Event) => apply((e as CustomEvent<Msg[]>).detail || []);
     window.addEventListener(THREAD_EVENT, onThread);
     return () => window.removeEventListener(THREAD_EVENT, onThread);
-  }, [labKey]);
+  }, [labKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveDraft = (v: string) => {
     setDraft(v);
-    const all = readMap<string>(DRAFTS_KEY);
+    const all = readMap<string>(DRAFTS);
     if (v) all[labKey] = v; else delete all[labKey];
-    writeMap(DRAFTS_KEY, all);
+    writeMap(DRAFTS, all);
   };
 
   const send = async () => {
@@ -80,18 +89,18 @@ export function LabCheck({ labKey, context }: { labKey: string; context: string 
     if (!body || state === 'sending') return;
     setState('sending');
     try {
-      const res = await fetch('/api/dm', {
+      const res = await fetch(ch.sendUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: PEER, message: `[Study: ${context}]\n[Lab ${labKey}]\n${fence(body)}` }),
+        body: JSON.stringify({ to: ch.peer, message: `[Study: ${context}]\n[Lab ${labKey}]\n${fence(body)}` }),
       });
       if (!res.ok) throw new Error(String(res.status));
       const out = await res.json().catch(() => ({}));
       const id = Number(out.message_id) || Date.now();
       setSentId(id);
-      const all = readMap<number>(SENT_KEY);
+      const all = readMap<number>(SENT);
       all[labKey] = id;
-      writeMap(SENT_KEY, all);
+      writeMap(SENT, all);
       saveDraft('');
       setState('idle');
       refreshThread();
@@ -104,7 +113,7 @@ export function LabCheck({ labKey, context }: { labKey: string; context: string 
 
   return (
     <div className={styles.labCheck}>
-      <b className={styles.labCheckHead}>Check with Karo</b>
+      <b className={styles.labCheckHead}>Check with {ch.name}</b>
       {verdict && (
         <div className={verdict.ok ? `${styles.verdict} ${styles.verdictOk}` : `${styles.verdict} ${styles.verdictFix}`}>
           <b>{verdict.ok ? '✅ Pass' : '❌ Fix this'}{pending ? ' · last check' : ''}</b>
@@ -115,7 +124,7 @@ export function LabCheck({ labKey, context }: { labKey: string; context: string 
           )}
         </div>
       )}
-      {pending && <p className={styles.muted}>Sent. Karo's check will show here.</p>}
+      {pending && <p className={styles.muted}>Sent. {ch.name}'s check will show here.</p>}
       <p className={styles.muted}>Don't paste API keys, tokens or passwords. Everything you send here is kept.</p>
       <textarea
         maxLength={8000}
@@ -126,7 +135,7 @@ export function LabCheck({ labKey, context }: { labKey: string; context: string 
       />
       <div className={styles.row}>
         <button className={`${styles.btn} ${styles.primary}`} disabled={!draft.trim() || state === 'sending'} onClick={send}>
-          {state === 'sending' ? 'Sending…' : 'Send to Karo'}
+          {state === 'sending' ? 'Sending…' : `Send to ${ch.name}`}
         </button>
         <span className={styles.muted}>{state === 'error' ? "Didn't send. Try again." : '⌘/Ctrl + Enter'}</span>
       </div>

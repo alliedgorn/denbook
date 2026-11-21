@@ -11,6 +11,9 @@ interface Guest {
   avatar_url: string | null;
   expires_at: string | null;
   disabled_at: string | null;
+  study_enabled?: number; // 0/1: the AI bootcamp on the Study page (11-17)
+  terms_accepted_at?: string | null; // message terms accepted (11-17)
+  terms_current?: boolean;           // accepted the CURRENT terms version (server-computed)
   created_at: string;
   last_login_at: string | null;
   last_active_at: string | null;
@@ -168,6 +171,17 @@ export function Guests() {
         body: JSON.stringify({
           disabled_at: guest.disabled_at ? null : new Date().toISOString(),
         }),
+      });
+      loadGuests();
+    } catch {}
+  }
+
+  async function handleToggleStudy(guest: Guest) {
+    try {
+      await fetch(`/api/guests/${guest.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ study_enabled: guest.study_enabled !== 1 }),
       });
       loadGuests();
     } catch {}
@@ -408,6 +422,25 @@ export function Guests() {
                       >Edit</button>
                     </span>
                   )}
+                </div>
+                <div className={styles.detailMetaItem}>
+                  <span className={styles.metaLabel}>Terms</span>
+                  <span className={styles.metaValue}>
+                    {selected.terms_current && selected.terms_accepted_at
+                      ? `accepted ${formatTime(selected.terms_accepted_at)}`
+                      : <em style={{ opacity: 0.6 }}>{selected.terms_accepted_at ? 'old terms, not yet re-accepted' : 'not yet'}</em>}
+                  </span>
+                </div>
+                <div className={styles.detailMetaItem}>
+                  <span className={styles.metaLabel}>Study</span>
+                  <span className={styles.metaValue} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    {selected.study_enabled === 1 ? 'AI bootcamp' : <em style={{ opacity: 0.6 }}>off</em>}
+                    <button
+                      onClick={() => handleToggleStudy(selected)}
+                      style={{ fontSize: 'inherit', padding: '2px 6px', cursor: 'pointer', opacity: 0.7 }}
+                      title={selected.study_enabled === 1 ? 'Turn the Study page off for this guest' : 'Let this guest use the AI bootcamp, with their own progress'}
+                    >{selected.study_enabled === 1 ? 'Turn off' : 'Turn on'}</button>
+                  </span>
                 </div>
                 {selected.disabled_at && (
                   <div className={styles.detailMetaItem}>

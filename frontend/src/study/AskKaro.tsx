@@ -4,8 +4,11 @@ import remarkGfm from 'remark-gfm';
 import styles from '../pages/Study.module.css';
 import { DRILL_TAG_RE, DRILL_VERDICT_RE, LAB_TAG_RE, VERDICT_RE } from './labTags';
 import { MD_COMPONENTS, REFRESH_EVENT, chatBreaks, publishThread } from './studyChat';
-import { PEER, type Msg } from './studyPeer';
+import { type Msg, type StudyChannel } from './studyPeer';
+import { useStudyChannel } from './studyChannel';
+import { ratingOfWord, RATING_ICON, RATING_LABEL } from './drillParse';
 import { FileUpload } from '../components/FileUpload';
+import { ASK_OPEN_EVENT, IMAGE_VIEW_EVENT, type ImageView, pictureLabel, viewingImage } from './imageView';
 
 // "Ask Karo" (T#968) — a study-side view of the existing gorn ↔ karo DM thread.
 // Sending is a normal owner DM (POST /api/dm, sender derived server-side from the
@@ -29,11 +32,11 @@ const PIN_RE = /^\[Pin\][ \t]*\n?/;
 const PIN_KEY = 'study-ask-karo-pin';
 const NOTE_HIDDEN_KEY = 'study-ask-karo-note-hidden';
 
-function readSeen(): number {
-  try { return Number(localStorage.getItem(SEEN_KEY)) || 0; } catch { return 0; }
+function readSeen(key: string): number {
+  try { return Number(localStorage.getItem(key)) || 0; } catch { return 0; }
 }
-function writeSeen(id: number) {
-  try { localStorage.setItem(SEEN_KEY, String(id)); } catch { /* private mode: badge just resets */ }
+function writeSeen(key: string, id: number) {
+  try { localStorage.setItem(key, String(id)); } catch { /* private mode: badge just resets */ }
 }
 function readBig(): boolean {
   try { return localStorage.getItem(BIG_KEY) === '1'; } catch { return false; }
@@ -61,25 +64,38 @@ function time(iso: string) {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// The panel for whoever is looking (owner → Karo, switched-on guest → Gnarl), or nothing.
 export function AskKaro({ context }: { context: string }) {
+  const ch = useStudyChannel();
+  return ch ? <AskPanel key={ch.storePrefix} ch={ch} context={context} /> : null;
+}
+
+function AskPanel({ ch, context: pageContext }: { ch: StudyChannel; context: string }) {
+  const PEER = ch.peer;
+  const seenKey = ch.storePrefix + SEEN_KEY;
   const [open, setOpen] = useState(false);
+  // The picture open in the full-screen viewer, if any. While one is open the
+  // dock sits beside it (wide screens) and questions say which picture they are about.
+  const [picture, setPicture] = useState<string | null>(viewingImage);
+  const context = picture ? `${pageContext} › picture: ${pictureLabel(picture)}` : pageContext;
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'error' | 'load-error'>('idle');
-  const [seen, setSeen] = useState(readSeen);
+  const [seen, setSeen] = useState(() => readSeen(seenKey));
   const [big, setBig] = useState(readBig);
   const toggleBig = () => {
     const next = !big;
     setBig(next);
     try { localStorage.setItem(BIG_KEY, next ? '1' : '0'); } catch { /* size just resets */ }
   };
-  const [cachedPin, setCachedPin] = useState<Pin | null>(readPin);
+  // Pins are the owner's only (Gorn 11-17): a guest channel never reads or shows one.
+  const [cachedPin, setCachedPin] = useState<Pin | null>(() => (ch.pins ? readPin() : null));
   const [noteHidden, setNoteHidden] = useState(() => readFlag(NOTE_HIDDEN_KEY));
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/dm/gorn/${PEER}?limit=40&order=desc`);
+      const res = await fetch(ch.threadUrl);
       if (!res.ok) throw new Error(String(res.status));
       const body = await res.json();
       const list: Msg[] = (body.messages || []).slice().reverse();
@@ -89,7 +105,7 @@ export function AskKaro({ context }: { context: string }) {
     } catch {
       setState(s => (s === 'sending' ? s : 'load-error'));
     }
-  }, []);
+  }, [ch.threadUrl]);
 
   useEffect(() => {
     load();
@@ -100,6 +116,14 @@ export function AskKaro({ context }: { context: string }) {
   }, [open, load]);
 
   useEffect(() => {
+    const onView = (e: Event) => setPicture((e as CustomEvent<ImageView>).detail?.alt ?? null);
+    const onAsk = () => setOpen(true);
+    window.addEventListener(IMAGE_VIEW_EVENT, onView);
+    window.addEventListener(ASK_OPEN_EVENT, onAsk);
+    return () => { window.removeEventListener(IMAGE_VIEW_EVENT, onView); window.removeEventListener(ASK_OPEN_EVENT, onAsk); };
+  }, []);
+
+  useEffect(() => {
     const onRefresh = () => { load(); };
     window.addEventListener(REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(REFRESH_EVENT, onRefresh);
@@ -107,7 +131,7 @@ export function AskKaro({ context }: { context: string }) {
 
   const lastKaro = msgs.filter(m => m.sender === PEER).reduce((a, m) => Math.max(a, m.id), 0);
 
-  const loadedPin = msgs.filter(m => m.sender === PEER && PIN_RE.test(m.message))
+  const loadedPin = !ch.pins ? null : msgs.filter(m => m.sender === PEER && PIN_RE.test(m.message))
     .reduce<Pin | null>((a, m) => (!a || m.id > a.id ? { id: m.id, text: m.message.replace(PIN_RE, '').trim() } : a), null);
   useEffect(() => {
     if (loadedPin && (!cachedPin || loadedPin.id > cachedPin.id)) {
@@ -124,17 +148,17 @@ export function AskKaro({ context }: { context: string }) {
 
   useEffect(() => {
     if (!open) return;
-    if (lastKaro > seen) { setSeen(lastKaro); writeSeen(lastKaro); }
+    if (lastKaro > seen) { setSeen(lastKaro); writeSeen(seenKey, lastKaro); }
     endRef.current?.scrollIntoView({ block: 'end' });
-    fetch(`/api/dm/gorn/${PEER}/read`, { method: 'PATCH' }).catch(() => { /* badge only */ });
-  }, [open, lastKaro, seen, msgs.length]);
+    if (ch.markReadUrl) fetch(ch.markReadUrl, { method: 'PATCH' }).catch(() => { /* badge only */ });
+  }, [open, lastKaro, seen, msgs.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = async () => {
     const body = text.trim();
     if (!body || state === 'sending') return;
     setState('sending');
     try {
-      const res = await fetch('/api/dm', {
+      const res = await fetch(ch.sendUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: PEER, message: `[Study: ${context}]\n${body}` }),
@@ -151,12 +175,12 @@ export function AskKaro({ context }: { context: string }) {
   return (
     <>
       {!open && (
-        <button className={styles.askFab} onClick={() => setOpen(true)} aria-label="Ask Karo">
-          🦴 Ask Karo{unread && <span className={styles.askDot} aria-label="new reply" />}
+        <button className={styles.askFab} onClick={() => setOpen(true)} aria-label={`Ask ${ch.name}`}>
+          {ch.pins ? '🦴 ' : ''}Ask {ch.name}{unread && <span className={styles.askDot} aria-label="new reply" />}
         </button>
       )}
       {open && (
-        <div className={big ? `${styles.askDock} ${styles.askDockBig}` : styles.askDock}>
+        <div className={[styles.askDock, big && styles.askDockBig, picture && styles.askDockSide].filter(Boolean).join(' ')}>
         {hasNote && !noteHidden && (
           <aside className={styles.askNote} aria-label="Pinned note from Karo">
             <div className={styles.askHead}>
@@ -168,9 +192,9 @@ export function AskKaro({ context }: { context: string }) {
             </div>
           </aside>
         )}
-        <aside className={styles.askPanel} aria-label="Ask Karo">
+        <aside className={styles.askPanel} aria-label={`Ask ${ch.name}`}>
           <div className={styles.askHead}>
-            <b>Ask Karo</b>
+            <b>Ask {ch.name}</b>
             <span className={styles.row}>
               {hasNote && noteHidden && (
                 <button className={styles.linkBtn} onClick={() => toggleNote(false)}>📌 Show note</button>
@@ -186,8 +210,8 @@ export function AskKaro({ context }: { context: string }) {
             )}
             {msgs.map(m => {
               const mine = m.sender !== PEER;
-              if (!mine && PIN_RE.test(m.message)) {
-                return <span key={m.id} className={styles.askPinLine}>📌 Karo updated the note · {time(m.created_at)}</span>;
+              if (!mine && ch.pins && PIN_RE.test(m.message)) {
+                return <span key={m.id} className={styles.askPinLine}>📌 {ch.name} updated the note · {time(m.created_at)}</span>;
               }
               const ctx = mine ? CTX_RE.exec(m.message) : null;
               let bodyText = ctx ? m.message.slice(ctx[0].length) : m.message;
@@ -199,14 +223,15 @@ export function AskKaro({ context }: { context: string }) {
               const dtag = mine && !tag ? DRILL_TAG_RE.exec(bodyText) : null;
               if (dtag) { bodyText = bodyText.slice(dtag[0].length); label = `${label ?? 'Drill'} · answer`; }
               const dverdict = mine || verdict ? null : DRILL_VERDICT_RE.exec(m.message);
-              if (dverdict) { bodyText = m.message.slice(dverdict[0].length); label = dverdict[2] === 'pass' ? 'Drill grade · ✅ pass' : 'Drill grade · ❌ fix'; }
+              const drate = dverdict ? ratingOfWord(dverdict[2]) : undefined;
+              if (dverdict && drate) { bodyText = m.message.slice(dverdict[0].length); label = `Drill grade · ${RATING_ICON[drate]} ${RATING_LABEL[drate]}`; }
               return (
                 <div key={m.id} className={mine ? `${styles.askMsg} ${styles.askMine}` : styles.askMsg}>
                   {label && <span className={styles.askCtx}>{label}</span>}
                   <div className={styles.askText}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{chatBreaks(bodyText)}</ReactMarkdown>
                   </div>
-                  <span className={styles.askTime}>{mine ? 'You' : 'Karo'} · {time(m.created_at)}</span>
+                  <span className={styles.askTime}>{mine ? 'You' : ch.name} · {time(m.created_at)}</span>
                 </div>
               );
             })}

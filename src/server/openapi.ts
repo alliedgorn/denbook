@@ -31,6 +31,8 @@ export const authStatusRoute = createRoute({
             role: z.enum(['owner', 'guest']).optional(),
             guestName: z.string().optional(),
             guestUsername: z.string().optional(),
+            studyEnabled: z.boolean().optional(),
+            termsAccepted: z.boolean().optional(),
           }),
         },
       },

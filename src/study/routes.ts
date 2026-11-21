@@ -3,16 +3,21 @@ import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { Database } from 'bun:sqlite';
 import fs from 'fs';
 import path from 'path';
+import { getGuest, isGuestActive } from '../server/guest-accounts.ts';
 
-// Study area — owner-only learning tracks + per-user progress (T#963)
+// Study area — learning tracks + per-user progress (T#963)
 //
-// Gate: owner browser session ONLY. A valid session cookie whose role is not
-// 'guest'. Beast bearer tokens carry no cookie, and local-bypass requests carry
-// no cookie, so neither reaches this data. Guests are already default-denied by
-// rbacMiddleware; the explicit role check here is defense-in-depth.
+// Gate: a browser session ONLY. Beast bearer tokens carry no cookie, and
+// local-bypass requests carry no cookie, so neither reaches this data.
+//   owner  → every track, stored as user 'gorn'.
+//   guest  → the bootcamp track only, and only while the owner has switched
+//            Study on for that guest (guest_accounts.study_enabled, 11-17).
+//            Stored as user 'guest:<id>', which can never equal 'gorn'.
+// rbacMiddleware allowlists exactly the bootcamp paths for guests; the checks
+// here are the real gate and do not rely on it.
 //
 // study_progress.user is always derived from the session, never from the body
-// or query. Today the only owner identity is 'gorn'.
+// or query.
 
 interface StudyHelpers {
   hasSessionAuth: (c: Context) => boolean;
@@ -26,6 +31,8 @@ export const STUDY_CONTENT_MAX_BYTES = 2 * 1024 * 1024;
 
 export const STUDY_MAX_BYTES = 256 * 1024;
 const TRACK_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+// Tracks (and content files) a switched-on guest may use. Gorn 11-17: bootcamp only.
+const GUEST_TRACKS = new Set(['bootcamp']);
 
 export function ensureStudyTables(sqlite: Database) {
   sqlite.prepare(`
@@ -42,25 +49,34 @@ export function ensureStudyTables(sqlite: Database) {
 export function registerStudyRoutes(app: OpenAPIHono, sqlite: Database, helpers: StudyHelpers) {
   const { hasSessionAuth, contentDir } = helpers;
 
-  function ownerOf(c: Context): string | null {
+  function userOf(c: Context, track: string): string | null {
     // Both checks are load-bearing. role 'owner' is also the middleware's default
     // for no-cookie local-bypass requests, so the signed-cookie check is what
     // keeps the on-box path out. Never reduce this to the role check alone.
     if (!hasSessionAuth(c)) return null;
-    if ((c.get as any)('role') !== 'owner') return null;
-    return 'gorn';
+    const role = (c.get as any)('role');
+    if (role === 'owner') return 'gorn';
+    if (role !== 'guest') return null;
+    if (!GUEST_TRACKS.has(track)) return null;
+    // Re-read the row on every request: the switch, expiry, disable and ban all
+    // take effect at once, not at the next login.
+    const id = (c.get as any)('guestId');
+    if (typeof id !== 'number') return null;
+    const guest = getGuest(sqlite, id);
+    if (!guest || guest.study_enabled !== 1 || !isGuestActive(guest).active) return null;
+    return `guest:${guest.id}`;
   }
 
   function deny(c: Context) {
-    return c.json({ error: 'forbidden — owner session required' }, 403);
+    return c.json({ error: 'forbidden' }, 403);
   }
 
   // GET /api/study/progress/:track — saved progress for one track
   app.get('/api/study/progress/:track', (c) => {
-    const user = ownerOf(c);
-    if (!user) return deny(c);
     const track = c.req.param('track');
     if (!TRACK_RE.test(track)) return c.json({ error: 'invalid track' }, 400);
+    const user = userOf(c, track);
+    if (!user) return deny(c);
 
     const row = sqlite.prepare(
       'SELECT data, updated_at FROM study_progress WHERE user = ? AND track = ?'
@@ -75,10 +91,10 @@ export function registerStudyRoutes(app: OpenAPIHono, sqlite: Database, helpers:
   // PUT /api/study/progress/:track — replace saved progress for one track
   // Body: { "data": { ...any JSON object... } }
   app.put('/api/study/progress/:track', async (c) => {
-    const user = ownerOf(c);
-    if (!user) return deny(c);
     const track = c.req.param('track');
     if (!TRACK_RE.test(track)) return c.json({ error: 'invalid track' }, 400);
+    const user = userOf(c, track);
+    if (!user) return deny(c);
 
     const declared = Number(c.req.header('content-length') || 0);
     if (declared > STUDY_MAX_BYTES) return c.json({ error: 'payload too large' }, 413);
@@ -101,15 +117,15 @@ export function registerStudyRoutes(app: OpenAPIHono, sqlite: Database, helpers:
   });
 
   // GET /api/study/content/:name — runtime content file <contentDir>/<name>.json
-  // Read-only, owner-gated like progress. The name is a strict slug, so it can never
+  // Read-only, gated like progress. The name is a strict slug, so it can never
   // leave contentDir. Symlinks are refused (O_NOFOLLOW on open). The page validates the shape again and
   // falls back to its bundled copy on anything wrong, and every string is rendered as
   // text by RichText, so a bad file can break the page's content but never inject HTML.
   app.get('/api/study/content/:name', (c) => {
-    const user = ownerOf(c);
-    if (!user) return deny(c);
     const name = c.req.param('name');
     if (!TRACK_RE.test(name)) return c.json({ error: 'invalid name' }, 400);
+    const user = userOf(c, name);
+    if (!user) return deny(c);
     if (!contentDir) return c.json({ error: 'no content' }, 404);
 
     const file = path.join(contentDir, `${name}.json`);

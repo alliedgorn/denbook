@@ -3,8 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import styles from '../pages/Study.module.css';
 import { MD_COMPONENTS, chatBreaks, latestThread, refreshThread, THREAD_EVENT } from './studyChat';
-import { PEER, type Msg } from './studyPeer';
-import { drillEntries, mergeEntries, pruneDeleted, toRounds, type Entry } from './drillParse';
+import { type Msg, type StudyChannel } from './studyPeer';
+import { useStudyChannel } from './studyChannel';
+import { drillEntries, gradeRating, latestRating, mergeEntries, pruneDeleted, RATING_ICON, RATING_LABEL, toRounds, type DrillRating, type Entry } from './drillParse';
 
 // Drill rounds (Gorn 11-16). Each drill card keeps every answer Gorn sends and every grade
 // Karo gives, in order, so he can watch an answer get sharper round by round. Same wiring as
@@ -31,21 +32,29 @@ function when(at: string): string {
   return isNaN(d.getTime()) ? '' : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export function DrillRounds({ drillKey, context }: { drillKey: string; context: string }) {
-  const [entries, setEntries] = useState<Entry[]>(() => readMap<Entry[]>(ROUNDS_KEY)[drillKey] || []);
-  const [draft, setDraft] = useState(() => readMap<string>(DRAFTS_KEY)[drillKey] || '');
+type Props = { drillKey: string; context: string; onRating?: (r: DrillRating) => void };
+
+export function DrillRounds(p: Props) {
+  const ch = useStudyChannel();
+  return ch ? <DrillRoundsFor key={ch.storePrefix} ch={ch} {...p} /> : null;
+}
+
+function DrillRoundsFor({ ch, drillKey, context, onRating }: Props & { ch: StudyChannel }) {
+  const ROUNDS = ch.storePrefix + ROUNDS_KEY, DRAFTS = ch.storePrefix + DRAFTS_KEY;
+  const [entries, setEntries] = useState<Entry[]>(() => readMap<Entry[]>(ROUNDS)[drillKey] || []);
+  const [draft, setDraft] = useState(() => readMap<string>(DRAFTS)[drillKey] || '');
   const [state, setState] = useState<'idle' | 'sending' | 'error'>('idle');
 
   useEffect(() => {
     const apply = (msgs: Msg[]) => {
       if (!msgs.length) return;
-      const found = drillEntries(msgs, drillKey);
+      const found = drillEntries(msgs, drillKey, ch.peer);
       setEntries(cur => {
         const merged = mergeEntries(pruneDeleted(cur, msgs), found);
         if (merged.length === cur.length && merged.every((e, i) => e.id === cur[i].id && e.text === cur[i].text)) return cur;
-        const all = readMap<Entry[]>(ROUNDS_KEY);
+        const all = readMap<Entry[]>(ROUNDS);
         all[drillKey] = merged;
-        writeMap(ROUNDS_KEY, all);
+        writeMap(ROUNDS, all);
         return merged;
       });
     };
@@ -53,14 +62,20 @@ export function DrillRounds({ drillKey, context }: { drillKey: string; context: 
     const onThread = (e: Event) => apply((e as CustomEvent<Msg[]>).detail || []);
     window.addEventListener(THREAD_EVENT, onThread);
     return () => window.removeEventListener(THREAD_EVENT, onThread);
-  }, [drillKey]);
+  }, [drillKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveDraft = (v: string) => {
     setDraft(v);
-    const all = readMap<string>(DRAFTS_KEY);
+    const all = readMap<string>(DRAFTS);
     if (v) all[drillKey] = v; else delete all[drillKey];
-    writeMap(DRAFTS_KEY, all);
+    writeMap(DRAFTS, all);
   };
+
+  // The mentor's newest grade goes into progress (Gorn 11-17). Only ever set, never cleared on
+  // absence: a fresh device has no cached rounds and the fetch window may not reach old grades,
+  // so "no grade seen here" does not mean "no grade".
+  const rating = latestRating(entries);
+  useEffect(() => { if (rating) onRating?.(rating); }, [rating]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rounds = toRounds(entries);
   const last = rounds[rounds.length - 1];
@@ -71,10 +86,10 @@ export function DrillRounds({ drillKey, context }: { drillKey: string; context: 
     if (!body || state === 'sending') return;
     setState('sending');
     try {
-      const res = await fetch('/api/dm', {
+      const res = await fetch(ch.sendUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: PEER, message: `[Study: ${context}]\n[Drill ${drillKey}]\n${body}` }),
+        body: JSON.stringify({ to: ch.peer, message: `[Study: ${context}]\n[Drill ${drillKey}]\n${body}` }),
       });
       if (!res.ok) throw new Error(String(res.status));
       saveDraft('');
@@ -87,26 +102,30 @@ export function DrillRounds({ drillKey, context }: { drillKey: string; context: 
 
   return (
     <div className={styles.labCheck}>
-      <b className={styles.labCheckHead}>Answer to Karo{rounds.length ? ` · ${rounds.length} round${rounds.length > 1 ? 's' : ''}` : ''}</b>
+      <b className={styles.labCheckHead}>Answer to {ch.name}{rounds.length ? ` · ${rounds.length} round${rounds.length > 1 ? 's' : ''}` : ''}</b>
       {rounds.map((r, i) => (
         <div key={r.answer.id} className={styles.round}>
           <span className={styles.askCtx}>Round {i + 1} · {when(r.answer.at)}</span>
           <div className={styles.askText}>
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{chatBreaks(r.answer.text)}</ReactMarkdown>
           </div>
-          {r.grades.map(g => (
-            <div key={g.id} className={g.ok ? `${styles.verdict} ${styles.verdictOk}` : `${styles.verdict} ${styles.verdictFix}`}>
-              <b>{g.ok ? '✅ Pass' : '❌ Fix this'}</b>
+          {r.grades.map(g => {
+            const gr = gradeRating(g) ?? 'shaky';
+            const cls = gr === 'solid' ? styles.verdictOk : gr === 'shaky' ? styles.verdictShaky : styles.verdictFix;
+            return (
+            <div key={g.id} className={`${styles.verdict} ${cls}`}>
+              <b>{RATING_ICON[gr]} {RATING_LABEL[gr]}</b>
               {g.text && (
                 <div className={styles.askText}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{chatBreaks(g.text)}</ReactMarkdown>
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       ))}
-      {waiting && <p className={styles.muted}>Sent. Karo's grade will show under this round.</p>}
+      {waiting && <p className={styles.muted}>Sent. {ch.name}'s grade will show under this round.</p>}
       <textarea
         maxLength={4000}
         placeholder={rounds.length ? `Round ${rounds.length + 1}: your sharper answer.` : 'Write your answer the way you would say it in the interview.'}
@@ -116,7 +135,7 @@ export function DrillRounds({ drillKey, context }: { drillKey: string; context: 
       />
       <div className={styles.row}>
         <button className={`${styles.btn} ${styles.primary}`} disabled={!draft.trim() || state === 'sending'} onClick={send}>
-          {state === 'sending' ? 'Sending…' : rounds.length ? `Send round ${rounds.length + 1}` : 'Send to Karo'}
+          {state === 'sending' ? 'Sending…' : rounds.length ? `Send round ${rounds.length + 1}` : `Send to ${ch.name}`}
         </button>
         <span className={styles.muted}>{state === 'error' ? "Didn't send. Try again." : '⌘/Ctrl + Enter'}</span>
       </div>

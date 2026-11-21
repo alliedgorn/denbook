@@ -89,6 +89,16 @@
 /* Learn */
 .cards { display: flex; flex-direction: column; gap: 14px; }
 .card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.cards [id] { scroll-margin-top: 80px; }
+.learnIndex { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 18px; background: var(--bg-card); }
+.learnIndex ol { margin: 6px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 2px; }
+.inLesson { border-left: 3px solid var(--accent); background: var(--bg-elevated); border-radius: 0 8px 8px 0; padding: 8px 14px; }
+.inLesson ul { margin: 4px 0 0; padding-left: 18px; columns: 2 220px; column-gap: 24px; }
+.inLesson li { break-inside: avoid; }
+.linkBtn { background: none; border: 0; padding: 2px 0; margin: 0; color: var(--accent); cursor: pointer; text-align: left; font: inherit; }
+.linkBtn:hover, .linkBtn:focus-visible { text-decoration: underline; }
+.toTop { position: fixed; left: 20px; bottom: 20px; z-index: 40; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary, inherit); border-radius: 999px; padding: 8px 14px; font: inherit; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+.toTop:hover { border-color: var(--accent); }
 .card.done { border-color: var(--success); }
 .card h3 { font-size: 18px; }
 .body { max-width: 68ch; }
@@ -224,6 +234,9 @@ td .linkBtn { margin-left: 0; }
 .askText pre { margin: 0 0 6px; padding: 8px 10px; background: var(--bg-card); border-radius: 8px; overflow-x: auto; }
 .askText pre code { padding: 0; background: none; font-size: 12px; }
 .askText img { max-width: 100%; border-radius: 8px; }
+.figure { margin: 12px 0; }
+.figure img { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+.figure figcaption { font-size: 13px; color: var(--text-secondary, var(--text-muted)); margin-top: 6px; }
 .chatImgBtn { display: block; padding: 0; margin: 4px 0; border: 0; background: none; cursor: zoom-in; max-width: 100%; }
 .chatImgBtn img { display: block; }
 /* z-index 10000: above the global DM chat overlay (9000), the expanded Ask Karo panel (150)
@@ -231,6 +244,21 @@ td .linkBtn { margin-left: 0; }
 .chatImgOverlay { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; cursor: zoom-out; }
 .chatImgOverlay img { max-width: 100%; max-height: calc(100vh - 60px); object-fit: contain; border-radius: 8px; background: #fff; }
 .chatImgHint { color: #ddd; font-size: 13px; }
+.chatImgAsk { margin-left: 12px; border: 1px solid var(--accent); background: var(--bg-card); color: var(--text-primary); border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+/* Picture + Ask Karo side by side (Gorn 11-16, laptop). Wide screens only: the
+   open dock moves above the image overlay (10000) and fills the right edge, and
+   the overlay stops short of it so the picture is never covered. On a phone the
+   picture stays full screen and the Ask button is hidden (no room side by side). */
+@media (min-width: 861px) {
+  .askDock.askDockSide { top: 20px; bottom: 20px; right: 20px; left: auto; height: auto; z-index: 10001; flex-direction: column; justify-content: flex-start; }
+  .askDock.askDockSide .askPanel { width: min(440px, 38vw); flex: 1 1 auto; min-height: 0; height: auto; }
+  .askDock.askDockSide .askNote { width: min(440px, 38vw); flex: 0 0 auto; max-height: 30%; }
+  .askDock.askDockSide .askMsg { max-width: 88%; }
+  :global(body):has(.askDockSide) .chatImgOverlay { right: calc(min(440px, 38vw) + 40px); }
+}
+@media (max-width: 860px) {
+  .chatImgAsk { display: none; }
+}
 .askText table { border-collapse: collapse; font-size: 12px; margin: 0 0 6px; }
 .askText th, .askText td { border: 1px solid var(--border); padding: 2px 6px; }
 .askText a { color: var(--accent); }
@@ -273,6 +301,7 @@ td .linkBtn { margin-left: 0; }
 .verdict > b { display: block; margin-bottom: 2px; }
 .verdictOk { border-color: var(--success); background: var(--st-good-soft); }
 .verdictFix { border-color: var(--st-bad); background: var(--st-bad-soft); }
+.verdictShaky { border-color: var(--st-warn); background: var(--st-warn-soft); }
 
 /* Lab toolbox (Gorn 11-14): what you'll need, closed by default */
 .toolbox { margin: 12px 0; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; max-width: 68ch; }

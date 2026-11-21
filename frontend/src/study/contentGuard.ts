@@ -6,6 +6,10 @@ import type { Block, BootModule, Inline, PlannedModule } from './types';
 // by RichText, so this guards against a broken page, not against HTML injection.
 
 const isStr = (x: unknown): x is string => typeof x === 'string';
+// Images in study content come only from our own uploads (Gorn 11-16). No external
+// URL, no protocol-relative "//host", no "..": a lesson must never make the page fetch
+// from somewhere else (tracking, IP leak) or reach another route.
+const IMG_SRC = /^\/api\/f\/[A-Za-z0-9-]+\.(png|jpe?g|webp|gif)$/;
 const isArr = Array.isArray;
 const obj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !isArr(x);
 
@@ -15,12 +19,29 @@ function inline(x: unknown): x is Inline {
 }
 const inlines = (x: unknown) => isArr(x) && x.every(inline);
 
+// A block has EXACTLY ONE kind key and nothing else it doesn't expect. The guard and
+// RichText test kinds in different orders, so a block with two kinds (tip + img)
+// could pass here as one kind and render as the other with its check skipped
+// (Bertus, PR 166). One kind per block makes the order irrelevant in both files.
+const BLOCK_KEYS: Record<string, readonly string[]> = {
+  p: ['p'], ul: ['ul'], tip: ['tip'], code: ['code'], img: ['img', 'alt', 'caption'],
+};
+function oneKind(x: Record<string, unknown>): boolean {
+  const keys = Object.keys(x);
+  const kinds = keys.filter(k => k in BLOCK_KEYS);
+  if (kinds.length !== 1) return false;
+  const allowed = BLOCK_KEYS[kinds[0]];
+  return keys.every(k => allowed.includes(k));
+}
+
 function block(x: unknown): x is Block {
-  if (!obj(x)) return false;
+  if (!obj(x) || !oneKind(x)) return false;
   if ('p' in x) return inlines(x.p);
   if ('tip' in x) return inlines(x.tip);
   if ('ul' in x) return isArr(x.ul) && x.ul.every(inlines);
   if ('code' in x) return isStr(x.code);
+  if ('img' in x) return isStr(x.img) && IMG_SRC.test(x.img) && isStr(x.alt) && x.alt.length > 0
+    && (x.caption === undefined || isStr(x.caption));
   return false;
 }
 const blocks = (x: unknown) => isArr(x) && x.every(block);

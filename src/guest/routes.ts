@@ -5,9 +5,10 @@ import * as path from 'path';
 import { getFullThread, handleThreadMessage } from '../forum/handler.ts';
 import { sendDm, getMessages as getDmMessages } from '../dm/handler.ts';
 import { getBeastProfile } from '../db/index.ts';
-import { getGuestByUsername, changeGuestPassword, updateGuestProfile } from '../server/guest-accounts.ts';
+import { getGuestByUsername, changeGuestPassword, updateGuestProfile, checkGuestName, guestTermsAccepted, acceptGuestTerms, GUEST_TERMS_TEXT, GUEST_TERMS_VERSION } from '../server/guest-accounts.ts';
 import { checkGuestPostRate, checkGuestDmRate, checkGuestContentLength, scanForInjection } from '../server/guest-safety.ts';
 import { logSecurityEvent } from '../server/security-logger.ts';
+import { clientIp } from '../server/client-ip.ts';
 
 interface GuestHelpers {
   wsBroadcast: (event: string, data: any) => void;
@@ -30,6 +31,46 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
     const guest = sqlite.query('SELECT display_name FROM guest_accounts WHERE username = ?').get(username) as any;
     return guest?.display_name || username;
   }
+
+  // Terms gate (Gorn 11-17). A guest who has not accepted the current terms can read
+  // but not send. Returns a 403 response to send back, or null when sending is fine.
+  function termsGate(c: Context) {
+    const u = (c.get as any)('guestUsername');
+    const g = u ? getGuestByUsername(sqlite, u) : null;
+    if (guestTermsAccepted(g)) return null;
+    return c.json({ error: 'Please read and accept the message terms first.', code: 'terms_required' }, 403);
+  }
+
+  // GET /api/guest/terms — the current terms and this guest's acceptance
+  app.get('/api/guest/terms', (c) => {
+    const u = (c.get as any)('guestUsername');
+    if (!u) return c.json({ error: 'Not a guest session' }, 400);
+    const g = getGuestByUsername(sqlite, u);
+    if (!g) return c.json({ error: 'Guest not found' }, 404);
+    return c.json({
+      version: GUEST_TERMS_VERSION,
+      text: GUEST_TERMS_TEXT,
+      accepted: guestTermsAccepted(g),
+      accepted_at: g.terms_accepted_at ?? null,
+      accepted_version: g.terms_version ?? null,
+    });
+  });
+
+  // POST /api/guest/terms/accept — body { version }. Only the CURRENT version can be
+  // accepted, so a page showing old wording can't record consent to new wording.
+  app.post('/api/guest/terms/accept', async (c) => {
+    const u = (c.get as any)('guestUsername');
+    if (!u) return c.json({ error: 'Not a guest session' }, 400);
+    const g = getGuestByUsername(sqlite, u);
+    if (!g) return c.json({ error: 'Guest not found' }, 404);
+    let body: any = null;
+    try { body = await c.req.json(); } catch { /* handled below */ }
+    if (body?.version !== GUEST_TERMS_VERSION) {
+      return c.json({ error: 'Those terms have changed. Reload to see the current ones.', version: GUEST_TERMS_VERSION }, 409);
+    }
+    const updated = acceptGuestTerms(sqlite, g.id);
+    return c.json({ accepted: true, accepted_at: updated?.terms_accepted_at ?? null, version: GUEST_TERMS_VERSION });
+  });
 
   // Guest dashboard — public data only (T#558, Spec #32)
   app.get('/api/guest/dashboard', (c) => {
@@ -162,6 +203,8 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // Guest post message — public threads only (T#559)
   app.post('/api/guest/thread/:id/message', async (c) => {
+    const gate = termsGate(c);
+    if (gate) return gate;
     const threadId = parseInt(c.req.param('id'), 10);
     if (isNaN(threadId)) return c.json({ error: 'Invalid thread ID' }, 400);
 
@@ -189,7 +232,7 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         actorType: 'guest',
         target: `/api/guest/thread/${threadId}/message`,
         details: { patterns: scan.patterns, content_preview: data.message.slice(0, 200) },
-        ipSource: c.req.header('x-real-ip') || 'local',
+        ipSource: clientIp(c, 'local'),
         requestId: (c.get as any)('requestId'),
       });
     }
@@ -216,6 +259,8 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // Guest create thread — new public thread (T#561)
   app.post('/api/guest/thread', async (c) => {
+    const gate = termsGate(c);
+    if (gate) return gate;
     const guestUsername = (c.get as any)('guestUsername') || 'guest';
     const data = await c.req.json();
     if (!data.message) return c.json({ error: 'Message required' }, 400);
@@ -236,7 +281,7 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         actorType: 'guest',
         target: '/api/guest/thread',
         details: { patterns: scan.patterns, content_preview: (data.title + ': ' + data.message).slice(0, 200) },
-        ipSource: c.req.header('x-real-ip') || 'local',
+        ipSource: clientIp(c, 'local'),
         requestId: (c.get as any)('requestId'),
       });
     }
@@ -343,6 +388,8 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
   // Guest DM — send message (T#559)
   app.post('/api/guest/dm', async (c) => {
+    const gate = termsGate(c);
+    if (gate) return gate;
     const guestUsername = (c.get as any)('guestUsername') || 'guest';
     const data = await c.req.json();
     if (!data.to || !data.message) return c.json({ error: 'to and message required' }, 400);
@@ -368,7 +415,7 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
         actorType: 'guest',
         target: `/api/guest/dm/${data.to}`,
         details: { patterns: scan.patterns, content_preview: data.message.slice(0, 200) },
-        ipSource: c.req.header('x-real-ip') || 'local',
+        ipSource: clientIp(c, 'local'),
         requestId: (c.get as any)('requestId'),
       });
     }
@@ -409,7 +456,7 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
           actorType: 'guest',
           target: '/api/guest/change-password',
           details: { attempts: attempts.count, window_ms: PASSWORD_CHANGE_RATE_WINDOW_MS },
-          ipSource: c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
+          ipSource: clientIp(c, '127.0.0.1'),
           requestId: (c.get as any)('requestId'),
         });
         return c.json({ error: `Too many password change attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes.` }, 429);
@@ -458,7 +505,7 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
           actorType: 'guest',
           target: '/api/guest/reset-password',
           details: { attempts: attempts.count, window_ms: PASSWORD_CHANGE_RATE_WINDOW_MS },
-          ipSource: c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
+          ipSource: clientIp(c, '127.0.0.1'),
           requestId: (c.get as any)('requestId'),
         });
         return c.json({ error: `Too many password change attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes.` }, 429);
@@ -510,17 +557,18 @@ export function registerGuestRoutes(app: OpenAPIHono, sqlite: Database, helpers:
 
     const body = await c.req.json();
 
-    if (body.display_name !== undefined && (!body.display_name || body.display_name.length > 50)) {
-      return c.json({ error: 'Display name must be 1-50 characters' }, 400);
-    }
     if (body.display_name !== undefined) {
-      const RESERVED_NAMES = new Set([
-        'karo','rax','mara','leonard','bertus','gnarl','zaghnal','pip','nyx','dex',
-        'flint','quill','snap','vigil','talon','sable','gorn','admin','administrator','system',
-      ]);
-      if (RESERVED_NAMES.has(body.display_name.toLowerCase().trim())) {
-        return c.json({ error: 'That display name is reserved' }, 400);
+      // Trimmed before every check AND before storing: the old reserved check trimmed
+      // but the store did not (Bertus, 11-17).
+      if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 50) {
+        return c.json({ error: 'Display name must be 1-50 characters' }, 400);
       }
+      body.display_name = body.display_name.trim();
+      // Beasts (live roster), system names, other guests' names, and any name that
+      // already has DM history: taking one would put this guest in those threads.
+      const check = checkGuestName(sqlite, body.display_name, guest.id);
+      if (check === 'reserved') return c.json({ error: 'That display name is reserved' }, 400);
+      if (check === 'taken') return c.json({ error: 'That display name is already taken' }, 409);
     }
     if (body.bio !== undefined && body.bio.length > 500) {
       return c.json({ error: 'Bio must be under 500 characters' }, 400);

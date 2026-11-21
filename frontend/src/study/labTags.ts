@@ -16,6 +16,8 @@ export function fence(text: string): string {
 // Drill rounds (Gorn 11-16: "make drill page accept answers like lab page", "multiple rounds
 // of answers so I can see how my understanding develops"). Own tag, because a drill key and
 // a lab key share the "<module>:<n>" shape and a lab verdict must never land on a drill card.
-// Gorn's answer: "[Study: …]\n[Drill <key>]\n<text>". Karo's grade: "[Drill <key> pass|fix]".
+// Gorn's answer: "[Study: …]\n[Drill <key>]\n<text>".
+// The mentor's grade: "[Drill <key> nailed|shaky|blanked]" (Gorn 11-17: the instructor rates
+// the drill, not the learner). The older "pass|fix" still parses: pass = nailed, fix = shaky.
 export const DRILL_TAG_RE = /^\[Drill ([a-z0-9-]{1,60}:\d{1,3})\][ \t]*\n?/;
-export const DRILL_VERDICT_RE = /^\[Drill ([a-z0-9-]{1,60}:\d{1,3}) (pass|fix)\][ \t]*\n?/;
+export const DRILL_VERDICT_RE = /^\[Drill ([a-z0-9-]{1,60}:\d{1,3}) (nailed|shaky|blanked|pass|fix)\][ \t]*\n?/;

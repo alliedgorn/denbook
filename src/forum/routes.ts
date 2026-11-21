@@ -7,6 +7,7 @@ import { logSecurityEvent } from '../server/security-logger.ts';
 import { searchIndexUpsert, searchIndexDelete } from '../search/routes.ts';
 import { handleThreadMessage, getFullThread, updateThreadStatus } from './handler.ts';
 import { emojiListRoute, emojiAddRoute, emojiRemoveRoute } from '../server/openapi.ts';
+import { clientIp } from '../server/client-ip.ts';
 
 // ============================================================================
 // Forum routes — Phase 2.1 of Library #102 (T#779)
@@ -481,7 +482,7 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
             actorType: 'guest',
             target: `/api/thread/${data.thread_id}`,
             details: { patterns: scan.patterns, content_preview: data.message.slice(0, 200) },
-            ipSource: c.req.header('x-real-ip') || 'local',
+            ipSource: clientIp(c, 'local'),
             requestId: (c.get as any)('requestId'),
           });
         }
@@ -707,7 +708,7 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     searchIndexDelete('forum', messageId);
 
     // Audit trail
-    const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+    const ip = clientIp(c, 'local');
     logSecurityEvent({
       eventType: 'message_delete',
       severity: 'warning',

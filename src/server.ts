@@ -5,6 +5,7 @@
  * Same handlers, same DB, just cleaner HTTP layer.
  */
 
+import { deriveAuditActor } from './server/audit-actor.ts';
 import { type Context, type Next } from 'hono';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
@@ -162,7 +163,9 @@ import {
   listTokens,
   pruneBeastTokens,
   getTokenInfo,
+  hmacTokenHash,
 } from './server/beast-tokens.ts';
+import { createPetApp, registerPetBeastRoutes, petTokenTripwire, ownerCookieCheck } from './pet/routes.ts';
 
 import {
   listTraces,
@@ -283,10 +286,15 @@ app.notFound((c) => {
 });
 
 // CORS middleware — restricted to known origins (T#502)
-app.use('*', cors({
+// Not on the pet bridge (T#1014): the pet is a native app and no browser should call it.
+const corsMiddleware = cors({
   origin: ['http://localhost:47778', 'http://127.0.0.1:47778', 'https://denbook.online'],
   credentials: true,
-}));
+});
+app.use('*', async (c, next) => {
+  if (c.req.path === '/api/pet' || c.req.path.startsWith('/api/pet/')) return next();
+  return corsMiddleware(c, next);
+});
 
 // Security headers middleware (T#502 — Talon audit finding, T#503 — CSP)
 app.use('*', async (c, next) => {
@@ -321,33 +329,10 @@ export const GUEST_SESSION_DURATION_MS = 4 * 60 * 60 * 1000; // 4 hours (guest)
 
 // Check if request is from local network
 export function isLocalNetwork(c: Context): boolean {
-  // Check actual client IP — do NOT trust Via header (spoofable).
-  // Caddy should be configured to set X-Real-IP to the actual client IP.
-  const forwarded = c.req.header('x-forwarded-for');
-  const realIp = c.req.header('x-real-ip');
-  const ip = forwarded?.split(',')[0]?.trim() || realIp || '127.0.0.1';
-
-  return ip === '127.0.0.1'
-      || ip === '::1'
-      || ip === 'localhost'
-      || ip.startsWith('192.168.')
-      || ip.startsWith('10.')
-      || ip.startsWith('172.16.')
-      || ip.startsWith('172.17.')
-      || ip.startsWith('172.18.')
-      || ip.startsWith('172.19.')
-      || ip.startsWith('172.20.')
-      || ip.startsWith('172.21.')
-      || ip.startsWith('172.22.')
-      || ip.startsWith('172.23.')
-      || ip.startsWith('172.24.')
-      || ip.startsWith('172.25.')
-      || ip.startsWith('172.26.')
-      || ip.startsWith('172.27.')
-      || ip.startsWith('172.28.')
-      || ip.startsWith('172.29.')
-      || ip.startsWith('172.30.')
-      || ip.startsWith('172.31.');
+  // T#846: socket peer is loopback AND no forwarding header. A request that came
+  // through Caddy is remote, whatever address its headers claim. The old version
+  // trusted the leftmost X-Forwarded-For and private ranges (see client-ip.ts).
+  return isLocalRequest(c);
 }
 
 // Generate session token using HMAC-SHA256
@@ -466,11 +451,38 @@ initGuestTables(sqlite);
 initGuestSafetyMigrations(sqlite);
 
 // ============================================================================
+// Pet bridge (T#1014, Spec #61): its own door, mounted on the static /api/pet prefix BEFORE the
+// general auth middleware below. It knows only the owner session cookie (checked as a cookie,
+// owner role only) and the pet_ token; no den_ bearer, no local-network exception. The
+// reply-beast's routes (messages/:id, pokes/:id, reply) are registered later in the main app.
+// ============================================================================
+
+app.route('/api/pet', createPetApp({
+  db: sqlite,
+  hash: hmacTokenHash,
+  isOwnerCookie: ownerCookieCheck(parseSessionToken, SESSION_COOKIE_NAME),
+  notify: (beast, message) => { enqueueNotification(beast, message, { from: 'pet' }); },
+  logSecurity: logSecurityEvent,
+  scan: scanForInjection,
+  replyBeast: process.env.PET_REPLY_BEAST || 'karo',
+  audit: ({ actor, actorType, method, path, status }) => {
+    sqlite.prepare(
+      `INSERT INTO audit_log (actor, actor_type, action, resource_type, resource_id, ip_source, request_method, request_path, status_code, request_id)
+       VALUES (?, ?, ?, 'pet', ?, NULL, ?, ?, ?, ?)`
+    ).run(actor, actorType, `${method} ${path}`, path.split('/')[3] || null, method, path, status, generateRequestId());
+  },
+}));
+
+// ============================================================================
 // Auth Middleware (protects /api/* except auth routes)
 // ============================================================================
 
 app.use('/api/*', async (c, next) => {
   const path = c.req.path;
+
+  // T#1014 tripwire: a pet_ token is refused everywhere the general middleware runs
+  const petRefusal = petTokenTripwire(c, logSecurityEvent);
+  if (petRefusal) return petRefusal;
 
   // Skip auth for certain endpoints
   const publicPaths = [
@@ -533,7 +545,7 @@ app.use('/api/*', async (c, next) => {
       return next();
     } else {
       // Invalid/expired token — log and reject
-      const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+      const ip = clientIp(c, 'local');
       logSecurityEvent({
         eventType: 'auth_failure',
         severity: 'warning',
@@ -621,47 +633,33 @@ app.use('/api/*', async (c, next) => {
 
   // Log after handler completes
   try {
-    const ip = c.req.header('x-real-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+    const ip = clientIp(c, 'local');
     // Actor extraction chain (T#718 — closes Bertus/Flint #10002 audit-attribution spoof gap):
     // 1. Bearer token identity (set by auth middleware — trusted)
     // 2. Session cookie → "gorn" (browser requests — trusted)
     // 3. Guest session → "[Guest] <username>" (server-set via session — trusted)
     // 4. ?as= query param — logged as legacy signal but NOT used as actor (spoofable)
-    // 5. Path patterns for path-identity routes (e.g. /api/dm/<beast>/...)
-    // 6. Fallback: "unknown"
+    // 5. Path-identity routes (/api/dm/<name>/...) and the x-beast header are CLAIMS:
+    //    logged as "path:<name>" / "header:<name>", never as a bare actor (T#1016)
+    // 6. Fallback: "unknown"  (see src/server/audit-actor.ts)
     // REMOVED (T#718): body.author / body.beast / body.from as actor fallback — client-asserted,
     // spoofable, no cryptographic binding to the calling process. Audit trail now records
     // true-caller only; forensic integrity preserved per Bertus #10002 + Principle 1.
-    const tokenActor = (c.get as any)('actor') as string | undefined;
-    const tokenActorType = (c.get as any)('actorType') as string | undefined;
-    let actor = tokenActor || '';
-    let actorType = tokenActorType || '';
-
-    if (!actor) {
-      if (hasSessionAuth(c)) {
-        actor = 'gorn';
-        actorType = 'human';
-      }
-    }
-    if (!actor) {
-      const role = (c.get as any)('role');
-      const guestUsername = (c.get as any)('guestUsername');
-      if (role === 'guest' && guestUsername) {
-        actor = `[Guest] ${guestUsername}`;
-        actorType = 'guest';
-      }
-    }
-    if (!actor) {
-      // Path-identity routes — /api/dm/<beast>/... has the beast in the path itself
-      const pathMatch = path.match(/\/api\/(?:dm|schedules)\/(?!messages|dashboard|due|pending)([a-z][\w-]*)/i);
-      if (pathMatch) actor = pathMatch[1];
-    }
+    const { actor, actorType } = deriveAuditActor({
+      tokenActor: (c.get as any)('actor') as string | undefined,
+      tokenActorType: (c.get as any)('actorType') as string | undefined,
+      hasSession: hasSessionAuth(c),
+      isGuest: (c.get as any)('role') === 'guest',
+      guestUsername: (c.get as any)('guestUsername'),
+      path,
+      xBeast: c.req.header('x-beast'),
+    });
 
     // ?as= logged as legacy-usage tracking (not used as actor — spoofable)
     const asParam = c.req.query('as') || '';
     if (asParam) {
       logSecurityEvent({
-        eventType: 'settings_changed', // Reuse existing type for legacy tracking
+        eventType: 'legacy_auth_used', // T#719 — dedicated type so legacy ?as= tracking no longer camouflages real settings_changed events
         severity: 'info',
         actor: actor || 'unknown',
         actorType: (actorType as any) || 'unknown',
@@ -672,12 +670,6 @@ app.use('/api/*', async (c, next) => {
       });
     }
 
-    if (!actor) {
-      actor = c.req.header('x-beast') || 'unknown';
-    }
-    if (!actorType) {
-      actorType = 'unknown';
-    }
 
     // bodyData kept in scope (null-tolerated) for potential future per-route use;
     // deliberately not consulted here — see REMOVED note above.
@@ -826,6 +818,7 @@ app.get('/api/session/stats', (c) => {
 // ============================================================================
 
 import { execSync } from 'child_process';
+import { clientIp, clientIpFrom, isLocalFrom, isLocalRequest } from './server/client-ip.ts';
 
 // Load all Beast spinner verbs from their settings.local.json configs
 // Returns a Set of all configured spinner verbs across all Beasts
@@ -1666,6 +1659,9 @@ try { sqlite.prepare(`
   )
 `).run(); } catch { /* exists */ }
 
+// Pet bridge, the reply-beast's side (T#1014): read a message / poke bundle, post a reply
+registerPetBeastRoutes(app, { db: sqlite, replyBeast: process.env.PET_REPLY_BEAST || 'karo' });
+
 // Prowl routes extracted to src/prowl/routes.ts (T#767)
 registerProwlRoutes(app, sqlite, { hasSessionAuth, isTrustedRequest, requireBeastIdentity, wsBroadcast, enqueueNotification });
 
@@ -1775,17 +1771,11 @@ function validateWsUpgrade(req: Request, server: any): { allowed: boolean; reaso
   }
 
   // 2. Auth check — same as REST: local network OR valid session
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || req.headers.get('x-real-ip')
-    || server.requestIP(req)?.address
-    || '127.0.0.1';
-
-  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === 'localhost'
-    || ip.startsWith('192.168.') || ip.startsWith('10.')
-    || (ip.startsWith('172.') && (() => {
-      const second = parseInt(ip.split('.')[1], 10);
-      return second >= 16 && second <= 31;
-    })());
+  // T#857: same rule as isLocalNetwork (client-ip.ts): the socket peer is
+  // loopback AND no forwarding header. The old inline read trusted the leftmost
+  // X-Forwarded-For, then X-Real-IP, and private ranges.
+  const wsHeader = (n: string) => req.headers.get(n);
+  const isLocal = isLocalFrom(wsHeader, server.requestIP(req)?.address);
 
   // Check session cookie from Cookie header
   const cookies = req.headers.get('cookie') || '';
@@ -1872,9 +1862,7 @@ export default {
       const validation = validateWsUpgrade(req, server);
       if (!validation.allowed) {
         // Audit log rejected WebSocket upgrade attempts
-        const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-          || req.headers.get('x-real-ip')
-          || server.requestIP(req)?.address || 'unknown';
+        const ip = clientIpFrom(n => req.headers.get(n), server.requestIP(req)?.address, 'unknown');
         try {
           sqlite.prepare(
             `INSERT INTO audit_log (actor, actor_type, action, resource_type, resource_id, ip_source, request_method, request_path, status_code)

@@ -201,3 +201,103 @@ describe('study content', () => {
     expect((await req('owner', 'GET', '/api/study/content/arr')).status).toBe(500);
   });
 });
+
+// Guests (Gorn 11-17): the bootcamp track only, per guest, owner switches it on.
+describe('study for guests', () => {
+  const fsMod = require('fs') as typeof import('fs');
+  const pathMod = require('path') as typeof import('path');
+  const osMod = require('os') as typeof import('os');
+  const { initGuestTables, updateGuest } = require('../guest-accounts.ts') as typeof import('../guest-accounts.ts');
+  let ids: Record<string, number>;
+
+  function buildGuests() {
+    const dir = fsMod.mkdtempSync(pathMod.join(osMod.tmpdir(), 'study-guest-'));
+    fsMod.writeFileSync(pathMod.join(dir, 'bootcamp.json'), JSON.stringify({ modules: [{ id: 'llm' }] }));
+    fsMod.writeFileSync(pathMod.join(dir, 'ai.json'), JSON.stringify({ secret: 'owner only' }));
+    fsMod.writeFileSync(pathMod.join(dir, 'bootcamp-plan.json'), JSON.stringify({ ramp: 'owner schedule' }));
+    sqlite = new Database(':memory:');
+    ensureStudyTables(sqlite);
+    initGuestTables(sqlite);
+    ids = {};
+    // Direct insert: createGuest bcrypt-hashes at cost 12, which is slow and not under test here.
+    for (const u of ['alice', 'bob', 'carol']) {
+      ids[u] = Number(sqlite.prepare('INSERT INTO guest_accounts (username, password_hash, display_name) VALUES (?, ?, ?)').run(u, 'x', u).lastInsertRowid);
+    }
+    updateGuest(sqlite, ids.alice, { study_enabled: true });
+    updateGuest(sqlite, ids.bob, { study_enabled: true });
+    // carol: switched off (the default)
+    app = new OpenAPIHono();
+    app.use('*', async (c, next) => {
+      const who = (c.req.header('x-test-caller') || 'none') as Caller;
+      if (who === 'owner') c.set('role' as any, 'owner');
+      if (who === 'guest') {
+        c.set('role' as any, 'guest');
+        const g = c.req.header('x-test-guest');
+        if (g) c.set('guestId' as any, ids[g]);
+      }
+      c.set('hasCookie' as any, who === 'owner' || who === 'guest');
+      return next();
+    });
+    registerStudyRoutes(app, sqlite, { hasSessionAuth: (c) => !!(c.get as any)('hasCookie'), contentDir: dir });
+  }
+
+  const greq = (g: string, method: string, path: string, body?: string) =>
+    app.request(path, { method, body, headers: { 'x-test-caller': 'guest', 'x-test-guest': g, ...(body ? { 'Content-Type': 'application/json' } : {}) } });
+
+  beforeEach(buildGuests);
+
+  test('switched-on guest: bootcamp progress round-trips, stored as guest:<id> (positive control)', async () => {
+    let r = await greq('alice', 'PUT', '/api/study/progress/bootcamp', JSON.stringify({ data: { read: { 'llm:0': true } } }));
+    expect(r.status).toBe(200);
+    r = await greq('alice', 'GET', '/api/study/progress/bootcamp');
+    expect((await r.json()).data).toEqual({ read: { 'llm:0': true } });
+    expect(rows()).toEqual([{ user: `guest:${ids.alice}`, track: 'bootcamp', data: '{"read":{"llm:0":true}}' }]);
+  });
+
+  test("a guest never sees the owner's or another guest's progress", async () => {
+    sqlite.prepare("INSERT INTO study_progress VALUES ('gorn','bootcamp','{\"owner\":1}','x')").run();
+    await greq('bob', 'PUT', '/api/study/progress/bootcamp', JSON.stringify({ data: { bob: 1 } }));
+    const r = await greq('alice', 'GET', '/api/study/progress/bootcamp');
+    expect((await r.json()).data).toBeNull();
+    const o = await req('owner', 'GET', '/api/study/progress/bootcamp');
+    expect((await o.json()).data).toEqual({ owner: 1 });
+  });
+
+  test('switched-on guest: bootcamp content 200, any other track or file 403', async () => {
+    expect((await greq('alice', 'GET', '/api/study/content/bootcamp')).status).toBe(200);
+    const c = await greq('alice', 'GET', '/api/study/content/ai');
+    expect(c.status).toBe(403);
+    expect(JSON.stringify(await c.json())).not.toContain('owner only');
+    // The owner's plan file (off the public bundle, 11-17) is owner-only too.
+    const plan = await greq('alice', 'GET', '/api/study/content/bootcamp-plan');
+    expect(plan.status).toBe(403);
+    expect(JSON.stringify(await plan.json())).not.toContain('owner schedule');
+    expect((await req('owner', 'GET', '/api/study/content/bootcamp-plan')).status).toBe(200);
+    expect((await greq('alice', 'GET', '/api/study/progress/ai')).status).toBe(403);
+    expect((await greq('alice', 'PUT', '/api/study/progress/ai', JSON.stringify({ data: { x: 1 } }))).status).toBe(403);
+    expect(rows()).toEqual([]);
+  });
+
+  test('switched-off guest: everything 403, nothing written', async () => {
+    expect((await greq('carol', 'GET', '/api/study/content/bootcamp')).status).toBe(403);
+    expect((await greq('carol', 'GET', '/api/study/progress/bootcamp')).status).toBe(403);
+    expect((await greq('carol', 'PUT', '/api/study/progress/bootcamp', JSON.stringify({ data: { x: 1 } }))).status).toBe(403);
+    expect(rows()).toEqual([]);
+  });
+
+  test('switching off, disabling or expiring takes effect on the next request', async () => {
+    expect((await greq('alice', 'GET', '/api/study/progress/bootcamp')).status).toBe(200);
+    updateGuest(sqlite, ids.alice, { study_enabled: false });
+    expect((await greq('alice', 'GET', '/api/study/progress/bootcamp')).status).toBe(403);
+    updateGuest(sqlite, ids.bob, { disabled_at: new Date().toISOString() });
+    expect((await greq('bob', 'GET', '/api/study/progress/bootcamp')).status).toBe(403);
+    updateGuest(sqlite, ids.bob, { disabled_at: null, expires_at: '2000-01-01T00:00:00Z' });
+    expect((await greq('bob', 'GET', '/api/study/progress/bootcamp')).status).toBe(403);
+  });
+
+  test('guest role without a guest id, or with an unknown id, is 403', async () => {
+    expect((await req('guest', 'GET', '/api/study/progress/bootcamp')).status).toBe(403);
+    ids.ghost = 99999;
+    expect((await greq('ghost', 'GET', '/api/study/progress/bootcamp')).status).toBe(403);
+  });
+});

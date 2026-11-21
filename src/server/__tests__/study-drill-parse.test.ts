@@ -1,7 +1,7 @@
 // Drill rounds parser (frontend/src/study/drillParse.ts, Gorn 11-16). Pure functions, run here
 // because the frontend has no unit runner (its `test` is Playwright).
 import { describe, expect, test } from 'bun:test';
-import { drillEntries, drillKeyFor, mergeEntries, pruneDeleted, toRounds } from '../../../frontend/src/study/drillParse';
+import { drillEntries, drillKeyFor, drillScore, gradeRating, latestRating, mergeEntries, pruneDeleted, ratingOfWord, toRounds } from '../../../frontend/src/study/drillParse';
 
 const msg = (id: number, sender: string, message: string) => ({ id, sender, message, created_at: '2026-11-16T04:00:00Z' });
 
@@ -100,5 +100,89 @@ describe('drillKeyFor (Gnarl, PR 150: the two tracks share module ids)', () => {
     for (const k of [drillKeyFor('ai', 'llm-basics', 0), drillKeyFor('boot', 'evals', 12)]) {
       expect(drillEntries([msg(1, 'gorn', `[Drill ${k}]\nx`)], k).length).toBe(1);
     }
+  });
+});
+
+// Guest mentor (Gorn 11-17): a guest's thread is graded by gnarl. Only the mentor's
+// own messages count as grades, so a guest cannot pass themselves by typing the tag.
+import { guestChannel, OWNER_CHANNEL, GUEST_MENTOR } from '../../../frontend/src/study/studyPeer';
+describe('drill grades by peer', () => {
+  const key = drillKeyFor('boot', 'llm-basics', 0);
+  const msgs = [
+    { id: 1, sender: 'alice', message: `[Study: x]\n[Drill ${key}]\nmy answer`, created_at: 'a' },
+    { id: 2, sender: 'alice', message: `[Drill ${key} pass]\nI grade myself`, created_at: 'b' },
+    { id: 3, sender: 'gnarl', message: `[Drill ${key} fix]\nnot yet`, created_at: 'c' },
+  ];
+  test('with peer gnarl: the guest\'s own "pass" is not a grade, gnarl\'s fix is', () => {
+    const e = drillEntries(msgs, key, 'gnarl');
+    expect(e.filter(x => x.kind === 'grade').map(x => [x.id, x.ok])).toEqual([[3, false]]);
+  });
+  test('default peer is karo, so a gnarl message is not a grade in the owner thread', () => {
+    expect(drillEntries(msgs, key).filter(x => x.kind === 'grade')).toEqual([]);
+  });
+  test('channels: owner → karo on owner routes; guest → gnarl on guest routes, no pins', () => {
+    expect(OWNER_CHANNEL.peer).toBe('karo');
+    expect(OWNER_CHANNEL.sendUrl).toBe('/api/dm');
+    const g = guestChannel('al/ice');
+    expect(g.peer).toBe(GUEST_MENTOR);
+    expect(g.sendUrl).toBe('/api/guest/dm');
+    expect(g.threadUrl).toBe('/api/guest/dm/al%2Fice/gnarl?limit=40&order=desc');
+    expect(g.markReadUrl).toBeNull();
+    expect(g.pins).toBe(false);
+    expect(g.storePrefix).not.toBe(OWNER_CHANNEL.storePrefix);
+  });
+});
+
+// Gorn 11-17: the mentor rates the drill (nailed / shaky / blanked), not the learner.
+describe('mentor ratings', () => {
+  test('the three grade words parse to ratings, and old pass/fix map to nailed/shaky', () => {
+    const msgs = [
+      msg(1, 'karo', '[Drill a:0 nailed]\nall there'),
+      msg(2, 'karo', '[Drill a:0 shaky]\ngaps'),
+      msg(3, 'karo', '[Drill a:0 blanked]\nmissed the core'),
+      msg(4, 'karo', '[Drill a:0 pass]\nold pass'),
+      msg(5, 'karo', '[Drill a:0 fix]\nold fix'),
+    ];
+    expect(drillEntries(msgs, 'a:0').map(e => [e.id, e.rating, e.ok])).toEqual([
+      [1, 'solid', true], [2, 'shaky', false], [3, 'blank', false], [4, 'solid', true], [5, 'shaky', false],
+    ]);
+  });
+
+  test('an unknown grade word is not a grade', () => {
+    expect(drillEntries([msg(1, 'karo', '[Drill a:0 great]\nnope'), msg(2, 'karo', '[Drill a:0 constructor]\nnope')], 'a:0')).toEqual([]);
+    expect(ratingOfWord('constructor')).toBeUndefined();
+    expect(ratingOfWord('toString')).toBeUndefined();
+  });
+
+  test('the newest grade wins, across rounds', () => {
+    const e = drillEntries([
+      msg(1, 'gorn', '[Drill a:0]\nround 1'),
+      msg(2, 'karo', '[Drill a:0 blanked]\nno'),
+      msg(3, 'gorn', '[Drill a:0]\nround 2'),
+      msg(4, 'karo', '[Drill a:0 nailed]\nyes'),
+    ], 'a:0');
+    expect(latestRating(e)).toBe('solid');
+    expect(latestRating(e.slice(0, 3))).toBe('blank');
+    expect(latestRating(e.slice(0, 1))).toBeNull();
+  });
+
+  test('a round cached before ratings existed (ok only) still reads', () => {
+    const old = [{ id: 1, kind: 'grade' as const, ok: true, text: '', at: '' }, { id: 2, kind: 'grade' as const, ok: false, text: '', at: '' }];
+    expect(old.map(gradeRating)).toEqual(['solid', 'shaky']);
+    expect(gradeRating({ id: 3, kind: 'answer', text: '', at: '' })).toBeUndefined();
+  });
+
+  test('a grade from the learner is still not a grade', () => {
+    expect(drillEntries([msg(1, 'gorn', '[Drill a:0 nailed]\nself-graded')], 'a:0')).toEqual([]);
+  });
+});
+
+describe('progress counts the mentor grade only', () => {
+  test('drillScore reads graded, never the old self-ratings', () => {
+    expect(drillScore('x', 2, undefined)).toEqual({ rated: 0, sum: 0 });
+    expect(drillScore('x', 2, {})).toEqual({ rated: 0, sum: 0 });
+    expect(drillScore('x', 3, { 'x:0': 'solid', 'x:1': 'shaky', 'x:2': 'blank' })).toEqual({ rated: 3, sum: 1.5 });
+    // another module's grades and out-of-range indexes don't count
+    expect(drillScore('x', 1, { 'y:0': 'solid', 'x:5': 'solid' })).toEqual({ rated: 0, sum: 0 });
   });
 });
