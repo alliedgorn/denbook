@@ -15,8 +15,8 @@ let app: OpenAPIHono;
 
 function build(actor: string | null) {
   db = new Database(':memory:');
-  db.run('CREATE TABLE beast_profiles (name TEXT PRIMARY KEY, rest_status TEXT, updated_at INTEGER)');
-  for (const b of ['karo', 'rax']) db.run("INSERT INTO beast_profiles VALUES (?, 'active', 0)", [b]);
+  db.run('CREATE TABLE beast_profiles (name TEXT PRIMARY KEY, rest_status TEXT, rest_since INTEGER, updated_at INTEGER)');
+  for (const b of ['karo', 'rax']) db.run("INSERT INTO beast_profiles (name, rest_status, updated_at) VALUES (?, 'active', 0)", [b]);
   app = new OpenAPIHono();
   registerInboxRoutes(app, db, {
     isTrustedRequest: () => true,          // worst case: every caller is "trusted"
@@ -60,6 +60,8 @@ describe('T#883 handoff rest identity', () => {
     expect((await r.json()).rested_beast).toBe('karo');
     expect(status('karo')).toBe('rest');
     expect(status('rax')).toBe('active');
+    // T#1025: the handoff path stamps rest_since too, so the hold is bounded.
+    expect(typeof (db.prepare("SELECT rest_since FROM beast_profiles WHERE name = 'karo'").get() as any).rest_since).toBe('number');
   });
 
   it('without ?as= writes the handoff and rests nobody', async () => {

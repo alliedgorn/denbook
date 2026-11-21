@@ -311,6 +311,7 @@ export const beastProfiles = sqliteTable('beast_profiles', {
   birthdate: text('birthdate'),                 // Date string: YYYY-MM-DD (chosen birthday)
   sex: text('sex'),                              // male, female, or null
   restStatus: text('rest_status').default('active'), // T#658 — Norm #65: active | rest (nap reserved)
+  restSince: integer('rest_since'),             // T#1025: ms when rest_status last became 'rest'; bounds the doorbell hold
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });

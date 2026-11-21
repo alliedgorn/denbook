@@ -69,8 +69,9 @@ export function registerInboxRoutes(app: OpenAPIHono, sqlite: Database, helpers:
       if (asParam && caller) {
         const beastRow = sqlite.prepare('SELECT name FROM beast_profiles WHERE name = ?').get(caller) as any;
         if (beastRow) {
-          sqlite.prepare("UPDATE beast_profiles SET rest_status = 'rest', updated_at = ? WHERE name = ?")
-            .run(Date.now(), caller);
+          const now = Date.now();
+          sqlite.prepare("UPDATE beast_profiles SET rest_status = 'rest', rest_since = ?, updated_at = ? WHERE name = ?")
+            .run(now, now, caller);
           restedBeast = caller;
           console.log(`[Handoff] ${caller} → rest_status=rest`);
           wsBroadcast('beast_state_change', { beast: caller, rest_status: 'rest' });

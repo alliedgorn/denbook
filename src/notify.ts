@@ -20,6 +20,7 @@
  */
 
 import path from 'path';
+import type { Database } from 'bun:sqlite';
 
 const WORKSPACE_ROOT = '/home/gorn/workspace';
 
@@ -81,6 +82,49 @@ export const notifySink: Array<{ via: 'enqueue' | 'pane'; target: string; text: 
 // every notification (Gnarl, PR 156).
 export const notifySinkOn = (): boolean => process.env.DEN_NOTIFY_SINK === 'memory' && process.env.NODE_ENV === 'test';
 const sinkOn = notifySinkOn;
+
+/**
+ * T#1025 (Gorn, 2026-11-21): a Beast at rest gets no doorbells. Before this,
+ * rest_status='rest' only paused the scheduler, so forum, board, DM and pet
+ * notifications kept being typed into the pane while the Beast wrote its
+ * handoff. Now the drain leaves a resting Beast's queue alone (held, never
+ * dropped) and it drains after /wake.
+ *
+ * The hold is bounded (Gnarl A1). A /rest that dies before sleep.sh relaunches
+ * the seat leaves it at rest while it is awake, and without a bound nothing
+ * would ever poke it again. Past REST_HOLD_MAX_MS the hold lapses and delivery
+ * resumes, which is itself the poke. A stopped seat needs no hold: the drain
+ * already re-queues on 'no-session'.
+ *
+ * Fail-open everywhere: no db, no row, no rest_since (rested before this
+ * column existed) or a read error all count as awake. A wrongly held queue is
+ * silent; a wrongly delivered doorbell is only noisy.
+ */
+export const REST_HOLD_MAX_MS = (parseInt(process.env.REST_HOLD_MAX_MIN || '60', 10) || 60) * 60 * 1000;
+
+export type RestHold = 'awake' | 'held' | 'lapsed';
+
+export function restHoldState(db: Pick<Database, 'prepare'> | null, beast: string, now: number = Date.now()): RestHold {
+  if (!db) return 'awake';
+  try {
+    const row = db.prepare('SELECT rest_status, rest_since FROM beast_profiles WHERE name = ?')
+      .get(beast.toLowerCase()) as { rest_status?: string | null; rest_since?: number | null } | null;
+    if (row?.rest_status !== 'rest') return 'awake';
+    if (typeof row.rest_since !== 'number') return 'awake';
+    return now - row.rest_since < REST_HOLD_MAX_MS ? 'held' : 'lapsed';
+  } catch {
+    return 'awake';
+  }
+}
+
+export function isBeastAtRest(db: Pick<Database, 'prepare'> | null, beast: string, now: number = Date.now()): boolean {
+  return restHoldState(db, beast, now) === 'held';
+}
+
+// The Tier-2 fallback below has no queue and no db handle of its own. The
+// server sets this at startup (initDaemons), so Tier-2 can refuse at rest too.
+let restDb: Pick<Database, 'prepare'> | null = null;
+export function setRestDb(db: Pick<Database, 'prepare'> | null): void { restDb = db; }
 
 export type PaneDelivery = 'sent' | 'no-session' | 'not-claude';
 
@@ -149,6 +193,13 @@ export function enqueueNotification(beast: string, message: string, opts?: Enque
   // Tier 2: direct tmux send-keys with synthesized stamp. Final fallback.
   // T#973: only into a pane running claude. There is no queue to put the line
   // back on here, so a refusal is reported as a failed notify.
+  // T#1025: never type into a resting Beast's pane. There is no queue here to
+  // hold the line, so it is reported as a failed notify; the content itself is
+  // already in oracle.db and the Beast reads forum and DMs on wake.
+  if (isBeastAtRest(restDb, beastLower)) {
+    console.error(`[notify] Tier-2 held for ${beastLower}: at rest (T#1025)`);
+    return false;
+  }
   try {
     const sessionName = beastLower.charAt(0).toUpperCase() + beastLower.slice(1);
     const stamp = formatUtc7Timestamp(opts?.sentAt ?? new Date());

@@ -62,3 +62,24 @@ describe('deliverToPane (T#973)', () => {
     expect(r.missingOutcome).toBe('no-session');
   });
 });
+
+describe('rest hold at its call sites (T#1025)', () => {
+  test('the drain reads a private queue dir', () => expect(r.drainDirIsPrivate).toBe(true));
+  test('at rest: the queue is left byte-identical and nothing is typed', () => {
+    expect(r.restQueueUntouched).toBe(true);
+    expect(r.restTyped).toBe(false);
+  });
+  test('after wake: the held line drains into claude', () => {
+    expect(r.wakeQueueEmpty).toBe(true);
+    expect(r.wakeTyped).toBe(true);
+  });
+  test('past the bound: delivery resumes', () => expect(r.lapsedTyped).toBe(true));
+  test('Tier-2 refuses at rest and types nothing', () => {
+    expect(r.tier2RestResult).toBe(false);
+    expect(r.tier2RestTyped).toBe(false);
+  });
+  test('Tier-2 delivers when awake (control)', () => {
+    expect(r.tier2AwakeResult).toBe(true);
+    expect(r.tier2AwakeTyped).toBe(true);
+  });
+});

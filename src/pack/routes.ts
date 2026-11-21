@@ -352,6 +352,7 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
           return c.json({ error: `rest_status must be one of: ${REST_STATUSES.join(', ')}` }, 400);
         }
         updates.restStatus = body.rest_status;
+        updates.restSince = body.rest_status === 'rest' ? Date.now() : null; // T#1025
       }
 
       db.update(beastProfiles)
@@ -434,7 +435,7 @@ export function registerPackRoutes(app: OpenAPIHono, sqliteDb: Database, helpers
       ).run(name, cutoff);
 
       // Set rest_status back to active
-      sqlite.prepare("UPDATE beast_profiles SET rest_status = 'active', updated_at = ? WHERE name = ?")
+      sqlite.prepare("UPDATE beast_profiles SET rest_status = 'active', rest_since = NULL, updated_at = ? WHERE name = ?")
         .run(Date.now(), name);
 
       console.log(`[Wake] ${name}: rest_status ${previousStatus} → active. Dropped ${dropResult.changes} schedules overdue by >${stormCapHours}h.`);

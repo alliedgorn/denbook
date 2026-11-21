@@ -16,6 +16,7 @@ const { registerPackRoutes } = await import('../../pack/routes.ts');
 // server.ts adds these two columns at boot (lines ~1014-1016), outside the migrations.
 try { sqlite.prepare('ALTER TABLE beast_profiles ADD COLUMN sex TEXT DEFAULT NULL').run(); } catch { /* exists */ }
 try { sqlite.prepare("ALTER TABLE beast_profiles ADD COLUMN rest_status TEXT DEFAULT 'active'").run(); } catch { /* exists */ }
+try { sqlite.prepare('ALTER TABLE beast_profiles ADD COLUMN rest_since INTEGER DEFAULT NULL').run(); } catch { /* exists */ }
 // /wake touches beast_schedules, which server.ts also creates at boot. Only the
 // columns the wake handler reads or writes.
 sqlite.prepare(`CREATE TABLE IF NOT EXISTS beast_schedules (
@@ -70,6 +71,19 @@ describe('rest_status via PATCH /api/beast/:name', () => {
     expect(r.status).toBe(200);
     expect((await r.json()).previous_status).toBe('rest');
     expect(status()).toBe('active');
+  });
+
+  // T#1025: rest_since bounds the notification hold. Rest stamps it, wake clears it.
+  test('rest stamps rest_since, wake clears it', async () => {
+    const since = () => (sqlite.prepare("SELECT rest_since FROM beast_profiles WHERE name = 'resttest'").get() as any).rest_since;
+    const t0 = Date.now();
+    await patch('resttest', { rest_status: 'rest' });
+    expect(since()).toBeGreaterThanOrEqual(t0);
+    await app.request('/api/beast/resttest/wake', { method: 'POST' });
+    expect(since()).toBeNull();
+    await patch('resttest', { rest_status: 'rest' });
+    await patch('resttest', { rest_status: 'active' });
+    expect(since()).toBeNull();
   });
 
   test('Gorn can set it', async () => {
