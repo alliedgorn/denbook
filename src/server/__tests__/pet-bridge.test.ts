@@ -530,7 +530,30 @@ describe('special touches (Gorn 11-21)', () => {
     expect(pokeBells().length).toBe(8);
   });
 
-  it('treats ride the normal schedule and reach the reply beast', async () => {
+  it('treats ride the special lane: a feeding run rings every 8 s at most and never says stop (Gorn 11-21)', async () => {
+    const t = await mint();
+    const start = clock;
+    const ringTimes: number[] = [];
+    for (let s = 0; s <= 60; s++) {
+      const before = pokeBells().length;
+      const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { treats: 1 } })).json() as any;
+      if (pokeBells().length > before) { ringTimes.push((clock - start) / 1000); expect(r.rang).toBe(true); }
+      else { expect(r.rang).toBe(false); expect(r.muted).toBe(false); }
+      advance(1_000);
+    }
+    expect(ringTimes).toEqual([0, 8, 16, 24, 32, 40, 48, 56]);
+  });
+
+  it('a feeding run does not spend the pat schedule: a pat right after still rings', async () => {
+    const t = await mint();
+    for (let s = 0; s < 20; s++) { await req('POST', '/api/pet/poke', { auth: t, body: { treats: 1 } }); advance(1_000); }
+    const before = pokeBells().length;
+    const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { head_pats: 1 } })).json() as any;
+    expect(r.rang).toBe(true);
+    expect(pokeBells().length).toBe(before + 1);
+  });
+
+  it('treats reach the reply beast', async () => {
     const t = await mint();
     const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { treats: 3 } })).json() as any;
     expect(r.rang).toBe(true);

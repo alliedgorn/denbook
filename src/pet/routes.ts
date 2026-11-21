@@ -54,9 +54,14 @@ export const PET_LIMITS = {
   pokeSpecialBellsPerDay: 120,
 } as const;
 
-// treats: a bite fed in the pet (Gorn 11-21); it rides the normal schedule like a pat
+// treats: a bite fed in the pet (Gorn 11-21). They ride the SPECIAL lane, not the pat schedule:
+// "feeding you should not have limit" (Gorn 11-21 21:35). On the pat schedule a feeding run hit
+// the fifth ring in 13 s and the pet said stop. The special lane rings at most every 8 s, never
+// says stop, and keeps its own hourly/daily budget and doorbell cap.
 const POKE_FIELDS = ['clicks', 'head_pats', 'belly_rubs', 'holds', 'special', 'treats'] as const;
 type PokeField = typeof POKE_FIELDS[number];
+const SPECIAL_LANE: readonly PokeField[] = ['special', 'treats'];
+const isSpecialLane = (f: PokeField) => SPECIAL_LANE.includes(f);
 
 /** Marker shapes that must never look like a system line when the text is read (spec). */
 const MARKER_SHAPES = [
@@ -418,7 +423,7 @@ export function createPetApp(deps: PetDeps): Hono {
       if (!st || now() - last < PET_LIMITS.pokeQuietSummaryMs) return;
       // a bundle holding only special counts rings on the special cap, not the pat one (Bertus, 186)
       const b = openBundle(tokenId);
-      const onlySpecial = b.special > 0 && POKE_FIELDS.every(f => f === 'special' || b[f] === 0);
+      const onlySpecial = SPECIAL_LANE.some(f => b[f] > 0) && POKE_FIELDS.every(f => isSpecialLane(f) || b[f] === 0);
       if (ring(tokenId, tokenHash, onlySpecial)) {
         db.query('UPDATE pet_poke_state SET last_ring_at = ? WHERE token_id = ?').run(now(), tokenId);
       }
@@ -440,8 +445,8 @@ export function createPetApp(deps: PetDeps): Hono {
       }
       counts[k as PokeField] = v;
     }
-    const hasSpecial = counts.special > 0;
-    const hasRegular = POKE_FIELDS.some(f => f !== 'special' && counts[f] > 0);
+    const hasSpecial = SPECIAL_LANE.some(f => counts[f] > 0);
+    const hasRegular = POKE_FIELDS.some(f => !isSpecialLane(f) && counts[f] > 0);
     // each kind is charged to its own budget, and a mixed call to both (Gnarl N1): a long run of special
     // touches can't block pats, and a bug that tacks `special` onto every call still meets the pat budget
     const t0 = now();
