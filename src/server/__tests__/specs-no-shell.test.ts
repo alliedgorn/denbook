@@ -108,8 +108,8 @@ describe('shell safety: file_path is never run', () => {
     specGit('denbook', payloads()[0], ['log'], { root, run });
     expect(calls).toHaveLength(1);
     expect(calls[0].file).toBe('git');
-    expect(calls[0].args.slice(0, 2)).toEqual(['log', '--']);
-    expect(calls[0].args[2]).toBe(payloads()[0]);
+    expect(calls[0].args.slice(0, 3)).toEqual(['--literal-pathspecs', 'log', '--']);
+    expect(calls[0].args[3]).toBe(payloads()[0]);
     expect(calls[0].opts.shell).toBeUndefined();
   });
 });
@@ -138,6 +138,11 @@ describe('path safety is kept', () => {
     const run = ((_f: string, args: string[]) => { calls.push(args); return ''; }) as any;
     specGit('denbook', 'docs/specs/sub/../a.md', ['log'], { root, run });
     expect(calls[0].at(-1)).toBe('docs/specs/a.md');
+  });
+
+  test('a glob in file_path matches nothing (literal pathspec)', async () => {
+    const res = await app.request(`/api/specs/${plant('docs/specs/*.md')}/history`);
+    expect((await res.json() as any).versions).toEqual([]);
   });
 
   test('history of a traversal path returns no versions', async () => {

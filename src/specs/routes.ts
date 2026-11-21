@@ -31,7 +31,7 @@ export function resolveSpecPath(repo: string, filePath: string, root: string = S
  * Shell safety (T#956): run git for one spec file with no shell at all. The file path is a
  * literal argv after `--`, so `$(...)`, backticks and quotes are just characters in a file name.
  * Path safety is kept: the path must pass resolveSpecPath first, and git gets the canonical
- * relative path, not the stored one. Returns null (and runs nothing) when the path is refused.
+ * relative path, not the stored one, read literally (no pathspec globbing). Returns null (and runs nothing) when the path is refused.
  */
 export function specGit(
   repo: string, filePath: string, args: string[],
@@ -42,7 +42,8 @@ export function specGit(
   if (!resolved) return null;
   const baseDir = path.resolve(root, repo);
   const run = opts.run ?? execFileSync;
-  return run('git', [...args, '--', path.relative(baseDir, resolved)],
+  // --literal-pathspecs: the path is one file, never a glob (Gnarl, PR 188 review)
+  return run('git', ['--literal-pathspecs', ...args, '--', path.relative(baseDir, resolved)],
     { cwd: baseDir, encoding: 'utf-8', timeout: 5000 }) as unknown as string;
 }
 
