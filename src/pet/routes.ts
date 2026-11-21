@@ -142,9 +142,11 @@ export function ensurePetTables(db: Database): void {
     step INTEGER NOT NULL DEFAULT 0,
     last_ring_at INTEGER,
     last_touch_at INTEGER,
-    special_ring_at INTEGER
+    special_ring_at INTEGER,
+    special_touch_at INTEGER
   )`);
   try { db.exec('ALTER TABLE pet_poke_state ADD COLUMN special_ring_at INTEGER'); } catch { /* exists */ }
+  try { db.exec('ALTER TABLE pet_poke_state ADD COLUMN special_touch_at INTEGER'); } catch { /* exists */ }
   // fixed-window counters keyed on the token hash, so a restart doesn't reset a cap
   db.exec(`CREATE TABLE IF NOT EXISTS pet_usage (
     token_hash TEXT NOT NULL,
@@ -409,10 +411,15 @@ export function createPetApp(deps: PetDeps): Hono {
     if (old !== undefined) timers.clear(old);
     summaryTimers.set(tokenId, timers.set(() => {
       summaryTimers.delete(tokenId);
-      const st = db.query('SELECT last_touch_at FROM pet_poke_state WHERE token_id = ?').get(tokenId) as
-        { last_touch_at: number } | null;
-      if (!st || now() - st.last_touch_at < PET_LIMITS.pokeQuietSummaryMs) return;
-      if (ring(tokenId, tokenHash)) {
+      const st = db.query('SELECT last_touch_at, special_touch_at FROM pet_poke_state WHERE token_id = ?').get(tokenId) as
+        { last_touch_at: number | null; special_touch_at: number | null } | null;
+      // quiet means no touch of either kind for 60 s (a run of special touches is not quiet)
+      const last = Math.max(st?.last_touch_at ?? 0, st?.special_touch_at ?? 0);
+      if (!st || now() - last < PET_LIMITS.pokeQuietSummaryMs) return;
+      // a bundle holding only special counts rings on the special cap, not the pat one (Bertus, 186)
+      const b = openBundle(tokenId);
+      const onlySpecial = b.special > 0 && POKE_FIELDS.every(f => f === 'special' || b[f] === 0);
+      if (ring(tokenId, tokenHash, onlySpecial)) {
         db.query('UPDATE pet_poke_state SET last_ring_at = ? WHERE token_id = ?').run(now(), tokenId);
       }
     }, PET_LIMITS.pokeQuietSummaryMs));
@@ -480,12 +487,13 @@ export function createPetApp(deps: PetDeps): Hono {
         st.last_ring_at = t;
       }
     }
-    db.query(`INSERT INTO pet_poke_state (token_id, step, last_ring_at, last_touch_at, special_ring_at)
-              VALUES (?, ?, ?, ?, ?)
+    db.query(`INSERT INTO pet_poke_state (token_id, step, last_ring_at, last_touch_at, special_ring_at, special_touch_at)
+              VALUES (?, ?, ?, ?, ?, ?)
               ON CONFLICT(token_id) DO UPDATE SET step = excluded.step, last_ring_at = excluded.last_ring_at,
-              last_touch_at = excluded.last_touch_at, special_ring_at = excluded.special_ring_at`)
+              last_touch_at = excluded.last_touch_at, special_ring_at = excluded.special_ring_at,
+              special_touch_at = excluded.special_touch_at`)
       .run(auth.id, st.step, st.last_ring_at, hasRegular || !hasSpecial ? t : (saved?.last_touch_at ?? null),
-           st.special_ring_at);
+           st.special_ring_at, hasSpecial ? t : (saved?.special_touch_at ?? null));
     armSummary(auth.id, auth.hash);
 
     const bellsLeft = used(auth.hash, `pokebell:d:${dayKey(t)}`) < PET_LIMITS.pokeBellsPerDay;
