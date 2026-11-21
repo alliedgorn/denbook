@@ -6,6 +6,7 @@ import { checkGuestPostRate, checkGuestContentLength, scanForInjection } from '.
 import { logSecurityEvent } from '../server/security-logger.ts';
 import { searchIndexUpsert, searchIndexDelete } from '../search/routes.ts';
 import { handleThreadMessage, getFullThread, updateThreadStatus } from './handler.ts';
+import { fetchPreviewHtml } from './link-preview-fetch.ts';
 import { emojiListRoute, emojiAddRoute, emojiRemoveRoute } from '../server/openapi.ts';
 import { clientIp } from '../server/client-ip.ts';
 
@@ -265,12 +266,9 @@ export function registerForumRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     }
 
     try {
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'DenBook/1.0' },
-        signal: AbortSignal.timeout(5000),
-        redirect: 'manual', // Don't follow redirects (prevents redirect-to-internal)
-      });
-      const html = await response.text();
+      // T#962: no compressed response is ever decoded here (see link-preview-fetch.ts).
+      const html = await fetchPreviewHtml(url);
+      if (html === null) return c.json({ url, title: null, description: null, image: null });
 
       // Extract basic meta tags
       const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
