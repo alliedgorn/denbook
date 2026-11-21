@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execFileSync } from 'child_process';
 import type { Context } from 'hono';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { Database } from 'bun:sqlite';
@@ -11,15 +12,52 @@ import { addMessage } from '../forum/handler.ts';
 // Mechanical extraction, no logic changes.
 // ============================================================================
 
+export const ALLOWED_SPEC_REPOS = ['denbook', 'supply-chain-tool', 'karo', 'zaghnal', 'gnarl', 'bertus', 'flint', 'pip', 'dex', 'talon', 'quill', 'sable', 'nyx', 'vigil', 'rax', 'leonard', 'mara', 'snap', 'beast-blueprint'];
+export const SPEC_WORKSPACE_ROOT = '/home/gorn/workspace';
+
+/** Path safety: a spec file must be a .md under <repo>/docs/specs/, after canonicalizing. */
+export function resolveSpecPath(repo: string, filePath: string, root: string = SPEC_WORKSPACE_ROOT): string | null {
+  if (!ALLOWED_SPEC_REPOS.includes(repo)) return null;
+  if (!filePath.endsWith('.md')) return null;
+  const baseDir = path.resolve(root, repo);
+  const resolved = path.resolve(baseDir, filePath);
+  if (!resolved.startsWith(baseDir + '/')) return null;
+  const relative = resolved.slice(baseDir.length + 1);
+  if (!relative.startsWith('docs/specs/')) return null;
+  return resolved;
+}
+
+/**
+ * Shell safety (T#956): run git for one spec file with no shell at all. The file path is a
+ * literal argv after `--`, so `$(...)`, backticks and quotes are just characters in a file name.
+ * Path safety is kept: the path must pass resolveSpecPath first, and git gets the canonical
+ * relative path, not the stored one. Returns null (and runs nothing) when the path is refused.
+ */
+export function specGit(
+  repo: string, filePath: string, args: string[],
+  opts: { root?: string; run?: typeof execFileSync } = {},
+): string | null {
+  const root = opts.root ?? SPEC_WORKSPACE_ROOT;
+  const resolved = resolveSpecPath(repo, filePath, root);
+  if (!resolved) return null;
+  const baseDir = path.resolve(root, repo);
+  const run = opts.run ?? execFileSync;
+  return run('git', [...args, '--', path.relative(baseDir, resolved)],
+    { cwd: baseDir, encoding: 'utf-8', timeout: 5000 }) as unknown as string;
+}
+
 interface SpecsHelpers {
   hasSessionAuth: (c: Context) => boolean;
   requireBeastIdentity: (c: Context) => string | null;
   isTrustedRequest: (c: Context) => boolean;
   wsBroadcast: (event: string, data: any) => void;
+  /** Where spec repos live, for the git history/diff routes. Tests point it at a temp dir. */
+  specRoot?: string;
 }
 
 export function registerSpecsRoutes(app: OpenAPIHono, sqliteDb: Database, helpers: SpecsHelpers): void {
   const { hasSessionAuth, requireBeastIdentity, isTrustedRequest, wsBroadcast } = helpers;
+  const gitOpts = { root: helpers.specRoot ?? SPEC_WORKSPACE_ROOT };
   const sqlite: Database = sqliteDb;
 
   // ============================================================================
@@ -73,19 +111,6 @@ export function registerSpecsRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       if (s.thread_id) insertLink.run(s.id, 'thread', s.thread_id, new Date().toISOString());
     }
   } catch { /* migration already done or no data */ }
-
-  const ALLOWED_SPEC_REPOS = ['denbook', 'supply-chain-tool', 'karo', 'zaghnal', 'gnarl', 'bertus', 'flint', 'pip', 'dex', 'talon', 'quill', 'sable', 'nyx', 'vigil', 'rax', 'leonard', 'mara', 'snap', 'beast-blueprint'];
-
-  function resolveSpecPath(repo: string, filePath: string): string | null {
-    if (!ALLOWED_SPEC_REPOS.includes(repo)) return null;
-    if (!filePath.endsWith('.md')) return null;
-    const baseDir = path.resolve(`/home/gorn/workspace/${repo}`);
-    const resolved = path.resolve(baseDir, filePath);
-    if (!resolved.startsWith(baseDir + '/')) return null;
-    const relative = resolved.slice(baseDir.length + 1);
-    if (!relative.startsWith('docs/specs/')) return null;
-    return resolved;
-  }
 
   // T#754 / Spec #57 Phase 1 — spec_versions table for amendment + version chain
   sqlite.prepare(`
@@ -216,14 +241,11 @@ export function registerSpecsRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     const id = parseInt(c.req.param('id'), 10);
     const spec = sqlite.prepare('SELECT repo, file_path FROM spec_reviews WHERE id = ?').get(id) as any;
     if (!spec) return c.json({ error: 'Spec not found' }, 404);
-    const repoDir = path.resolve(`/home/gorn/workspace/${spec.repo}`);
     if (!ALLOWED_SPEC_REPOS.includes(spec.repo)) return c.json({ error: 'Invalid repo' }, 400);
     try {
-      const { execSync } = require('child_process');
-      const log = execSync(
-        `git log --format='{"hash":"%H","short":"%h","date":"%aI","subject":"%s","author":"%an"}' -- "${spec.file_path}"`,
-        { cwd: repoDir, encoding: 'utf-8', timeout: 5000 }
-      ).trim();
+      // no shell (T#956): the stored file_path is an argv, never part of a command line
+      const log = (specGit(spec.repo, spec.file_path,
+        ['log', '--format={"hash":"%H","short":"%h","date":"%aI","subject":"%s","author":"%an"}'], gitOpts) ?? '').trim();
       const versions = log ? log.split('\n').map((line: string) => {
         try { return JSON.parse(line); } catch { return null; }
       }).filter(Boolean) : [];
@@ -246,13 +268,9 @@ export function registerSpecsRoutes(app: OpenAPIHono, sqliteDb: Database, helper
     if (!/^[a-f0-9]+$/i.test(from) || !/^[a-f0-9]+$/i.test(to) && to !== 'HEAD') {
       return c.json({ error: 'Invalid commit hash' }, 400);
     }
-    const repoDir = path.resolve(`/home/gorn/workspace/${spec.repo}`);
     try {
-      const { execSync } = require('child_process');
-      const diff = execSync(
-        `git diff ${from} ${to} -- "${spec.file_path}"`,
-        { cwd: repoDir, encoding: 'utf-8', timeout: 5000 }
-      );
+      // no shell (T#956); from/to stay hex-validated above
+      const diff = specGit(spec.repo, spec.file_path, ['diff', from, to], gitOpts) ?? '';
       return c.json({ diff, from, to, file_path: spec.file_path, repo: spec.repo });
     } catch {
       return c.json({ diff: '', from, to, file_path: spec.file_path, repo: spec.repo });
@@ -272,6 +290,10 @@ export function registerSpecsRoutes(app: OpenAPIHono, sqliteDb: Database, helper
       }
       if (!ALLOWED_SPEC_REPOS.includes(repo)) {
         return c.json({ error: `Invalid repo. Allowed: ${ALLOWED_SPEC_REPOS.join(', ')}` }, 400);
+      }
+      // T#956: refuse at write what the read paths would refuse anyway (and no control characters)
+      if (typeof file_path !== 'string' || /[\x00-\x1f\x7f]/.test(file_path) || !resolveSpecPath(repo, file_path)) {
+        return c.json({ error: 'file_path must be a .md file under docs/specs/ in that repo' }, 400);
       }
       // T#718 — derive author from auth, reject client-asserted mismatch
       const caller = requireBeastIdentity(c);
