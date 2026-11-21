@@ -426,6 +426,100 @@ describe('pokes', () => {
   });
 });
 
+describe('special touches (Gorn 11-21)', () => {
+  const special = async (t: string, n = 1) => await (await req('POST', '/api/pet/poke', { auth: t, body: { special: n } })).json() as any;
+
+  it('ring at most every 8 s while they keep coming, and never go silent like the pat schedule', async () => {
+    const t = await mint();
+    const start = clock;
+    const ringTimes: number[] = [];
+    for (let s = 0; s <= 60; s++) {
+      const before = pokeBells().length;
+      const r = await special(t);
+      if (pokeBells().length > before) { ringTimes.push((clock - start) / 1000); expect(r.rang).toBe(true); }
+      else { expect(r.rang).toBe(false); expect(r.muted).toBe(false); }
+      advance(1_000);
+    }
+    expect(ringTimes).toEqual([0, 8, 16, 24, 32, 40, 48, 56]);
+  });
+
+  it('the bundle carries the special count to the reply beast', async () => {
+    const t = await mint();
+    await special(t, 3);
+    const id = Number(pokeBells()[0].match(/pokes (\d+)/)![1]);
+    const b = await (await req('GET', `/api/pet/pokes/${id}`, { auth: KARO })).json() as any;
+    expect(b.special).toBe(3);
+    expect(b.clicks).toBe(0);
+  });
+
+  it('do not spend the pat schedule: after a long special run, a pat still rings immediately', async () => {
+    const t = await mint();
+    for (let s = 0; s < 40; s++) { await special(t); advance(1_000); }
+    const n = pokeBells().length;
+    const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { head_pats: 1 } })).json() as any;
+    expect(r.rang).toBe(true);
+    expect(pokeBells().length).toBe(n + 1);
+  });
+
+  it('have their own call budget: using it up leaves pats working, and the other way round', async () => {
+    const t = await mint();
+    for (let i = 0; i < PET_LIMITS.pokeSpecialPerHour; i++) await req('POST', '/api/pet/poke', { auth: t, body: { special: 1 } });
+    expect((await req('POST', '/api/pet/poke', { auth: t, body: { special: 1 } })).status).toBe(429);
+    expect((await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } })).status).toBe(200);
+    const t2 = await mint();
+    for (let i = 0; i < PET_LIMITS.pokePerHour; i++) await req('POST', '/api/pet/poke', { auth: t2, body: { clicks: 1 } });
+    expect((await req('POST', '/api/pet/poke', { auth: t2, body: { clicks: 1 } })).status).toBe(429);
+    expect((await req('POST', '/api/pet/poke', { auth: t2, body: { special: 1 } })).status).toBe(200);
+  });
+
+  it('stop ringing at their own daily doorbell cap, then say muted; counts are kept', async () => {
+    const t = await mint();
+    const cap = PET_LIMITS.pokeSpecialBellsPerDay;
+    // one every 9 s: each one is due; 240 calls an hour would allow more than the cap in the first hour
+    for (let i = 0; i < cap; i++) { await special(t); advance(9_000); }
+    expect(pokeBells().length).toBe(cap);
+    const r = await special(t, 5);
+    expect(r.rang).toBe(false);
+    expect(r.muted).toBe(true);
+    const open = db.query('SELECT special FROM pet_pokes WHERE rung_at IS NULL').get() as any;
+    expect(open.special).toBe(5);
+  });
+
+  it('a mixed call is charged to both budgets (Gnarl N1)', async () => {
+    const t = await mint();
+    for (let i = 0; i < PET_LIMITS.pokePerHour; i++) await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } });
+    expect((await req('POST', '/api/pet/poke', { auth: t, body: { special: 1, clicks: 1 } })).status).toBe(429);
+    expect((await req('POST', '/api/pet/poke', { auth: t, body: { special: 1 } })).status).toBe(200);
+  });
+
+  it('special touches keep their own clock: they do not hold off the pat schedule reset (Gnarl N2)', async () => {
+    const t = await mint();
+    for (let i = 0; i < 30; i++) { await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } }); advance(1_000); }
+    expect((await (await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } })).json() as any).muted).toBe(true);
+    for (let i = 0; i < 31; i++) { await special(t); advance(1_000); }     // 31 s of only special touches
+    const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { head_pats: 1 } })).json() as any;
+    expect(r.muted).toBe(false);
+    expect(r.rang).toBe(true);
+  });
+
+  it('treats ride the normal schedule and reach the reply beast', async () => {
+    const t = await mint();
+    const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { treats: 3 } })).json() as any;
+    expect(r.rang).toBe(true);
+    const id = Number(pokeBells()[0].match(/pokes (\d+)/)![1]);
+    const b = await (await req('GET', `/api/pet/pokes/${id}`, { auth: KARO })).json() as any;
+    expect(b.treats).toBe(3);
+    expect(b.special).toBe(0);
+  });
+
+  it('reject a bad special count like any other field', async () => {
+    const t = await mint();
+    for (const body of [{ special: 201 }, { special: -1 }, { special: 1.5 }, { special: '2' }]) {
+      expect((await req('POST', '/api/pet/poke', { auth: t, body })).status).toBe(400);
+    }
+  });
+});
+
 describe('the pet token works nowhere else', () => {
   // spec test 1: every /api route registered in src/ (read from the source), with a pet token -> 401
   it('sweep: a pet token on every registered /api route except say, replies and poke is 401', async () => {

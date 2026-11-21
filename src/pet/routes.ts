@@ -46,9 +46,16 @@ export const PET_LIMITS = {
   pokeQuietSummaryMs: 60_000,                // 60 s quiet: one summary
   pokeResetMs: 30_000,                       // 30 s quiet: schedule resets (Gorn 11-20, was 10 min)
   pokeSchedule: [0, 3_000, 5_000, 8_000, 13_000], // Gorn 11-19: immediate, +3, +5, +8, +13, then silent
+  // `special` touches (Gorn 11-21) have their own rhythm and budget, so they never spend the pat/rub
+  // schedule: a ring every 8 s at most while they keep coming, with no stop after the fifth
+  pokeSpecialGapMs: 8_000,
+  pokeSpecialPerHour: 240,
+  pokeSpecialPerDay: 600,
+  pokeSpecialBellsPerDay: 120,
 } as const;
 
-const POKE_FIELDS = ['clicks', 'head_pats', 'belly_rubs', 'holds'] as const;
+// treats: a bite fed in the pet (Gorn 11-21); it rides the normal schedule like a pat
+const POKE_FIELDS = ['clicks', 'head_pats', 'belly_rubs', 'holds', 'special', 'treats'] as const;
 type PokeField = typeof POKE_FIELDS[number];
 
 /** Marker shapes that must never look like a system line when the text is read (spec). */
@@ -122,16 +129,22 @@ export function ensurePetTables(db: Database): void {
     head_pats INTEGER NOT NULL DEFAULT 0,
     belly_rubs INTEGER NOT NULL DEFAULT 0,
     holds INTEGER NOT NULL DEFAULT 0,
+    special INTEGER NOT NULL DEFAULT 0,
+    treats INTEGER NOT NULL DEFAULT 0,
     opened_at INTEGER NOT NULL,
     rung_at INTEGER
   )`);
+  try { db.exec('ALTER TABLE pet_pokes ADD COLUMN special INTEGER NOT NULL DEFAULT 0'); } catch { /* exists */ }
+  try { db.exec('ALTER TABLE pet_pokes ADD COLUMN treats INTEGER NOT NULL DEFAULT 0'); } catch { /* exists */ }
   // per-token poke schedule state (survives a restart; the 60 s summary timer does not)
   db.exec(`CREATE TABLE IF NOT EXISTS pet_poke_state (
     token_id INTEGER PRIMARY KEY,
     step INTEGER NOT NULL DEFAULT 0,
     last_ring_at INTEGER,
-    last_touch_at INTEGER
+    last_touch_at INTEGER,
+    special_ring_at INTEGER
   )`);
+  try { db.exec('ALTER TABLE pet_poke_state ADD COLUMN special_ring_at INTEGER'); } catch { /* exists */ }
   // fixed-window counters keyed on the token hash, so a restart doesn't reset a cap
   db.exec(`CREATE TABLE IF NOT EXISTS pet_usage (
     token_hash TEXT NOT NULL,
@@ -379,11 +392,13 @@ export function createPetApp(deps: PetDeps): Hono {
     return b;
   }
 
-  /** Ring for the open bundle if it holds anything and today's poke doorbells aren't used up. */
-  function ring(tokenId: number, tokenHash: string): boolean {
+  /** Ring for the open bundle if it holds anything and today's doorbells of that kind aren't used up. */
+  function ring(tokenId: number, tokenHash: string, special = false): boolean {
     const b = openBundle(tokenId);
     if (POKE_FIELDS.every(f => b[f] === 0)) return false;
-    if (!take(tokenHash, `pokebell:d:${dayKey(now())}`, PET_LIMITS.pokeBellsPerDay)) return false;
+    const bucket = special ? 'pokespecialbell' : 'pokebell';
+    const cap = special ? PET_LIMITS.pokeSpecialBellsPerDay : PET_LIMITS.pokeBellsPerDay;
+    if (!take(tokenHash, `${bucket}:d:${dayKey(now())}`, cap)) return false;
     db.query('UPDATE pet_pokes SET rung_at = ? WHERE id = ?').run(now(), b.id);
     deps.notify(replyBeast, `[Pet] pokes ${b.id} waiting`);
     return true;
@@ -410,7 +425,7 @@ export function createPetApp(deps: PetDeps): Hono {
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return c.json({ error: 'Body must be an object of counts' }, 400);
     }
-    const counts: Record<PokeField, number> = { clicks: 0, head_pats: 0, belly_rubs: 0, holds: 0 };
+    const counts: Record<PokeField, number> = { clicks: 0, head_pats: 0, belly_rubs: 0, holds: 0, special: 0, treats: 0 };
     for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
       if (!(POKE_FIELDS as readonly string[]).includes(k)) return c.json({ error: `Unknown field ${k}` }, 400);
       if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > PET_LIMITS.pokeCountMax) {
@@ -418,25 +433,46 @@ export function createPetApp(deps: PetDeps): Hono {
       }
       counts[k as PokeField] = v;
     }
-    if (!takeBoth(auth.hash, 'poke', PET_LIMITS.pokePerHour, PET_LIMITS.pokePerDay)) {
-      return c.json({ error: 'rate_limited' }, 429);
-    }
+    const hasSpecial = counts.special > 0;
+    const hasRegular = POKE_FIELDS.some(f => f !== 'special' && counts[f] > 0);
+    // each kind is charged to its own budget, and a mixed call to both (Gnarl N1): a long run of special
+    // touches can't block pats, and a bug that tacks `special` onto every call still meets the pat budget
+    const t0 = now();
+    const room = (kind: string, perHour: number, perDay: number) =>
+      used(auth.hash, `${kind}:h:${hourKey(t0)}`) < perHour && used(auth.hash, `${kind}:d:${dayKey(t0)}`) < perDay;
+    const regularOk = !hasRegular || room('poke', PET_LIMITS.pokePerHour, PET_LIMITS.pokePerDay);
+    const specialOk = !hasSpecial || room('pokespecial', PET_LIMITS.pokeSpecialPerHour, PET_LIMITS.pokeSpecialPerDay);
+    if (!regularOk || !specialOk) return c.json({ error: 'rate_limited' }, 429);
+    if (hasRegular || !hasSpecial) takeBoth(auth.hash, 'poke', PET_LIMITS.pokePerHour, PET_LIMITS.pokePerDay);
+    if (hasSpecial) takeBoth(auth.hash, 'pokespecial', PET_LIMITS.pokeSpecialPerHour, PET_LIMITS.pokeSpecialPerDay);
 
     const t = now();
     const b = openBundle(auth.id);
     const cap = PET_LIMITS.pokeCounterCap;
     db.query(`UPDATE pet_pokes SET clicks = MIN(?, clicks + ?), head_pats = MIN(?, head_pats + ?),
-              belly_rubs = MIN(?, belly_rubs + ?), holds = MIN(?, holds + ?) WHERE id = ?`)
-      .run(cap, counts.clicks, cap, counts.head_pats, cap, counts.belly_rubs, cap, counts.holds, b.id);
+              belly_rubs = MIN(?, belly_rubs + ?), holds = MIN(?, holds + ?), special = MIN(?, special + ?),
+              treats = MIN(?, treats + ?) WHERE id = ?`)
+      .run(cap, counts.clicks, cap, counts.head_pats, cap, counts.belly_rubs, cap, counts.holds,
+           cap, counts.special, cap, counts.treats, b.id);
 
-    let st = db.query('SELECT step, last_ring_at, last_touch_at FROM pet_poke_state WHERE token_id = ?')
-      .get(auth.id) as { step: number; last_ring_at: number | null; last_touch_at: number | null } | null;
+    const saved = db.query('SELECT step, last_ring_at, last_touch_at, special_ring_at FROM pet_poke_state WHERE token_id = ?')
+      .get(auth.id) as { step: number; last_ring_at: number | null; last_touch_at: number | null;
+        special_ring_at: number | null } | null;
+    let st = saved;
     if (!st || st.last_touch_at == null || t - st.last_touch_at >= PET_LIMITS.pokeResetMs) {
-      st = { step: 0, last_ring_at: null, last_touch_at: null };     // quiet for 30 s: start over
+      st = { step: 0, last_ring_at: null, last_touch_at: null, special_ring_at: saved?.special_ring_at ?? null };
     }
     const schedule = PET_LIMITS.pokeSchedule;
     let rang = false;
-    if (st.step < schedule.length) {
+    if (hasSpecial) {
+      // its own rhythm: at most one ring per 8 s while they keep coming, and it never goes silent
+      const due = st.special_ring_at == null || t - st.special_ring_at >= PET_LIMITS.pokeSpecialGapMs;
+      if (due && ring(auth.id, auth.hash, true)) {
+        rang = true;
+        st.special_ring_at = t;
+      }
+    }
+    if (!rang && hasRegular && st.step < schedule.length) {
       const due = st.last_ring_at == null || t - st.last_ring_at >= schedule[st.step];
       if (due && ring(auth.id, auth.hash)) {
         rang = true;
@@ -444,13 +480,18 @@ export function createPetApp(deps: PetDeps): Hono {
         st.last_ring_at = t;
       }
     }
-    db.query(`INSERT INTO pet_poke_state (token_id, step, last_ring_at, last_touch_at) VALUES (?, ?, ?, ?)
+    db.query(`INSERT INTO pet_poke_state (token_id, step, last_ring_at, last_touch_at, special_ring_at)
+              VALUES (?, ?, ?, ?, ?)
               ON CONFLICT(token_id) DO UPDATE SET step = excluded.step, last_ring_at = excluded.last_ring_at,
-              last_touch_at = excluded.last_touch_at`).run(auth.id, st.step, st.last_ring_at, t);
+              last_touch_at = excluded.last_touch_at, special_ring_at = excluded.special_ring_at`)
+      .run(auth.id, st.step, st.last_ring_at, hasRegular || !hasSpecial ? t : (saved?.last_touch_at ?? null),
+           st.special_ring_at);
     armSummary(auth.id, auth.hash);
 
     const bellsLeft = used(auth.hash, `pokebell:d:${dayKey(t)}`) < PET_LIMITS.pokeBellsPerDay;
-    const muted = !rang && (st.step >= schedule.length || !bellsLeft);
+    const specialBellsLeft = used(auth.hash, `pokespecialbell:d:${dayKey(t)}`) < PET_LIMITS.pokeSpecialBellsPerDay;
+    // muted: the pet should say "stop". Special touches only go quiet at their daily cap
+    const muted = !rang && (hasRegular ? (st.step >= schedule.length || !bellsLeft) : (hasSpecial && !specialBellsLeft));
     // rang: this call rang Karo (so an answer is coming); the app shows thinking dots on it (Gorn 11-20)
     return c.json({ muted, rang });
   });
@@ -503,6 +544,7 @@ export function registerPetBeastRoutes(app: { get: Function; post: Function }, d
     if (!r) return c.json({ error: 'Not found' }, 404);
     return c.json({
       id: r.id, clicks: r.clicks, head_pats: r.head_pats, belly_rubs: r.belly_rubs, holds: r.holds,
+      special: r.special ?? 0, treats: r.treats ?? 0,
       opened_at: iso(r.opened_at), rung_at: iso(r.rung_at),
     });
   });
