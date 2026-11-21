@@ -492,6 +492,14 @@ describe('special touches (Gorn 11-21)', () => {
     expect((await req('POST', '/api/pet/poke', { auth: t, body: { special: 1 } })).status).toBe(200);
   });
 
+  it('mixed calls spend the pat budget too: after 60 of them a pat-only call is 429 (Bertus, 186)', async () => {
+    const t = await mint();
+    for (let i = 0; i < PET_LIMITS.pokePerHour; i++) {
+      expect((await req('POST', '/api/pet/poke', { auth: t, body: { special: 1, clicks: 1 } })).status).toBe(200);
+    }
+    expect((await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } })).status).toBe(429);
+  });
+
   it('special touches keep their own clock: they do not hold off the pat schedule reset (Gnarl N2)', async () => {
     const t = await mint();
     for (let i = 0; i < 30; i++) { await req('POST', '/api/pet/poke', { auth: t, body: { clicks: 1 } }); advance(1_000); }
@@ -500,6 +508,26 @@ describe('special touches (Gorn 11-21)', () => {
     const r = await (await req('POST', '/api/pet/poke', { auth: t, body: { head_pats: 1 } })).json() as any;
     expect(r.muted).toBe(false);
     expect(r.rang).toBe(true);
+  });
+
+  it('the summary after a special-only bundle rings on the special cap, not the pat one (Bertus, 186)', async () => {
+    const bucket = (b: string) => (db.query('SELECT COALESCE(SUM(count), 0) AS n FROM pet_usage WHERE bucket LIKE ?')
+      .get(`${b}:%`) as any).n as number;
+    const t = await mint();
+    await special(t);                                   // rings at 0
+    advance(2_000);
+    await special(t, 2);                                // inside the 8 s gap: held in the open bundle
+    advance(61_000);                                    // 60 s quiet: the summary rings it
+    expect(pokeBells().length).toBe(2);
+    expect(bucket('pokebell')).toBe(0);
+    expect(bucket('pokespecialbell')).toBe(2);
+  });
+
+  it('a run of special touches is not quiet: no summary fires in the middle of it', async () => {
+    const t = await mint();
+    for (let s = 0; s <= 70; s += 5) { await special(t); advance(5_000); }   // touches 0..70 s, every 5 s
+    // rings every 8 s at the earliest touch: 0, 10, 20, ..., 70 = 8; a mid-run summary would add one
+    expect(pokeBells().length).toBe(8);
   });
 
   it('treats ride the normal schedule and reach the reply beast', async () => {
